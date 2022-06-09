@@ -1,0 +1,52 @@
+{
+  "name": "@alex-neo/playwright-azure-reporter",
+  "version": "1.0.0",
+  "description": "Playwright Azure Reporter",
+  "main": "./dist/playwright-azure-reporter.js",
+  "scripts": {
+    "test": "npx playwright test",
+    "lint": "eslint src/**",
+    "lint:fix": "eslint --fix src/**",
+    "build": "npm run clean && npm run dev",
+    "clean": "rm -rf dist || true",
+    "prepublishOnly": "npm run lint",
+    "dev": "npm run lint && tsc",
+    "dev:watch": "nodemon --watch src --exec \"npm run build\""
+  },
+  "keywords": [
+    "playwright",
+    "azure",
+    "reporter"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexneo2003/playwright-azure-reporter.git"
+  },
+  "publishConfig": {
+   "@alex-neo:registry": "https://npm.pkg.github.com"
+ },
+  "author": {
+    "name": "Oleksii Galagan",
+    "email": "alexneo2003@gmail.com",
+    "url": "https://github.com/alexneo2003/"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "azure-devops-node-api": "^11.1.1",
+    "chalk": "4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.22.2",
+    "@typescript-eslint/eslint-plugin": "^5.27.1",
+    "@typescript-eslint/eslint-plugin-tslint": "^5.27.1",
+    "@typescript-eslint/parser": "^5.27.1",
+    "chalk": "^4.1.0",
+    "eslint": "^8.17.0",
+    "eslint-config-standard": "^17.0.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-jsdoc": "^39.3.2",
+    "eslint-plugin-n": "^15.2.2",
+    "eslint-plugin-prefer-arrow": "^1.2.2",
+    "eslint-plugin-promise": "^6.0.0"
+  }
+}
