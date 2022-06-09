@@ -26,6 +26,7 @@ jobs:
         path: playwright-report/
         retention-days: 30
   publish:
+    needs: test
     runs-on: ubuntu-latest 
     permissions: 
       contents: read
