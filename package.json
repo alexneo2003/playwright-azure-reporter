@@ -23,8 +23,8 @@
     "url": "https://github.com/alexneo2003/playwright-azure-reporter.git"
   },
   "publishConfig": {
-   "@alex-neo:registry": "https://npm.pkg.github.com"
- },
+    "registry": "https://registry.npmjs.org/"
+  },
   "author": {
     "name": "Oleksii Galagan",
     "email": "alexneo2003@gmail.com",
