@@ -37,7 +37,7 @@ jobs:
           node-version: '16.x'
           registry-url: 'https://registry.npmjs.org'
           # Defaults to the user or organization that owns the workflow file
-          scope: '@alex-neo'
+          scope: '@alex_neo'
       - run: npm ci
       - run: npm run build
       - run: npm publish --access public
