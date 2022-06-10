@@ -10,7 +10,7 @@
     "lint:fix": "eslint --fix src/**",
     "build": "npm run clean && npm run dev",
     "clean": "rm -rf dist || true",
-    "prepublishOnly": "npm run lint",
+    "prepublishOnly": "tsc",
     "dev": "npm run lint && tsc",
     "dev:watch": "nodemon --watch src --exec \"npm run build\""
   },
