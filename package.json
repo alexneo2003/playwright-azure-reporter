@@ -3,6 +3,7 @@
   "version": "1.0.1",
   "description": "Playwright Azure Reporter",
   "main": "./dist/playwright-azure-reporter.js",
+  "types": "./dist/playwright-azure-reporter.d.js",
   "scripts": {
     "test": "npx playwright test",
     "lint": "eslint src/**",
@@ -18,10 +19,6 @@
     "azure",
     "reporter"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/alexneo2003/playwright-azure-reporter.git"
-  },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },
@@ -47,6 +44,7 @@
     "eslint-plugin-jsdoc": "^39.3.2",
     "eslint-plugin-n": "^15.2.2",
     "eslint-plugin-prefer-arrow": "^1.2.2",
-    "eslint-plugin-promise": "^6.0.0"
+    "eslint-plugin-promise": "^6.0.0",
+    "typescript": "^4.7.3"
   }
 }
