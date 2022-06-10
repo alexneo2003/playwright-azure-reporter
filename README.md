@@ -3,7 +3,7 @@
 ## How to integrate
 
 ```
-npm install @alex-neo/playwright-azure-reporter
+npm install @alex_neo/playwright-azure-reporter
 ```
 
 ## Usage
@@ -58,7 +58,7 @@ const config: PlaywrightTestConfig = {
   reporter: [
     ['list'],
     [
-      '@alex-neo/playwright-azure-reporter',
+      '@alex_neo/playwright-azure-reporter',
       {
         token: azureConfig.token,
         orgUrl: azureConfig.orgUrl,
