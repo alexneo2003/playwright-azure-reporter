@@ -17,7 +17,7 @@ const Statuses = {
   timedOut: 'Failed'
 }
 
-interface AzureOptions {
+export interface AzureOptions {
   token: string;
   planId: number;
   orgUrl: string;
