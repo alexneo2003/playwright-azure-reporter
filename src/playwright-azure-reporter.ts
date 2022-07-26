@@ -1,17 +1,17 @@
 /* eslint-disable no-control-regex */
-import * as Test from 'azure-devops-node-api/TestApi'
-import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces'
 import * as azdev from 'azure-devops-node-api'
+import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces'
+import * as Test from 'azure-devops-node-api/TestApi'
 
 import { Reporter, TestCase, TestResult } from '@playwright/test/reporter'
 
-import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces'
 import { WebApi } from 'azure-devops-node-api'
-import chalk from 'chalk'
-import { readFileSync } from 'fs'
 import { ICoreApi } from 'azure-devops-node-api/CoreApi'
 import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces'
+import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces'
+import chalk from 'chalk'
 import crypto from 'crypto'
+import { existsSync, readFileSync } from 'fs'
 
 export function createGuid(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -366,21 +366,26 @@ class AzureDevOpsReporter implements Reporter {
     return await Promise.all(
       testResult.attachments.map(async (attachment) => {
         if (this.attachmentsType!.includes((attachment.name as TAttachmentType[number]))) {
-          const attachments: TestInterfaces.TestAttachmentRequestModel = {
-            attachmentType: 'GeneralAttachment',
-            fileName: `${attachment.name}-${createGuid()}.${attachment.contentType.split('/')[1]}`,
-            stream: readFileSync(attachment.path!, { encoding: 'base64' })
-          };
+          if (existsSync(attachment.path!)) {
+            const attachments: TestInterfaces.TestAttachmentRequestModel = {
+              attachmentType: 'GeneralAttachment',
+              fileName: `${attachment.name}-${createGuid()}.${attachment.contentType.split('/')[1]}`,
+              stream: readFileSync(attachment.path!, { encoding: 'base64' })
+            };
 
-          if (!this.testApi)
-            this.testApi = await this.connection.getTestApi();
-          const response = await this.testApi.createTestResultAttachment(
-            attachments,
-            this.projectName,
-            this.runId!,
-            caseId
-          );
-          return response.url;
+            if (!this.testApi)
+              this.testApi = await this.connection.getTestApi();
+            const response = await this.testApi.createTestResultAttachment(
+              attachments,
+              this.projectName,
+              this.runId!,
+              caseId
+            );
+            return response.url;
+          } else {
+            this.log(chalk.red(`Attachment ${attachment.path} does not exist.`));
+            return '';
+          }
         } else {
           return '';
         }
