@@ -1,3 +1,12 @@
+# [1.2.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.1.1...v1.2.0-beta.0) (2022-09-30)
+
+
+### Features
+
+* Refactoring ([8f2545d](https://github.com/alexneo2003/playwright-azure-reporter/commit/8f2545d79cf9e3015498fcc01823d9ecbb47de8a))
+
+
+
 ## [1.1.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.1.0...v1.1.1) (2022-07-26)
 
 
