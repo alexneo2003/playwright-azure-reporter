@@ -26,7 +26,14 @@ const config: PlaywrightTestConfig = {
         environment: 'AQA',
         testRunTitle: 'Playwright Test Run',
         uploadAttachments: true,
-        // attachmentsType: ['screenshot'],
+        logging: true,
+        attachmentsType: ['screenshot'],
+        testRunConfig: {
+          owner: {
+            displayName: 'Alex Neo',
+          },
+          comment: 'Playwright Test Run',
+        }
       } as AzureReporterOptions
     ]
   ],
