@@ -33,7 +33,7 @@ const attachmentTypesArray = [
 ] as const;
 
 type TAttachmentType = Array<typeof attachmentTypesArray[number]>;
-type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'configurationIds' | 'automated' | 'plan' | 'pointIds'> | undefined;
+type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'>;
 
 export interface AzureReporterOptions {
   token: string;
@@ -120,7 +120,7 @@ class AzureDevOpsReporter implements Reporter {
   private runIdPromise: Promise<number | void>;
   private resolveRunId: (value: number) => void = () => { };
   private rejectRunId: (reason: any) => void = () => { };
-  private testRunConfig: TTestRunConfig
+  private testRunConfig: TTestRunConfig = {} as TTestRunConfig;
 
   public constructor(options: AzureReporterOptions) {
     this.runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -179,7 +179,9 @@ class AzureDevOpsReporter implements Reporter {
       `${this.environment ? `[${this.environment}]:` : ''}Test plan ${this.planId}`;
     this.uploadAttachments = options?.uploadAttachments || false;
     this.connection = new azdev.WebApi(this.orgUrl, azdev.getPersonalAccessTokenHandler(this.token));
-    this.testRunConfig = options?.testRunConfig || undefined;
+    this.testRunConfig = options?.testRunConfig || {
+      configurationIds: [1],
+    }
   }
 
   async onBegin(): Promise<void> {
@@ -299,9 +301,8 @@ class AzureDevOpsReporter implements Reporter {
         const runModel: TestInterfaces.RunCreateModel = {
           name: runName,
           automated: true,
-          configurationIds: [1],
           plan: { id: String(this.planId) },
-          ...(this.testRunConfig && this.testRunConfig),
+          ...this.testRunConfig,
         };
         if (!this.testApi)
           this.testApi = await this.connection.getTestApi();
