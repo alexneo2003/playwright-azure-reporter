@@ -1,18 +1,18 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-control-regex */
-import * as azdev from 'azure-devops-node-api'
-import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces'
-import * as Test from 'azure-devops-node-api/TestApi'
+import * as azdev from 'azure-devops-node-api';
+import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces';
+import * as Test from 'azure-devops-node-api/TestApi';
 
-import { Reporter, TestCase, TestResult } from '@playwright/test/reporter'
+import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
 
-import { WebApi } from 'azure-devops-node-api'
-import { ICoreApi } from 'azure-devops-node-api/CoreApi'
-import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces'
-import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces'
-import chalk from 'chalk'
-import crypto from 'crypto'
-import { existsSync, readFileSync } from 'fs'
+import { WebApi } from 'azure-devops-node-api';
+import { ICoreApi } from 'azure-devops-node-api/CoreApi';
+import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces';
+import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
+import chalk from 'chalk';
+import crypto from 'crypto';
+import { existsSync, readFileSync } from 'fs';
 
 export function createGuid(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -26,14 +26,11 @@ enum AzureTestStatuses {
   interrupted = 'Failed',
 }
 
-const attachmentTypesArray = [
-  'screenshot',
-  'video',
-  'trace',
-] as const;
+const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 
 type TAttachmentType = Array<typeof attachmentTypesArray[number]>;
-type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'>;
+type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
+type TTestPoint = { point: number | undefined; configurationId: string; configurationName: string };
 
 export interface AzureReporterOptions {
   token: string;
@@ -68,8 +65,7 @@ interface ValueEntity {
   lastUpdatedBy: LastUpdatedBy;
 }
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
-interface Project {
-}
+interface Project {}
 interface TestRun {
   id: string;
 }
@@ -79,14 +75,14 @@ interface LastUpdatedBy {
 }
 interface Headers {
   'cache-control': string;
-  'pragma': string;
+  pragma: string;
   'content-length': string;
   'content-type': string;
-  'expires': string;
-  'p3p': string;
+  expires: string;
+  p3p: string;
   'x-tfs-processid': string;
   'strict-transport-security': string;
-  'activityid': string;
+  activityid: string;
   'x-tfs-session': string;
   'x-vss-e2eid': string;
   'x-vss-senderdeploymentid': string;
@@ -97,8 +93,8 @@ interface Headers {
   'x-content-type-options': string;
   'x-cache': string;
   'x-msedge-ref': string;
-  'date': string;
-  'connection': string;
+  date: string;
+  connection: string;
 }
 
 class AzureDevOpsReporter implements Reporter {
@@ -118,20 +114,22 @@ class AzureDevOpsReporter implements Reporter {
   private attachmentsType?: TAttachmentType;
   private token: string = '';
   private runIdPromise: Promise<number | void>;
-  private resolveRunId: (value: number) => void = () => { };
-  private rejectRunId: (reason: any) => void = () => { };
+  private resolveRunId: (value: number) => void = () => {};
+  private rejectRunId: (reason: any) => void = () => {};
   private testRunConfig: TTestRunConfig = {} as TTestRunConfig;
 
   public constructor(options: AzureReporterOptions) {
     this.runIdPromise = new Promise<number | void>((resolve, reject) => {
       this.resolveRunId = resolve;
       this.rejectRunId = reject;
-    }).then(runId => {
-      return runId;
-    }).catch(error => {
-      this._warning(error);
-      this.isDisabled = true;
-    });
+    })
+      .then((runId) => {
+        return runId;
+      })
+      .catch((error) => {
+        this._warning(error);
+        this.isDisabled = true;
+      });
     this._validateOptions(options);
   }
 
@@ -175,18 +173,16 @@ class AzureDevOpsReporter implements Reporter {
     this.logging = options.logging || false;
     this.token = options.token;
     this.environment = options?.environment || undefined;
-    this.testRunTitle = `${this.environment ? `[${this.environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
+    this.testRunTitle =
+      `${this.environment ? `[${this.environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
       `${this.environment ? `[${this.environment}]:` : ''}Test plan ${this.planId}`;
     this.uploadAttachments = options?.uploadAttachments || false;
     this.connection = new azdev.WebApi(this.orgUrl, azdev.getPersonalAccessTokenHandler(this.token));
-    this.testRunConfig = options?.testRunConfig || {
-      configurationIds: [1],
-    }
+    this.testRunConfig = options?.testRunConfig || undefined;
   }
 
   async onBegin(): Promise<void> {
-    if (this.isDisabled)
-      return;
+    if (this.isDisabled) return;
     try {
       this.testApi = await this.connection.getTestApi();
 
@@ -206,32 +202,28 @@ class AzureDevOpsReporter implements Reporter {
         this._warning('Failed to create test run. Check your orgUrl. Reporting is disabled.');
       } else {
         this._warning('Failed to create test run. Reporting is disabled.');
-        const parsedError = JSON.parse(String(error.message.trim()))
+        const parsedError = JSON.parse(String(error.message.trim()));
         this._warning(parsedError?.message || error.message);
       }
     }
   }
 
   async onTestEnd(test: TestCase, testResult: TestResult): Promise<void> {
-    if (this.isDisabled)
-      return;
+    if (this.isDisabled) return;
     try {
       const runId = await this.runIdPromise;
 
-      if (!runId)
-        return;
+      if (!runId) return;
 
       this._logTestItem(test, testResult);
       await this._publishCaseResult(test, testResult);
-
     } catch (error: any) {
       this._warning(`Failed to publish test result. \n ${error.message}`);
     }
   }
 
   async onEnd(): Promise<void> {
-    if (this.isDisabled)
-      return;
+    if (this.isDisabled) return;
     try {
       const runId = await this.runIdPromise;
 
@@ -244,7 +236,7 @@ class AzureDevOpsReporter implements Reporter {
           );
           prevCount--;
         }
-        await new Promise(resolve => setTimeout(resolve, 250));
+        await new Promise((resolve) => setTimeout(resolve, 250));
       }
 
       if (this.publishedResultsCount === 0 && !runId) {
@@ -252,8 +244,7 @@ class AzureDevOpsReporter implements Reporter {
         return;
       }
 
-      if (!this.testApi)
-        this.testApi = await this.connection.getTestApi();
+      if (!this.testApi) this.testApi = await this.connection.getTestApi();
       const runUpdatedResponse = await this.testApi.updateTestRun({ state: 'Completed' }, this.projectName, runId!);
       this._log(chalk.green(`Run ${runId} - ${runUpdatedResponse.state}`));
     } catch (error: any) {
@@ -274,21 +265,32 @@ class AzureDevOpsReporter implements Reporter {
   private _warning(message: any) {
     console.log(`${chalk.magenta('azure:')} ${chalk.yellow(message)}`);
   }
-  
+
   private _getCaseIds(test: TestCase): string | undefined {
     const results = /\[([\d,]+)\]/.exec(test.title);
-    if (results && results.length === 2)
-      return results[1];
+    if (results && results.length === 2) return results[1];
   }
 
   private _logTestItem(test: TestCase, testResult: TestResult) {
     switch (testResult.status) {
-      case 'passed': this._log(chalk.green(`${test.title} - ${testResult.status}`)); break;
-      case 'failed': this._log(chalk.red(`${test.title} - ${testResult.status}`)); break;
-      case 'timedOut': this._log(chalk.yellow(`${test.title} - ${testResult.status}`)); break;
-      case 'skipped': this._log(chalk.yellow(`${test.title} - ${testResult.status}`)); break;
-      case 'interrupted': this._log(chalk.red(`${test.title} - ${testResult.status}`)); break;
-      default: this._log(`${test.title} - ${testResult.status}`); break;
+      case 'passed':
+        this._log(chalk.green(`${test.title} - ${testResult.status}`));
+        break;
+      case 'failed':
+        this._log(chalk.red(`${test.title} - ${testResult.status}`));
+        break;
+      case 'timedOut':
+        this._log(chalk.yellow(`${test.title} - ${testResult.status}`));
+        break;
+      case 'skipped':
+        this._log(chalk.yellow(`${test.title} - ${testResult.status}`));
+        break;
+      case 'interrupted':
+        this._log(chalk.red(`${test.title} - ${testResult.status}`));
+        break;
+      default:
+        this._log(`${test.title} - ${testResult.status}`);
+        break;
     }
   }
 
@@ -302,15 +304,16 @@ class AzureDevOpsReporter implements Reporter {
           name: runName,
           automated: true,
           plan: { id: String(this.planId) },
-          ...this.testRunConfig,
+          ...(this.testRunConfig
+            ? this.testRunConfig
+            : {
+                configurationIds: [1],
+              }),
         };
-        if (!this.testApi)
-          this.testApi = await this.connection.getTestApi();
+        if (!this.testApi) this.testApi = await this.connection.getTestApi();
         const adTestRun = await this.testApi.createTestRun(runModel, this.projectName);
-        if (adTestRun?.id)
-          return adTestRun;
-        else
-          throw new Error('Failed to create test run');
+        if (adTestRun?.id) return adTestRun;
+        else throw new Error('Failed to create test run');
       }
     } catch (error: any) {
       this._warning(chalk.red(error.message));
@@ -320,53 +323,66 @@ class AzureDevOpsReporter implements Reporter {
 
   private _removePublished(testAlias: string): void {
     const resultIndex = this.resultsToBePublished.indexOf(testAlias);
-    if (resultIndex !== -1)
-      this.resultsToBePublished.splice(resultIndex, 1);
+    if (resultIndex !== -1) this.resultsToBePublished.splice(resultIndex, 1);
   }
 
   private async _checkProject(projectName: string): Promise<TeamProject | void> {
     try {
-      if (!this.coreApi)
-        this.coreApi = await this.connection.getCoreApi();
+      if (!this.coreApi) this.coreApi = await this.connection.getCoreApi();
       const project = await this.coreApi.getProject(projectName);
-      if (project)
-        return project;
-      else
-        throw new Error(`Project ${projectName} does not exist. Reporting is disabled.`);
-
+      if (project) return project;
+      else throw new Error(`Project ${projectName} does not exist. Reporting is disabled.`);
     } catch (error: any) {
       this._warning(chalk.red(error.message));
       this.isDisabled = true;
     }
   }
 
-  private async _getTestPointIdsByTCIds(planId: number, testcaseIds: number[]): Promise<number[]> {
-    const pointsIds: number[] = [];
+  private async _getTestPointIdsByTCIds(planId: number, testcaseIds: number[]): Promise<TTestPoint> {
+    const result = {} as TTestPoint;
     try {
       const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: { testcaseIds }
+        pointsFilter: { testcaseIds },
       };
-      if (!this.testApi)
-        this.testApi = await this.connection.getTestApi();
+      if (!this.testApi) this.testApi = await this.connection.getTestApi();
       const pointsQueryResult: TestInterfaces.TestPointsQuery = await this.testApi.getPointsByQuery(
         pointsQuery,
         this.projectName
       );
       if (pointsQueryResult.points) {
-        pointsQueryResult.points.forEach((point: TestPoint) => {
-          if (point.testPlan && point.testPlan.id && parseInt(point.testPlan.id, 10) === planId) {
-            pointsIds.push(point.id);
+        const findedPointWithConfiguration = pointsQueryResult.points.find(
+          (point) =>
+            point.testPlan &&
+            point.testPlan.id &&
+            parseInt(point.testPlan.id, 10) === planId &&
+            (this.testRunConfig?.configurationIds?.length
+              ? this.testRunConfig.configurationIds.includes(Number(point.configuration.id))
+              : false)
+        );
+        if (findedPointWithConfiguration) {
+          result.point = findedPointWithConfiguration.id;
+          result.configurationId = findedPointWithConfiguration.configuration.id!;
+          result.configurationName = findedPointWithConfiguration.configuration.name!;
+        } else {
+          const findedPoint = pointsQueryResult.points.find(
+            (point) => point.testPlan && point.testPlan.id && parseInt(point.testPlan.id, 10) === planId
+          );
+          if (findedPoint) {
+            result.point = findedPoint.id;
           }
-        });
+        }
       }
-      if (pointsIds.length === 0) {
-        throw new Error(`Could not find test point for test cases [${testcaseIds.join(',')}] associated with test plan ${this.planId}. Check, maybe testPlanId, what you specified, is incorrect.`);
+      if (!result?.point) {
+        throw new Error(
+          `Could not find test point for test cases [${testcaseIds.join(',')}] associated with test plan ${
+            this.planId
+          }. Check, maybe testPlanId, what you specified, is incorrect.`
+        );
       }
-      return pointsIds;
     } catch (error: any) {
       this._warning(chalk.red(error.message));
     }
-    return pointsIds;
+    return result;
   }
 
   private _addReportingOverride = (api: Test.ITestApi): Test.ITestApi => {
@@ -381,7 +397,7 @@ class AzureDevOpsReporter implements Reporter {
       return new Promise(async (resolve, reject) => {
         const routeValues = {
           project: projectName,
-          runId
+          runId,
         };
 
         try {
@@ -409,16 +425,15 @@ class AzureDevOpsReporter implements Reporter {
     const attachmentsResult: string[] = [];
     for (const attachment of testResult.attachments) {
       try {
-        if (this.attachmentsType!.includes((attachment.name as TAttachmentType[number]))) {
+        if (this.attachmentsType!.includes(attachment.name as TAttachmentType[number])) {
           if (existsSync(attachment.path!)) {
             const attachments: TestInterfaces.TestAttachmentRequestModel = {
               attachmentType: 'GeneralAttachment',
               fileName: `${attachment.name}-${createGuid()}.${attachment.contentType.split('/')[1]}`,
-              stream: readFileSync(attachment.path!, { encoding: 'base64' })
+              stream: readFileSync(attachment.path!, { encoding: 'base64' }),
             };
 
-            if (!this.testApi)
-              this.testApi = await this.connection.getTestApi();
+            if (!this.testApi) this.testApi = await this.connection.getTestApi();
             const response = await this.testApi.createTestResultAttachment(
               attachments,
               this.projectName,
@@ -440,8 +455,7 @@ class AzureDevOpsReporter implements Reporter {
 
   private async _publishCaseResult(test: TestCase, testResult: TestResult): Promise<TestResultsToTestRun | void> {
     const caseId = this._getCaseIds(test);
-    if (!caseId)
-      return;
+    if (!caseId) return;
 
     const testAlias = `${caseId} - ${test.title}`;
     this.resultsToBePublished.push(testAlias);
@@ -449,15 +463,15 @@ class AzureDevOpsReporter implements Reporter {
       const runId = await this.runIdPromise;
       this._log(chalk.gray(`Start publishing: ${test.title}`));
 
-      const pointIds = await this._getTestPointIdsByTCIds(this.planId as number, [parseInt(caseId, 10)]);
-      if (!pointIds || !pointIds.length) {
+      const points = await this._getTestPointIdsByTCIds(this.planId as number, [parseInt(caseId, 10)]);
+      if (!points.point) {
         this._removePublished(testAlias);
         throw new Error(`No test points found for test case [${caseId}]`);
       }
       const results: TestInterfaces.TestCaseResult[] = [
         {
           testCase: { id: caseId },
-          testPoint: { id: String(pointIds[0]) },
+          testPoint: { id: String(points.point) },
           testCaseTitle: test.title,
           outcome: AzureTestStatuses[testResult.status],
           state: 'Completed',
@@ -465,13 +479,17 @@ class AzureDevOpsReporter implements Reporter {
           errorMessage: testResult.error
             ? `${test.title}: ${testResult.error?.message?.replace(/\u001b\[.*?m/g, '') as string}`
             : undefined,
-          stackTrace: testResult.error?.stack?.replace(/\u001b\[.*?m/g, '')
-        }
+          stackTrace: testResult.error?.stack?.replace(/\u001b\[.*?m/g, ''),
+          ...(points.configurationId && {
+            configuration: { id: points.configurationId, name: points.configurationName },
+          }),
+        },
       ];
 
-      if (!this.testApi)
-        this.testApi = await this.connection.getTestApi();
-      const testCaseResult: TestResultsToTestRun = await this._addReportingOverride(this.testApi).addTestResultsToTestRun(results, this.projectName, runId!) as unknown as TestResultsToTestRun;
+      if (!this.testApi) this.testApi = await this.connection.getTestApi();
+      const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
+        this.testApi
+      ).addTestResultsToTestRun(results, this.projectName, runId!)) as unknown as TestResultsToTestRun;
       if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test case [${caseId}]`);
 
       if (this.uploadAttachments && testResult.attachments.length > 0)
