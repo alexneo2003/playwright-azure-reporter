@@ -1,3 +1,12 @@
+# [1.2.0-beta.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2022-10-14)
+
+
+### Bug Fixes
+
+* configurationIds implementing ([9c9ad44](https://github.com/alexneo2003/playwright-azure-reporter/commit/9c9ad44b4a798e336b534f46a804e64d9c8cc31a))
+
+
+
 # [1.2.0-beta.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.2.0-beta.0...v1.2.0-beta.1) (2022-10-13)
 
 
