@@ -1,3 +1,12 @@
+# [1.3.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.2.0-beta.2...v1.3.0-beta.0) (2022-10-31)
+
+
+### Features
+
+* define multiple test cases for a single test ([a89847a](https://github.com/alexneo2003/playwright-azure-reporter/commit/a89847acd8a4115cfb54329b27c7941ac403a792))
+
+
+
 # [1.2.0-beta.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2022-10-14)
 
 
