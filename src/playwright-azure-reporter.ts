@@ -18,6 +18,10 @@ export function createGuid(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
+export function shortID(): string {
+  return crypto.randomBytes(8).toString('hex');
+}
+
 enum AzureTestStatuses {
   passed = 'Passed',
   failed = 'Failed',
@@ -266,9 +270,16 @@ class AzureDevOpsReporter implements Reporter {
     console.log(`${chalk.magenta('azure:')} ${chalk.yellow(message)}`);
   }
 
-  private _getCaseIds(test: TestCase): string | undefined {
-    const results = /\[([\d,]+)\]/.exec(test.title);
-    if (results && results.length === 2) return results[1];
+  private _getCaseIds(test: TestCase): string[] {
+    const result: string[] = [];
+    const regex = new RegExp(/\[([\d,\s]+)\]/, 'gm');
+    const matchesAll = test.title.matchAll(regex);
+    const matches = [...matchesAll].map((match) => match[1]);
+    matches.forEach((match) => {
+      const ids = match.split(',').map((id) => id.trim());
+      result.push(...ids);
+    });
+    return result;
   }
 
   private _logTestItem(test: TestCase, testResult: TestResult) {
@@ -454,55 +465,59 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   private async _publishCaseResult(test: TestCase, testResult: TestResult): Promise<TestResultsToTestRun | void> {
-    const caseId = this._getCaseIds(test);
-    if (!caseId) return;
+    const caseIds = this._getCaseIds(test);
+    if (!caseIds || !caseIds.length) return;
 
-    const testAlias = `${caseId} - ${test.title}`;
-    this.resultsToBePublished.push(testAlias);
-    try {
-      const runId = await this.runIdPromise;
-      this._log(chalk.gray(`Start publishing: ${test.title}`));
+    await Promise.all(
+      caseIds.map(async (caseId) => {
+        const testAlias = `${shortID()} - ${test.title}`;
+        this.resultsToBePublished.push(testAlias);
+        try {
+          const runId = await this.runIdPromise;
+          this._log(chalk.gray(`Start publishing: TC:${caseId} - ${test.title}`));
 
-      const points = await this._getTestPointIdsByTCIds(this.planId as number, [parseInt(caseId, 10)]);
-      if (!points.point) {
-        this._removePublished(testAlias);
-        throw new Error(`No test points found for test case [${caseId}]`);
-      }
-      const results: TestInterfaces.TestCaseResult[] = [
-        {
-          testCase: { id: caseId },
-          testPoint: { id: String(points.point) },
-          testCaseTitle: test.title,
-          outcome: AzureTestStatuses[testResult.status],
-          state: 'Completed',
-          durationInMs: testResult.duration,
-          errorMessage: testResult.error
-            ? `${test.title}: ${testResult.error?.message?.replace(/\u001b\[.*?m/g, '') as string}`
-            : undefined,
-          stackTrace: testResult.error?.stack?.replace(/\u001b\[.*?m/g, ''),
-          ...(points.configurationId && {
-            configuration: { id: points.configurationId, name: points.configurationName },
-          }),
-        },
-      ];
+          const points = await this._getTestPointIdsByTCIds(this.planId as number, [parseInt(caseId, 10)]);
+          if (!points.point) {
+            this._removePublished(testAlias);
+            throw new Error(`No test points found for test case [${caseIds}]`);
+          }
+          const results: TestInterfaces.TestCaseResult[] = [
+            {
+              testCase: { id: caseId },
+              testPoint: { id: String(points.point) },
+              testCaseTitle: test.title,
+              outcome: AzureTestStatuses[testResult.status],
+              state: 'Completed',
+              durationInMs: testResult.duration,
+              errorMessage: testResult.error
+                ? `${test.title}: ${testResult.error?.message?.replace(/\u001b\[.*?m/g, '') as string}`
+                : undefined,
+              stackTrace: testResult.error?.stack?.replace(/\u001b\[.*?m/g, ''),
+              ...(points.configurationId && {
+                configuration: { id: points.configurationId, name: points.configurationName },
+              }),
+            },
+          ];
 
-      if (!this.testApi) this.testApi = await this.connection.getTestApi();
-      const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
-        this.testApi
-      ).addTestResultsToTestRun(results, this.projectName, runId!)) as unknown as TestResultsToTestRun;
-      if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test case [${caseId}]`);
+          if (!this.testApi) this.testApi = await this.connection.getTestApi();
+          const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
+            this.testApi
+          ).addTestResultsToTestRun(results, this.projectName, runId!)) as unknown as TestResultsToTestRun;
+          if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test case [${caseId}]`);
 
-      if (this.uploadAttachments && testResult.attachments.length > 0)
-        await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, caseId);
+          if (this.uploadAttachments && testResult.attachments.length > 0)
+            await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, caseId);
 
-      this._removePublished(testAlias);
-      this.publishedResultsCount++;
-      this._log(chalk.gray(`Result published: ${test.title}`));
-      return testCaseResult;
-    } catch (error: any) {
-      this._removePublished(testAlias);
-      this._warning(chalk.red(error.message));
-    }
+          this._removePublished(testAlias);
+          this.publishedResultsCount++;
+          this._log(chalk.gray(`Result published: TC:${caseId} - ${test.title}`));
+          return testCaseResult;
+        } catch (error: any) {
+          this._removePublished(testAlias);
+          this._warning(chalk.red(error.message));
+        }
+      })
+    );
   }
 }
 

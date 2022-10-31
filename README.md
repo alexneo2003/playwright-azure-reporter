@@ -12,6 +12,13 @@ You must register an ID already existing test cases from Azure DevOps before run
 
 > **You need write testCaseId wraped in square brackets at the test name.**
 
+You can define multiple test cases for a single test with next format:
+
+- `[1] Test name` - single test case
+- `[1,2,3] Test name` - multiple test cases
+- `[16, 17, 18] Test name` - multiple test cases with spaces
+- `[1, 2, 3] Test name [4] Test name [5][6] Test name` - with combined format
+
 For example:
 
 ```typescript
@@ -20,16 +27,32 @@ describe('Test suite', () => {
     expect(true).toBe(true);
   });
 
-  test('[3] Correct test', () => {
+  test('Correct test [3]', () => {
     expect(true).toBe(true);
   });
 
-  test.skip('[4] Skipped test', () => {
+  test.skip('Skipped test [4]', () => {
     expect(true).toBe(true);
   });
 
   test('[6] Failed test', () => {
     expect(true).toBe(false);
+  });
+
+  test('[7] Test seven [8] Test eight [9] Test nine', () => {
+    expect(true).toBe(true);
+  });
+
+  test('[10,11,12] Test ten, eleven, twelve', () => {
+    expect(true).toBe(true);
+  });
+
+  test('[13, 14, 15] Test thirteen, fourteen, fifteen', () => {
+    expect(true).toBe(true);
+  });
+
+  test('[16, 17, 18] Test sixteen, seventeen, eighteen [19] Test nineteen', () => {
+    expect(true).toBe(true);
   });
 });
 ```
