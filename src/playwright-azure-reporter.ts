@@ -13,6 +13,7 @@ import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
 import chalk from 'chalk';
 import crypto from 'crypto';
 import { existsSync, readFileSync } from 'fs';
+import { IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
 
 export function createGuid(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -121,6 +122,10 @@ class AzureDevOpsReporter implements Reporter {
   private resolveRunId: (value: number) => void = () => {};
   private rejectRunId: (reason: any) => void = () => {};
   private testRunConfig: TTestRunConfig = {} as TTestRunConfig;
+  private azureClientOptions = {
+    allowRetries: true,
+    maxRetries: 20,
+  } as IRequestOptions;
 
   public constructor(options: AzureReporterOptions) {
     this.runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -181,7 +186,11 @@ class AzureDevOpsReporter implements Reporter {
       `${this.environment ? `[${this.environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
       `${this.environment ? `[${this.environment}]:` : ''}Test plan ${this.planId}`;
     this.uploadAttachments = options?.uploadAttachments || false;
-    this.connection = new azdev.WebApi(this.orgUrl, azdev.getPersonalAccessTokenHandler(this.token));
+    this.connection = new azdev.WebApi(
+      this.orgUrl,
+      azdev.getPersonalAccessTokenHandler(this.token),
+      this.azureClientOptions
+    );
     this.testRunConfig = options?.testRunConfig || undefined;
   }
 
