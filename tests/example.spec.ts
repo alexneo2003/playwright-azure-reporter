@@ -4,7 +4,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('https://playwright.dev/');
 });
 
-test.describe('Describe', () => {
+test.describe.parallel('Describe', () => {
   test('[3] Should page opened', async ({ page }) => {
     await page.locator('text=Get started').click();
     await expect(page).toHaveTitle(/Getting started/);
@@ -17,15 +17,15 @@ test.describe('Describe', () => {
     await page.locator('text=Get started').click();
     await expect(page).toHaveTitle(/Getting started/);
   });
-  test('[3] [7] [8] Awaiting for user input', async ({ page }) => {
+  test('[7] [8] Awaiting for user input', async ({ page }) => {
     await page.locator('text=Get started').click();
     await expect(page).toHaveTitle(/Getting started/);
   });
-  test('[3,7,8] Awaiting for user input', async ({ page }) => {
+  test('[3,8] Awaiting for user input', async ({ page }) => {
     await page.locator('text=Get started').click();
     await expect(page).toHaveTitle(/Getting started/);
   });
-  test('[3, 7, 8] Awaiting for user input', async ({ page }) => {
+  test('[3, 7] Awaiting for user input', async ({ page }) => {
     await page.locator('text=Get started').click();
     await expect(page).toHaveTitle(/Getting started/);
   });
