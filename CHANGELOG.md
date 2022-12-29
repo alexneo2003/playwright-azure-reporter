@@ -1,3 +1,12 @@
+# [1.4.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.3.1-beta.0...v1.4.0-beta.0) (2022-12-29)
+
+
+### Features
+
+* publishTestResultsMode config to set mode when publish test results ([4e25019](https://github.com/alexneo2003/playwright-azure-reporter/commit/4e2501926beb4680c4ef770273847fae39c57b71))
+
+
+
 ## [1.3.1-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.3.0-beta.0...v1.3.1-beta.0) (2022-12-22)
 
 
