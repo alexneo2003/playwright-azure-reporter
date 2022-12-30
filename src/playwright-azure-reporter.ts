@@ -513,7 +513,7 @@ class AzureDevOpsReporter implements Reporter {
         }
       });
       if (!result?.some((item) => item.point)) {
-        throw new Error(
+        this._warning(
           `Could not find test point for test cases [${testcaseIds.join(',')}] associated with test plan ${
             this._planId
           }. Check, maybe testPlanId, what you specified, is incorrect.`
@@ -685,7 +685,7 @@ class AzureDevOpsReporter implements Reporter {
             const testPoint = testsPoints.find((p) => p.testCaseId === parseInt(id, 10));
 
             if (!testPoint) {
-              throw new Error(`No test points found for test case [${testCaseIds}]`);
+              this._warning(`No test points found for test case [${testCaseIds}]`);
             } else {
               testCaseResults.push({
                 testCase: { id },
@@ -706,12 +706,16 @@ class AzureDevOpsReporter implements Reporter {
           }
         }
 
+        if (testCaseResults.length === 0) {
+          continue;
+        }
+
         const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
           this._testApi
         ).addTestResultsToTestRun(testCaseResults, this._projectName, runId!)) as unknown as TestResultsToTestRun;
 
         if (!testCaseResult.result) {
-          throw new Error(`Failed to publish test result for test case [${testCaseIds.join(', ')}]`);
+          this._warning(`Failed to publish test result for test case [${testCaseIds.join(', ')}]`);
         }
 
         const testsWithAttachments = testsPack.filter((t) => t.testResult.attachments.length > 0);
