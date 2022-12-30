@@ -1,3 +1,12 @@
+## [1.4.1-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.4.0-beta.0...v1.4.1-beta.0) (2022-12-30)
+
+
+### Bug Fixes
+
+* fixing some throwe error ([733e759](https://github.com/alexneo2003/playwright-azure-reporter/commit/733e759f82bf7dc17176af7f3ef04ce43593ceeb))
+
+
+
 # [1.4.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.3.1-beta.0...v1.4.0-beta.0) (2022-12-29)
 
 
