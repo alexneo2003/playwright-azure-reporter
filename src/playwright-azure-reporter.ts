@@ -23,7 +23,7 @@ export function shortID(): string {
   return crypto.randomBytes(8).toString('hex');
 }
 
-enum AzureTestStatuses {
+enum EAzureTestStatuses {
   passed = 'Passed',
   failed = 'Failed',
   skipped = 'Paused',
@@ -35,13 +35,26 @@ const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 
 type TAttachmentType = Array<typeof attachmentTypesArray[number]>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
-type TTestPoint = { point: number | undefined; configurationId: string; configurationName: string };
+type TTestPoint = {
+  point: number | undefined;
+  configurationId?: string;
+  configurationName?: string;
+  testCaseId: number;
+};
+type TTestResultsToBePublished = { test: ITestCaseExtended; testResult: TestResult };
+type TPublishTestResults = 'testResult' | 'testRun';
+
+interface ITestCaseExtended extends TestCase {
+  testAlias: string;
+  testCaseIds: string[];
+}
 
 export interface AzureReporterOptions {
   token: string;
   planId: number;
   orgUrl: string;
   projectName: string;
+  publishTestResultsMode?: TPublishTestResults;
   logging?: boolean | undefined;
   isDisabled?: boolean | undefined;
   environment?: string | undefined;
@@ -103,112 +116,131 @@ interface Headers {
 }
 
 class AzureDevOpsReporter implements Reporter {
-  private testApi!: Test.ITestApi;
-  private coreApi!: ICoreApi;
-  private publishedResultsCount = 0;
-  private resultsToBePublished: string[] = [];
-  private connection!: WebApi;
-  private orgUrl!: string;
-  private projectName!: string;
-  private environment?: string;
-  private planId = 0;
-  private logging = false;
-  private isDisabled = false;
-  private testRunTitle = '';
-  private uploadAttachments = false;
-  private attachmentsType?: TAttachmentType;
-  private token: string = '';
-  private runIdPromise: Promise<number | void>;
-  private resolveRunId: (value: number) => void = () => {};
-  private rejectRunId: (reason: any) => void = () => {};
-  private testRunConfig: TTestRunConfig = {} as TTestRunConfig;
-  private azureClientOptions = {
+  private _testApi!: Test.ITestApi;
+  private _coreApi!: ICoreApi;
+  private _publishedResultsCount = 0;
+  private _testsAliasToBePublished: string[] = [];
+  private _testResultsToBePublished: TTestResultsToBePublished[] = [];
+  private _connection!: WebApi;
+  private _orgUrl!: string;
+  private _projectName!: string;
+  private _environment?: string;
+  private _planId = 0;
+  private _logging = false;
+  private _isDisabled = false;
+  private _testRunTitle = '';
+  private _uploadAttachments = false;
+  private _attachmentsType?: TAttachmentType;
+  private _token: string = '';
+  private _runIdPromise: Promise<number | void>;
+  private _resolveRunId: (value: number) => void = () => {};
+  private _rejectRunId: (reason: any) => void = () => {};
+  private _publishResultsPromise: Promise<any | void>;
+  private _resolvePublishResults: () => void = () => {};
+  private _rejectPublishResults: (reason: any) => void = () => {};
+  private _testRunConfig: TTestRunConfig = {} as TTestRunConfig;
+  private _azureClientOptions = {
     allowRetries: true,
     maxRetries: 20,
   } as IRequestOptions;
+  private _publishTestResultsMode: TPublishTestResults = 'testResult';
 
   public constructor(options: AzureReporterOptions) {
-    this.runIdPromise = new Promise<number | void>((resolve, reject) => {
-      this.resolveRunId = resolve;
-      this.rejectRunId = reject;
+    this._runIdPromise = new Promise<number | void>((resolve, reject) => {
+      this._resolveRunId = resolve;
+      this._rejectRunId = reject;
     })
       .then((runId) => {
         return runId;
       })
       .catch((error) => {
         this._warning(error);
-        this.isDisabled = true;
+        this._isDisabled = true;
+      });
+    this._publishResultsPromise = new Promise<void>((resolve, reject) => {
+      this._resolvePublishResults = resolve;
+      this._rejectPublishResults = reject;
+    })
+      .then((runId) => {
+        return runId;
+      })
+      .catch((error) => {
+        this._warning(error);
+        this._isDisabled = true;
       });
     this._validateOptions(options);
   }
 
   _validateOptions(options: AzureReporterOptions): void {
     if (options?.isDisabled) {
-      this.isDisabled = true;
+      this._isDisabled = true;
       return;
     }
     if (!options?.orgUrl) {
       this._warning("'orgUrl' is not set. Reporting is disabled.");
-      this.isDisabled = true;
+      this._isDisabled = true;
       return;
     }
     if (!options?.projectName) {
       this._warning("'projectName' is not set. Reporting is disabled.");
-      this.isDisabled = true;
+      this._isDisabled = true;
       return;
     }
     if (!options?.planId) {
       this._warning("'planId' is not set. Reporting is disabled.");
-      this.isDisabled = true;
+      this._isDisabled = true;
       return;
     }
     if (!options?.token) {
       this._warning("'token' is not set. Reporting is disabled.");
-      this.isDisabled = true;
+      this._isDisabled = true;
       return;
     }
     if (options?.uploadAttachments) {
       if (!options?.attachmentsType) {
         this._warning("'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default.");
-        this.attachmentsType = ['screenshot'];
+        this._attachmentsType = ['screenshot'];
       } else {
-        this.attachmentsType = options.attachmentsType;
+        this._attachmentsType = options.attachmentsType;
       }
     }
 
-    this.orgUrl = options.orgUrl;
-    this.projectName = options.projectName;
-    this.planId = options.planId;
-    this.logging = options.logging || false;
-    this.token = options.token;
-    this.environment = options?.environment || undefined;
-    this.testRunTitle =
-      `${this.environment ? `[${this.environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
-      `${this.environment ? `[${this.environment}]:` : ''}Test plan ${this.planId}`;
-    this.uploadAttachments = options?.uploadAttachments || false;
-    this.connection = new azdev.WebApi(
-      this.orgUrl,
-      azdev.getPersonalAccessTokenHandler(this.token),
-      this.azureClientOptions
+    this._orgUrl = options.orgUrl;
+    this._projectName = options.projectName;
+    this._planId = options.planId;
+    this._logging = options.logging || false;
+    this._token = options.token;
+    this._environment = options?.environment || undefined;
+    this._testRunTitle =
+      `${this._environment ? `[${this._environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
+      `${this._environment ? `[${this._environment}]:` : ''}Test plan ${this._planId}`;
+    this._uploadAttachments = options?.uploadAttachments || false;
+    this._connection = new azdev.WebApi(
+      this._orgUrl,
+      azdev.getPersonalAccessTokenHandler(this._token),
+      this._azureClientOptions
     );
-    this.testRunConfig = options?.testRunConfig || undefined;
+    this._testRunConfig = options?.testRunConfig || undefined;
+    this._publishTestResultsMode = options?.publishTestResultsMode || 'testResult';
   }
 
   async onBegin(): Promise<void> {
-    if (this.isDisabled) return;
+    if (this._isDisabled) return;
     try {
-      this.testApi = await this.connection.getTestApi();
+      this._testApi = await this._connection.getTestApi();
 
-      const run = await this._createRun(this.testRunTitle);
-      if (run?.id) {
-        this.resolveRunId(run.id);
-        this._log(chalk.green(`Using run ${run.id} to publish test results`));
-      } else {
-        this.isDisabled = true;
-        this.rejectRunId('Failed to create test run. Reporting is disabled.');
+      if (this._publishTestResultsMode === 'testResult') {
+        const run = await this._createRun(this._testRunTitle);
+        if (run?.id) {
+          this._resolveRunId(run.id);
+          this._log(chalk.green(`Using run ${run.id} to publish test results`));
+        } else {
+          this._isDisabled = true;
+          this._rejectRunId('Failed to create test run. Reporting is disabled.');
+        }
       }
     } catch (error: any) {
-      this.isDisabled = true;
+      this._isDisabled = true;
       if (error.message.includes('401')) {
         this._warning('Failed to create test run. Check your token. Reporting is disabled.');
       } else if (error.message.includes('getaddrinfo ENOTFOUND')) {
@@ -222,43 +254,73 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   async onTestEnd(test: TestCase, testResult: TestResult): Promise<void> {
-    if (this.isDisabled) return;
+    if (this._isDisabled) return;
     try {
-      const runId = await this.runIdPromise;
+      if (this._publishTestResultsMode === 'testResult') {
+        const runId = await this._runIdPromise;
 
-      if (!runId) return;
+        if (!runId) return;
 
-      this._logTestItem(test, testResult);
-      await this._publishCaseResult(test, testResult);
+        this._logTestItem(test, testResult);
+        await this._publishCaseResult(test, testResult);
+      } else {
+        this._logTestItem(test, testResult);
+        const testCase: ITestCaseExtended = {
+          ...test,
+          testAlias: `${shortID()} - ${test.title}`,
+          testCaseIds: this._getCaseIds(test),
+        };
+        this._testResultsToBePublished.push({ test: testCase, testResult });
+      }
     } catch (error: any) {
       this._warning(`Failed to publish test result. \n ${error.message}`);
     }
   }
 
   async onEnd(): Promise<void> {
-    if (this.isDisabled) return;
+    if (this._isDisabled) return;
     try {
-      const runId = await this.runIdPromise;
+      let runId: number | void;
 
-      let prevCount = this.resultsToBePublished.length;
-      while (this.resultsToBePublished.length > 0) {
-        // need wait all results to be published
-        if (prevCount > this.resultsToBePublished.length) {
-          this._log(
-            chalk.gray(`Waiting for all results to be published. Remaining ${this.resultsToBePublished.length} results`)
-          );
-          prevCount--;
+      if (this._publishTestResultsMode === 'testResult') {
+        runId = await this._runIdPromise;
+
+        let prevCount = this._testsAliasToBePublished.length;
+        while (this._testsAliasToBePublished.length > 0) {
+          // need wait all results to be published
+          if (prevCount > this._testsAliasToBePublished.length) {
+            this._log(
+              chalk.gray(
+                `Waiting for all results to be published. Remaining ${this._testsAliasToBePublished.length} results`
+              )
+            );
+            prevCount--;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
         }
-        await new Promise((resolve) => setTimeout(resolve, 250));
+      } else {
+        this._logging = true;
+        const createRunResponse = await this._createRun(this._testRunTitle);
+        runId = createRunResponse?.id;
+        if (runId) {
+          this._resolveRunId(runId);
+          this._log(chalk.green(`Using run ${runId} to publish test results`));
+          await this._publishTestResults(runId, this._testResultsToBePublished);
+        } else {
+          this._isDisabled = true;
+          this._rejectRunId('Failed to create test run. Reporting is disabled.');
+        }
+
+        await this._publishResultsPromise;
       }
 
-      if (this.publishedResultsCount === 0 && !runId) {
+      if (this._publishedResultsCount === 0 && !runId) {
         this._log(chalk.gray('No testcases were matched. Ensure that your tests are declared correctly.'));
         return;
       }
 
-      if (!this.testApi) this.testApi = await this.connection.getTestApi();
-      const runUpdatedResponse = await this.testApi.updateTestRun({ state: 'Completed' }, this.projectName, runId!);
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      const runUpdatedResponse = await this._testApi.updateTestRun({ state: 'Completed' }, this._projectName, runId!);
       this._log(chalk.green(`Run ${runId} - ${runUpdatedResponse.state}`));
     } catch (error: any) {
       this._warning(chalk.red(`Error on completing run ${error as string}`));
@@ -270,7 +332,7 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   private _log(message: any) {
-    if (this.logging) {
+    if (this._logging) {
       console.log(chalk.magenta(`azure: ${message}`));
     }
   }
@@ -316,58 +378,58 @@ class AzureDevOpsReporter implements Reporter {
 
   private async _createRun(runName: string): Promise<TestInterfaces.TestRun | void> {
     try {
-      const isExists = await this._checkProject(this.projectName);
+      const isExists = await this._checkProject(this._projectName);
       if (!isExists) {
         return;
       } else {
         const runModel: TestInterfaces.RunCreateModel = {
           name: runName,
           automated: true,
-          plan: { id: String(this.planId) },
-          ...(this.testRunConfig
-            ? this.testRunConfig
+          plan: { id: String(this._planId) },
+          ...(this._testRunConfig
+            ? this._testRunConfig
             : {
                 configurationIds: [1],
               }),
         };
-        if (!this.testApi) this.testApi = await this.connection.getTestApi();
-        const adTestRun = await this.testApi.createTestRun(runModel, this.projectName);
+        if (!this._testApi) this._testApi = await this._connection.getTestApi();
+        const adTestRun = await this._testApi.createTestRun(runModel, this._projectName);
         if (adTestRun?.id) return adTestRun;
         else throw new Error('Failed to create test run');
       }
     } catch (error: any) {
       this._warning(chalk.red(error.message));
-      this.isDisabled = true;
+      this._isDisabled = true;
     }
   }
 
   private _removePublished(testAlias: string): void {
-    const resultIndex = this.resultsToBePublished.indexOf(testAlias);
-    if (resultIndex !== -1) this.resultsToBePublished.splice(resultIndex, 1);
+    const resultIndex = this._testsAliasToBePublished.indexOf(testAlias);
+    if (resultIndex !== -1) this._testsAliasToBePublished.splice(resultIndex, 1);
   }
 
   private async _checkProject(projectName: string): Promise<TeamProject | void> {
     try {
-      if (!this.coreApi) this.coreApi = await this.connection.getCoreApi();
-      const project = await this.coreApi.getProject(projectName);
+      if (!this._coreApi) this._coreApi = await this._connection.getCoreApi();
+      const project = await this._coreApi.getProject(projectName);
       if (project) return project;
       else throw new Error(`Project ${projectName} does not exist. Reporting is disabled.`);
     } catch (error: any) {
       this._warning(chalk.red(error.message));
-      this.isDisabled = true;
+      this._isDisabled = true;
     }
   }
 
-  private async _getTestPointIdsByTCIds(planId: number, testcaseIds: number[]): Promise<TTestPoint> {
+  private async _getTestPointIdByTCId(planId: number, testcaseId: number): Promise<TTestPoint> {
     const result = {} as TTestPoint;
     try {
       const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: { testcaseIds },
+        pointsFilter: { testcaseIds: [testcaseId] },
       };
-      if (!this.testApi) this.testApi = await this.connection.getTestApi();
-      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this.testApi.getPointsByQuery(
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
         pointsQuery,
-        this.projectName
+        this._projectName
       );
       if (pointsQueryResult.points) {
         const findedPointWithConfiguration = pointsQueryResult.points.find(
@@ -375,8 +437,8 @@ class AzureDevOpsReporter implements Reporter {
             point.testPlan &&
             point.testPlan.id &&
             parseInt(point.testPlan.id, 10) === planId &&
-            (this.testRunConfig?.configurationIds?.length
-              ? this.testRunConfig.configurationIds.includes(Number(point.configuration.id))
+            (this._testRunConfig?.configurationIds?.length
+              ? this._testRunConfig.configurationIds.includes(Number(point.configuration.id))
               : false)
         );
         if (findedPointWithConfiguration) {
@@ -394,8 +456,66 @@ class AzureDevOpsReporter implements Reporter {
       }
       if (!result?.point) {
         throw new Error(
+          `Could not find test point for test cases [${testcaseId}] associated with test plan ${this._planId}. Check, maybe testPlanId, what you specified, is incorrect.`
+        );
+      }
+    } catch (error: any) {
+      this._warning(chalk.red(error.message));
+    }
+    return result;
+  }
+
+  private async _getTestPointIdsByTCIds(planId: number, testcaseIds: number[]): Promise<TTestPoint[]> {
+    const result = [] as TTestPoint[];
+    try {
+      const pointsQuery: TestInterfaces.TestPointsQuery = {
+        pointsFilter: { testcaseIds: testcaseIds },
+      };
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
+        pointsQuery,
+        this._projectName
+      );
+      testcaseIds.forEach((testcaseId) => {
+        if (pointsQueryResult.points) {
+          const findedPointWithConfiguration = pointsQueryResult.points.find(
+            (point) =>
+              point.testCase.id === testcaseId.toString() &&
+              point.testPlan &&
+              point.testPlan.id &&
+              parseInt(point.testPlan.id, 10) === planId &&
+              (this._testRunConfig?.configurationIds?.length
+                ? this._testRunConfig.configurationIds.includes(Number(point.configuration.id))
+                : false)
+          );
+          if (findedPointWithConfiguration) {
+            result.push({
+              testCaseId: testcaseId,
+              point: findedPointWithConfiguration.id,
+              configurationId: findedPointWithConfiguration.configuration.id!,
+              configurationName: findedPointWithConfiguration.configuration.name!,
+            });
+          } else {
+            const findedPoint = pointsQueryResult.points.find(
+              (point) =>
+                point.testCase.id === testcaseId.toString() &&
+                point.testPlan &&
+                point.testPlan.id &&
+                parseInt(point.testPlan.id, 10) === planId
+            );
+            if (findedPoint) {
+              result.push({
+                testCaseId: testcaseId,
+                point: findedPoint.id,
+              });
+            }
+          }
+        }
+      });
+      if (!result?.some((item) => item.point)) {
+        this._warning(
           `Could not find test point for test cases [${testcaseIds.join(',')}] associated with test plan ${
-            this.planId
+            this._planId
           }. Check, maybe testPlanId, what you specified, is incorrect.`
         );
       }
@@ -439,28 +559,37 @@ class AzureDevOpsReporter implements Reporter {
     return api;
   };
 
-  private async _uploadAttachmentsFunc(testResult: TestResult, caseId: number, testCaseId: string): Promise<string[]> {
-    this._log(chalk.gray(`Start upload attachments for test case [${testCaseId}]`));
-    const runId = await this.runIdPromise;
+  private async _uploadAttachmentsFunc(
+    testResult: TestResult,
+    testCaseResultId: number,
+    test: ITestCaseExtended | TestCase
+  ): Promise<string[]> {
+    this._log(chalk.gray(`Uploading attachments for test: ${test.title}`));
+    const runId = await this._runIdPromise;
     const attachmentsResult: string[] = [];
+
+    if (!runId) {
+      throw new Error('Could not find test run id. Check, maybe testPlanId, what you specified, is incorrect.');
+    }
+
     for (const attachment of testResult.attachments) {
       try {
-        if (this.attachmentsType!.includes(attachment.name as TAttachmentType[number])) {
+        if (this._attachmentsType!.includes(attachment.name as TAttachmentType[number])) {
           if (existsSync(attachment.path!)) {
-            const attachments: TestInterfaces.TestAttachmentRequestModel = {
+            const attachmentRequestModel: TestInterfaces.TestAttachmentRequestModel = {
               attachmentType: 'GeneralAttachment',
               fileName: `${attachment.name}-${createGuid()}.${attachment.contentType.split('/')[1]}`,
               stream: readFileSync(attachment.path!, { encoding: 'base64' }),
             };
 
-            if (!this.testApi) this.testApi = await this.connection.getTestApi();
-            const response = await this.testApi.createTestResultAttachment(
-              attachments,
-              this.projectName,
+            if (!this._testApi) this._testApi = await this._connection.getTestApi();
+            const response = await this._testApi.createTestResultAttachment(
+              attachmentRequestModel,
+              this._projectName,
               runId!,
-              caseId
+              testCaseResultId
             );
-            if (!response?.id) throw new Error(`Failed to upload attachment for test case [${testCaseId}]`);
+            if (!response?.id) throw new Error(`Failed to upload attachment for test: ${test.title}`);
             attachmentsResult.push(response.url);
           } else {
             throw new Error(`Attachment ${attachment.path} does not exist`);
@@ -470,6 +599,7 @@ class AzureDevOpsReporter implements Reporter {
         this._log(chalk.red(error.message));
       }
     }
+    this._log(chalk.gray('Uploaded attachments'));
     return attachmentsResult;
   }
 
@@ -480,12 +610,12 @@ class AzureDevOpsReporter implements Reporter {
     await Promise.all(
       caseIds.map(async (caseId) => {
         const testAlias = `${shortID()} - ${test.title}`;
-        this.resultsToBePublished.push(testAlias);
+        this._testsAliasToBePublished.push(testAlias);
         try {
-          const runId = await this.runIdPromise;
+          const runId = await this._runIdPromise;
           this._log(chalk.gray(`Start publishing: TC:${caseId} - ${test.title}`));
 
-          const points = await this._getTestPointIdsByTCIds(this.planId as number, [parseInt(caseId, 10)]);
+          const points = await this._getTestPointIdByTCId(this._planId as number, parseInt(caseId, 10));
           if (!points.point) {
             this._removePublished(testAlias);
             throw new Error(`No test points found for test case [${caseIds}]`);
@@ -495,7 +625,7 @@ class AzureDevOpsReporter implements Reporter {
               testCase: { id: caseId },
               testPoint: { id: String(points.point) },
               testCaseTitle: test.title,
-              outcome: AzureTestStatuses[testResult.status],
+              outcome: EAzureTestStatuses[testResult.status],
               state: 'Completed',
               durationInMs: testResult.duration,
               errorMessage: testResult.error
@@ -508,17 +638,17 @@ class AzureDevOpsReporter implements Reporter {
             },
           ];
 
-          if (!this.testApi) this.testApi = await this.connection.getTestApi();
+          if (!this._testApi) this._testApi = await this._connection.getTestApi();
           const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
-            this.testApi
-          ).addTestResultsToTestRun(results, this.projectName, runId!)) as unknown as TestResultsToTestRun;
+            this._testApi
+          ).addTestResultsToTestRun(results, this._projectName, runId!)) as unknown as TestResultsToTestRun;
           if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test case [${caseId}]`);
 
-          if (this.uploadAttachments && testResult.attachments.length > 0)
-            await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, caseId);
+          if (this._uploadAttachments && testResult.attachments.length > 0)
+            await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
 
           this._removePublished(testAlias);
-          this.publishedResultsCount++;
+          this._publishedResultsCount++;
           this._log(chalk.gray(`Result published: TC:${caseId} - ${test.title}`));
           return testCaseResult;
         } catch (error: any) {
@@ -527,6 +657,106 @@ class AzureDevOpsReporter implements Reporter {
         }
       })
     );
+  }
+
+  private async _publishTestResults(runId: number, testsResults: TTestResultsToBePublished[]) {
+    if (!this._testApi) this._testApi = await this._connection.getTestApi();
+
+    const testsPackSize = 50;
+    const testsEndPack = Math.ceil(testsResults.length / testsPackSize);
+    const testsPacksArray = Array.from({ length: testsEndPack }, (_, i) =>
+      testsResults.slice(i * testsPackSize, (i + 1) * testsPackSize)
+    );
+
+    this._log(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`));
+
+    try {
+      for (const testsPack of testsPacksArray) {
+        let testCaseIds: string[] = [];
+        const testsPoints = await this._getTestPointIdsByTCIds(this._planId as number, [
+          ...new Set(testsPack.map((t) => t.test.testCaseIds.map((id) => parseInt(id, 10))).flat()),
+        ]);
+        const testCaseResults: TestInterfaces.TestCaseResult[] = [];
+
+        for (const { test, testResult } of testsPack) {
+          testCaseIds = test.testCaseIds;
+
+          for (const id of testCaseIds) {
+            const testPoint = testsPoints.find((p) => p.testCaseId === parseInt(id, 10));
+
+            if (!testPoint) {
+              this._warning(`No test points found for test case [${testCaseIds}]`);
+            } else {
+              testCaseResults.push({
+                testCase: { id },
+                testPoint: { id: String(testPoint.point) },
+                testCaseTitle: test.title,
+                outcome: EAzureTestStatuses[testResult.status],
+                state: 'Completed',
+                durationInMs: testResult.duration,
+                errorMessage: testResult.error
+                  ? `${test.title}: ${testResult.error?.message?.replace(/\u001b\[.*?m/g, '') as string}`
+                  : undefined,
+                stackTrace: testResult.error?.stack?.replace(/\u001b\[.*?m/g, ''),
+                ...(testPoint.configurationId && {
+                  configuration: { id: testPoint.configurationId, name: testPoint.configurationName },
+                }),
+              });
+            }
+          }
+        }
+
+        if (testCaseResults.length === 0) {
+          continue;
+        }
+
+        const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
+          this._testApi
+        ).addTestResultsToTestRun(testCaseResults, this._projectName, runId!)) as unknown as TestResultsToTestRun;
+
+        if (!testCaseResult.result) {
+          this._warning(`Failed to publish test result for test case [${testCaseIds.join(', ')}]`);
+        }
+
+        const testsWithAttachments = testsPack.filter((t) => t.testResult.attachments.length > 0);
+        if (this._uploadAttachments && testsWithAttachments.length > 0) {
+          this._log(chalk.gray(`Starting to uploading attachments for ${testsWithAttachments.length} test(s)`));
+        }
+
+        if (this._uploadAttachments && testsWithAttachments?.length > 0) {
+          const testResultsQuery: TestInterfaces.TestResultsQuery = {
+            fields: [''],
+            results: testCaseResult.result.value?.map((r) => {
+              return { id: r.id, testRun: { id: r.testRun?.id } };
+            }),
+          };
+
+          const resultData = await this._testApi.getTestResultsByQuery(testResultsQuery, this._projectName);
+
+          for (const publishedTestResult of resultData.results!) {
+            const testWithAttachments = testsWithAttachments.find((t) =>
+              t.test.testCaseIds.includes(publishedTestResult.testCase?.id as string)
+            );
+
+            if (testWithAttachments) {
+              await this._uploadAttachmentsFunc(
+                testWithAttachments.testResult,
+                publishedTestResult.id!,
+                testWithAttachments.test
+              );
+            }
+          }
+        }
+
+        this._publishedResultsCount += testsPack.length;
+        this._log(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount}`));
+      }
+      this._log(chalk.gray(`Test results published for ${this._publishedResultsCount} test(s)`));
+      this._resolvePublishResults();
+    } catch (error: any) {
+      this._warning(chalk.red(error.message));
+      this._rejectPublishResults(error);
+    }
   }
 }
 
