@@ -90,6 +90,7 @@ const config: PlaywrightTestConfig = {
         environment: 'AQA',
         logging: true,
         testRunTitle: 'Playwright Test Run',
+        publishTestResultsMode: 'testRun',
         uploadAttachments: true,
         attachmentsType: ['screenshot', 'video', 'trace'],
         testRunConfig: {
@@ -118,7 +119,7 @@ Reporter options (\* - required):
 - \*`token` - Azure DevOps token, you can find more information [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
 - \*`orgUrl` - Full url for your organization space. Example: `https://dev.azure.com/your-organization-name`
 
-> Please note that some API's (e.g. ProfileApi) can't be hit at the org level, and has to be hit at the deployment level, so url should be structured like https://vssps.dev.azure.com/{yourorgname}
+  > **Note:** some API's (e.g. ProfileApi) can't be hit at the org level, and has to be hit at the deployment level, so url should be structured like https://vssps.dev.azure.com/{yourorgname}
 
 - \*`projectName` - Name of your project (also can be got from run URL). Example: `https://dev.azure.com/alex-neo/SampleProject/` - **SampleProject**
 - \*`planId` - Id of test plan. You can find it in test plan URL. Example: `https://dev.azure.com/alex-neo/SampleProject/_testPlans/execute?planId=4&suiteId=6` - **planId=4**
@@ -129,3 +130,7 @@ Reporter options (\* - required):
 - `isDisabled` [true/false] - Disable reporter. Default: `false`.
 - `testRunTitle` - Title of test run using to create new test run. Default: `Playwright Test Run`.
 - `testRunConfig` - Extra data to pass when Test Run creating. Read [doc](https://learn.microsoft.com/en-us/rest/api/azure/devops/test/runs/create?view=azure-devops-rest-7.1&tabs=HTTP#request-body) from more information. Default: `empty`.
+- `publishTestResultsMode` - Mode of publishing test results. Default: `'testResult'`. Available options:
+  - `testResult` - Published results of tests, at the end of each test, parallel to test run..
+  - `testRun` - Published test results to test run, at the end of test run.
+    > **Note:** If you use `testRun` mode and using same test cases in different tests (yes i know it sounds funny), it will be overwritten with last test result.
