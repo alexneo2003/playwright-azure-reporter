@@ -1,6 +1,6 @@
-import { PlaywrightTestConfig } from '@playwright/test'
-import azureConfig from './azure.config.json'
-import { AzureReporterOptions } from './src/playwright-azure-reporter'
+import { PlaywrightTestConfig } from '@playwright/test';
+import azureConfig from './azure.config.json';
+import { AzureReporterOptions } from './src/playwright-azure-reporter';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -9,7 +9,7 @@ const config: PlaywrightTestConfig = {
   testDir: './tests',
   timeout: 30 * 1000,
   expect: {
-    timeout: 5000
+    timeout: 5000,
   },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -26,15 +26,24 @@ const config: PlaywrightTestConfig = {
         environment: 'AQA',
         testRunTitle: 'Playwright Test Run',
         uploadAttachments: true,
-        // attachmentsType: ['screenshot'],
-      } as AzureReporterOptions
-    ]
+        logging: false,
+        attachmentsType: ['screenshot', 'trace'],
+        publishTestResultsMode: 'testRun',
+        testRunConfig: {
+          configurationIds: [1],
+          owner: {
+            displayName: 'Alex Neo',
+          },
+          comment: 'Playwright Test Run',
+        },
+      } as AzureReporterOptions,
+    ],
   ],
   use: {
     screenshot: 'only-on-failure',
     actionTimeout: 0,
-    trace: 'on-first-retry'
-  }
-}
+    trace: 'retain-on-failure',
+  },
+};
 
-export default config
+export default config;
