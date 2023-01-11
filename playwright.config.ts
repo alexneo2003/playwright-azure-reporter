@@ -26,8 +26,9 @@ const config: PlaywrightTestConfig = {
         environment: 'AQA',
         testRunTitle: 'Playwright Test Run',
         uploadAttachments: true,
-        logging: true,
-        attachmentsType: ['screenshot'],
+        logging: false,
+        attachmentsType: ['screenshot', 'trace'],
+        publishTestResultsMode: 'testRun',
         testRunConfig: {
           configurationIds: [1],
           owner: {
@@ -41,7 +42,7 @@ const config: PlaywrightTestConfig = {
   use: {
     screenshot: 'only-on-failure',
     actionTimeout: 0,
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
   },
 };
 
