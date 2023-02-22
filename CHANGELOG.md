@@ -1,3 +1,12 @@
+## [1.4.4](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.4.3...v1.4.4) (2023-02-22)
+
+
+### Bug Fixes
+
+* fixing readme ([516d29f](https://github.com/alexneo2003/playwright-azure-reporter/commit/516d29f64f851635af4e8de4b4843449105544f3))
+
+
+
 ## [1.4.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.4.2...v1.4.3) (2023-02-08)
 
 
