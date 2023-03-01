@@ -35,12 +35,6 @@ const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 
 type TAttachmentType = Array<typeof attachmentTypesArray[number]>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
-type TTestPoint = {
-  point: number | undefined;
-  configurationId?: string;
-  configurationName?: string;
-  testCaseId: number;
-};
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
 type TPublishTestResults = 'testResult' | 'testRun';
 
@@ -62,7 +56,7 @@ export interface AzureReporterOptions {
   uploadAttachments?: boolean | undefined;
   attachmentsType?: TAttachmentType | undefined;
   testRunConfig?: TTestRunConfig;
-  testPointMapper?: (testCase: ITestCaseExtended, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
+  testPointMapper?: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
 }
 
 interface TestResultsToTestRun {
@@ -140,7 +134,7 @@ class AzureDevOpsReporter implements Reporter {
   private _resolvePublishResults: () => void = () => {};
   private _rejectPublishResults: (reason: any) => void = () => {};
   private _testRunConfig: TTestRunConfig = {} as TTestRunConfig;
-  private _testPointMapper: (testCase: ITestCaseExtended, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
+  private _testPointMapper: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
   private _azureClientOptions = {
     allowRetries: true,
     maxRetries: 20,
