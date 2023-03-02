@@ -695,12 +695,17 @@ class AzureDevOpsReporter implements Reporter {
           const resultData = await this._testApi.getTestResultsByQuery(testResultsQuery, this._projectName);
 
           for (const [key, value] of withAttachmentsByTestPoint.entries()) {
-            const testResult = resultData.results?.find((result) => {result.testPoint?.id === String(key.id)});
+            const testResult = resultData.results?.find((result) => result.testPoint?.id === String(key.id));
+
+            if (!testResult) {
+              this._warning(`Test result for test point [${key.id}] is missing, attachments are not uploaded!`);
+              continue;
+            }
 
             for (const withAttachments of value) {
               await this._uploadAttachmentsFunc(
                 withAttachments.testResult,
-                testResult!.id!,
+                testResult.id!,
                 withAttachments.testCase
               );
             }
