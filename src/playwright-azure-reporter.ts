@@ -15,10 +15,6 @@ import crypto from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
 
-export function createGuid(): string {
-  return crypto.randomBytes(16).toString('hex');
-}
-
 export function shortID(): string {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -33,7 +29,7 @@ enum EAzureTestStatuses {
 
 const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 
-type TAttachmentType = Array<typeof attachmentTypesArray[number]>;
+type TAttachmentType = Array<typeof attachmentTypesArray[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
 type TPublishTestResults = 'testResult' | 'testRun';
@@ -125,7 +121,7 @@ class AzureDevOpsReporter implements Reporter {
   private _isDisabled = false;
   private _testRunTitle = '';
   private _uploadAttachments = false;
-  private _attachmentsType?: TAttachmentType;
+  private _attachmentsType: RegExp[] = [];
   private _token: string = '';
   private _runIdPromise: Promise<number | void>;
   private _resolveRunId: (value: number) => void = () => {};
@@ -205,9 +201,15 @@ class AzureDevOpsReporter implements Reporter {
     if (options?.uploadAttachments) {
       if (!options?.attachmentsType) {
         this._warning("'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default.");
-        this._attachmentsType = ['screenshot'];
+        this._attachmentsType = [new RegExp('screenshot')];
       } else {
-        this._attachmentsType = options.attachmentsType;
+        this._attachmentsType = options.attachmentsType.map((pattern) => {
+          if (pattern instanceof RegExp) {
+            return pattern;
+          } else {
+            return new RegExp(pattern);
+          }
+        });
       }
     }
 
@@ -274,10 +276,12 @@ class AzureDevOpsReporter implements Reporter {
         await this._publishCaseResult(test, testResult);
       } else {
         this._logTestItem(test, testResult);
+        const caseIds = this._getCaseIds(test);
+        if (!caseIds || !caseIds.length) return;
         const testCase: ITestCaseExtended = {
           ...test,
           testAlias: `${shortID()} - ${test.title}`,
-          testCaseIds: this._getCaseIds(test),
+          testCaseIds: caseIds,
         };
         this._testResultsToBePublished.push({ testCase: testCase, testResult });
       }
@@ -529,11 +533,12 @@ class AzureDevOpsReporter implements Reporter {
 
     for (const attachment of testResult.attachments) {
       try {
-        if (this._attachmentsType!.includes(attachment.name as TAttachmentType[number])) {
+        if (this._attachmentsType.find((regex) => regex.test(attachment.name))) {
           if (existsSync(attachment.path!)) {
+            const seperatorAt = Math.max(attachment.path!.lastIndexOf('\\'), attachment.path!.lastIndexOf('/'))
             const attachmentRequestModel: TestInterfaces.TestAttachmentRequestModel = {
               attachmentType: 'GeneralAttachment',
-              fileName: `${attachment.name}-${createGuid()}.${attachment.contentType.split('/')[1]}`,
+              fileName: attachment.path!.substring(seperatorAt + 1),
               stream: readFileSync(attachment.path!, { encoding: 'base64' }),
             };
 
