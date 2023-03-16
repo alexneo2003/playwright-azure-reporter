@@ -644,6 +644,7 @@ class AzureDevOpsReporter implements Reporter {
           const testPoints = value;
 
           if (testPoints && testPoints.length > 0) {
+            testCaseIds.push(...testCase.testCaseIds);
             testCaseResults.push(...testPoints.map((testPoint) => ({
               // the testPoint is the testCase + configuration, there is not need to set these
               testPoint: { id: String(testPoint.id) },
