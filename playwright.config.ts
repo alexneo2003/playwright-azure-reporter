@@ -1,4 +1,6 @@
 import { PlaywrightTestConfig } from '@playwright/test';
+import { TestCase } from '@playwright/test/reporter';
+import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
 import azureConfig from './azure.config.json';
 import { AzureReporterOptions } from './src/playwright-azure-reporter';
 
@@ -27,7 +29,7 @@ const config: PlaywrightTestConfig = {
         testRunTitle: 'Playwright Test Run',
         uploadAttachments: true,
         logging: false,
-        attachmentsType: ['screenshot', 'trace'],
+        attachmentsType: ['screenshot', 'trace', /test.*/],
         publishTestResultsMode: 'testRun',
         testRunConfig: {
           configurationIds: [1],
@@ -36,6 +38,18 @@ const config: PlaywrightTestConfig = {
           },
           comment: 'Playwright Test Run',
         },
+        testPointMapper: async (testCase: TestCase, testPoints: TestPoint[]) => {
+          switch(testCase.parent.project()?.use.browserName) {
+            case 'chromium':
+              return testPoints.filter((testPoint) => testPoint.configuration.id === '3');
+            case 'firefox':
+              return testPoints.filter((testPoint) => testPoint.configuration.id === '4');
+            case 'webkit':
+              return testPoints.filter((testPoint) => testPoint.configuration.id === '5');
+            default:
+              throw new Error("invalid test configuration!");
+          }
+        }
       } as AzureReporterOptions,
     ],
   ],

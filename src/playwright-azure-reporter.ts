@@ -162,10 +162,8 @@ class AzureDevOpsReporter implements Reporter {
       });
     // this is the default implementation, might be replaced by the options
     this._testPointMapper = async (testCase, testPoints) => {
-      let mappedTestPoints: TestPoint[];
-      
       if (testPoints.length > 1) {
-        this._warning("there are " + testPoints.length + " testPoints found for this testCase, you should set testRunConfig.configurationIds and/or use set a testPointMapper!");
+        this._warning(`There are ${testPoints.length} testPoints found for the test case \n ${testCase.title}, \n you should set testRunConfig.configurationIds and/or use set a testPointMapper!`);
       }
 
       return testPoints;
