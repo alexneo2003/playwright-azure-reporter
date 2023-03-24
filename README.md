@@ -98,6 +98,9 @@ const config: PlaywrightTestConfig = {
             displayName: 'Alex Neo',
           },
           comment: 'Playwright Test Run',
+          // the configuration ids of this test run, use https://dev.azure.com/{organization}/{project}/_apis/test/configurations to get the ids of  your project.
+          // if multiple configuration ids are used in one run a testPointMapper should be used to pick the correct one, otherwise the results are pushed to all.
+          configurationIds: [ 1 ],
         },
       } as AzureReporterOptions,
     ],
@@ -126,10 +129,25 @@ Reporter options (\* - required):
 - `environment` - Any string that will be used as environment name. Will be used as prefix for all test runs. Default: `undefined`. Example: `QA`
 - `logging` [true/false] - Enabled debug logging from reporter or not. Default: `false`.
 - `uploadAttachments` [true/false] - Uploading attachments (screenshot/video) after test ended. Default: `false`.
-- `attachmentsType` - List of attachments types that will be uploaded. Default: `['screenshot']`.
+- `attachmentsType` - List of attachments types or a RegEx to match the name of the attachment that will be uploaded. Default: `['screenshot']`
 - `isDisabled` [true/false] - Disable reporter. Default: `false`.
 - `testRunTitle` - Title of test run using to create new test run. Default: `Playwright Test Run`.
 - `testRunConfig` - Extra data to pass when Test Run creating. Read [doc](https://learn.microsoft.com/en-us/rest/api/azure/devops/test/runs/create?view=azure-devops-rest-7.1&tabs=HTTP#request-body) from more information. Default: `empty`.
+- `testPointMapper` - A callback to map the test runs to test configurations, e.g. by browser
+```
+  testPointMapper: async (testCase: TestCase, testPoints: TestPoint[]) => {
+    switch(testCase.parent.project()?.use.browserName) {
+      case 'chromium':
+        return testPoints.filter((testPoint) => testPoint.configuration.id === '3');
+      case 'firefox':
+        return testPoints.filter((testPoint) => testPoint.configuration.id === '4');
+      case 'webkit':
+        return testPoints.filter((testPoint) => testPoint.configuration.id === '5');
+      default:
+        throw new Error("invalid test configuration!");
+    }
+  }
+```
 - `publishTestResultsMode` - Mode of publishing test results. Default: `'testResult'`. Available options:
   - `testResult` - Published results of tests, at the end of each test, parallel to test run..
   - `testRun` - Published test results to test run, at the end of test run.
