@@ -1,6 +1,6 @@
 {
   "name": "@alex_neo/playwright-azure-reporter",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "description": "Playwright Azure Reporter",
   "main": "./dist/playwright-azure-reporter.js",
   "types": "./dist/playwright-azure-reporter.d.js",
