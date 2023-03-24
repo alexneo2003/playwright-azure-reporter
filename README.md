@@ -1,14 +1,21 @@
 # Playwright Azure Reporter
-
-## How to integrate
-
-```
-npm install @alex_neo/playwright-azure-reporter
-```
+![GitHub](https://img.shields.io/github/license/alexneo2003/playwright-azure-reporter) ![npm (scoped)](https://img.shields.io/npm/v/@alex_neo/playwright-azure-reporter) ![npm](https://img.shields.io/npm/dw/@alex_neo/playwright-azure-reporter) ![npm](https://img.shields.io/npm/dt/@alex_neo/playwright-azure-reporter)
 
 ## A must read!
 **Since version 1.5.0 reporter allows using configurationIds to publish results for different configurations e.g. different browsers**
 **Necessarily defining `testRun.configurationIds` or/and `testPointMapper` function in reporter config, otherwise reporter will be publishing results for all configurations**
+
+
+## How to integrate
+Install package
+
+```bash
+npm install @alex_neo/playwright-azure-reporter
+```
+or 
+```bash
+yarn add @alex_neo/playwright-azure-reporter
+```
 
 ## Usage
 
