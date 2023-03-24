@@ -458,7 +458,7 @@ class AzureDevOpsReporter implements Reporter {
             } else {
               // no configuration ids to filter, ignore them
               return true;
-            };
+            }
           });
 
           if (currentTestPoints && currentTestPoints.length > 0) {
