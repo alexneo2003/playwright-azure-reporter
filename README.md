@@ -6,6 +6,10 @@
 npm install @alex_neo/playwright-azure-reporter
 ```
 
+## A must read!
+**Since version 1.5.0 reporter allows using configurationIds to publish results for different configurations e.g. different browsers**
+**Necessarily defining `testRun.configurationIds` or/and `testPointMapper` function in reporter config, otherwise reporter will be publishing results for all configurations**
+
 ## Usage
 
 You must register an ID already existing test cases from Azure DevOps before running tests.
@@ -63,7 +67,6 @@ Configure Playwright Azure Reporter with `playwright-azure-reporter` package.
 
 ```typescript
 import { PlaywrightTestConfig } from '@playwright/test';
-import azureConfig from './azure.config.json';
 import { AzureReporterOptions } from '@alex_neo/playwright-azure-reporter/dist/playwright-azure-reporter';
 
 /**
@@ -84,7 +87,7 @@ const config: PlaywrightTestConfig = {
       '@alex_neo/playwright-azure-reporter',
       {
         orgUrl: 'https://dev.azure.com/your-organization-name',
-        token: 'AZURE-TOKEN',
+        token: process.env.AZURE_TOKEN,
         planId: 44,
         projectName: 'SampleSample',
         environment: 'AQA',
@@ -98,8 +101,10 @@ const config: PlaywrightTestConfig = {
             displayName: 'Alex Neo',
           },
           comment: 'Playwright Test Run',
-          // the configuration ids of this test run, use https://dev.azure.com/{organization}/{project}/_apis/test/configurations to get the ids of  your project.
-          // if multiple configuration ids are used in one run a testPointMapper should be used to pick the correct one, otherwise the results are pushed to all.
+          // the configuration ids of this test run, use 
+          // https://dev.azure.com/{organization}/{project}/_apis/test/configurations to get the ids of  your project.
+          // if multiple configuration ids are used in one run a testPointMapper should be used to pick the correct one, 
+          // otherwise the results are pushed to all.
           configurationIds: [ 1 ],
         },
       } as AzureReporterOptions,
