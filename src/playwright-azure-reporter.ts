@@ -15,6 +15,10 @@ import crypto from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
 
+export function createGuid(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
 export function shortID(): string {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -532,11 +536,22 @@ class AzureDevOpsReporter implements Reporter {
     for (const attachment of testResult.attachments) {
       try {
         if (this._attachmentsType.find((regex) => regex.test(attachment.name))) {
-          if (existsSync(attachment.path!)) {
-            const seperatorAt = Math.max(attachment.path!.lastIndexOf('\\'), attachment.path!.lastIndexOf('/'))
-            const attachmentRequestModel: TestInterfaces.TestAttachmentRequestModel = {
+          let attachmentRequestModel: TestInterfaces.TestAttachmentRequestModel;
+          const name = attachment.name.split(/[^a-zA-Z0-9]+/).join('_') + '_' + createGuid();
+          if (attachment.body) {
+            const seperatorAt = attachment.contentType.lastIndexOf('/');
+            const ext = (seperatorAt !== -1) ? attachment.contentType.substring(seperatorAt + 1) : "bin";
+            let attachmentRequestModel = {
               attachmentType: 'GeneralAttachment',
-              fileName: attachment.path!.substring(seperatorAt + 1),
+              fileName: name + "." + ext,
+              stream: attachment.body,
+            };
+          } else if (existsSync(attachment.path!)) {
+            const seperatorAt = attachment.path!.lastIndexOf('.');
+            const ext = (seperatorAt !== -1) ? attachment.path!.substring(seperatorAt + 1) : "bin";
+            let attachmentRequestModel = {
+              attachmentType: 'GeneralAttachment',
+              fileName: name + "." + ext,
               stream: readFileSync(attachment.path!, { encoding: 'base64' }),
             };
 
