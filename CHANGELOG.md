@@ -1,3 +1,7 @@
+## [1.5.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.0...v1.5.1) (2023-03-25)
+
+
+
 # [1.5.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.4.4...v1.5.0) (2023-03-24)
 
 
