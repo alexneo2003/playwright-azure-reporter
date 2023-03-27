@@ -541,32 +541,31 @@ class AzureDevOpsReporter implements Reporter {
           if (attachment.body) {
             const seperatorAt = attachment.contentType.lastIndexOf('/');
             const ext = (seperatorAt !== -1) ? attachment.contentType.substring(seperatorAt + 1) : "bin";
-            let attachmentRequestModel = {
+            attachmentRequestModel = {
               attachmentType: 'GeneralAttachment',
               fileName: name + "." + ext,
-              stream: attachment.body,
+              stream: attachment.body.toString('base64'),
             };
           } else if (existsSync(attachment.path!)) {
             const seperatorAt = attachment.path!.lastIndexOf('.');
             const ext = (seperatorAt !== -1) ? attachment.path!.substring(seperatorAt + 1) : "bin";
-            let attachmentRequestModel = {
+            attachmentRequestModel = {
               attachmentType: 'GeneralAttachment',
               fileName: name + "." + ext,
               stream: readFileSync(attachment.path!, { encoding: 'base64' }),
             };
-
-            if (!this._testApi) this._testApi = await this._connection.getTestApi();
-            const response = await this._testApi.createTestResultAttachment(
-              attachmentRequestModel,
-              this._projectName,
-              runId!,
-              testCaseResultId
-            );
-            if (!response?.id) throw new Error(`Failed to upload attachment for test: ${test.title}`);
-            attachmentsResult.push(response.url);
           } else {
             throw new Error(`Attachment ${attachment.path} does not exist`);
           }
+          if (!this._testApi) this._testApi = await this._connection.getTestApi();
+          const response = await this._testApi.createTestResultAttachment(
+            attachmentRequestModel,
+            this._projectName,
+            runId!,
+            testCaseResultId
+          );
+          if (!response?.id) throw new Error(`Failed to upload attachment for test: ${test.title}`);
+          attachmentsResult.push(response.url);
         }
       } catch (error: any) {
         this._log(chalk.red(error.message));
