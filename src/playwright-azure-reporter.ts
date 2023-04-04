@@ -167,7 +167,7 @@ class AzureDevOpsReporter implements Reporter {
     // this is the default implementation, might be replaced by the options
     this._testPointMapper = async (testCase, testPoints) => {
       if (testPoints.length > 1) {
-        this._warning(`There are ${testPoints.length} testPoints found for the test case \n ${testCase.title}, \n you should set testRunConfig.configurationIds and/or use set a testPointMapper!`);
+        this._warning(`There are ${testPoints.length} testPoints found for the test case \n\t ${testCase.title}, \n\t you should set testRunConfig.configurationIds and/or use set a testPointMapper!`);
       }
 
       return testPoints;
@@ -585,6 +585,8 @@ class AzureDevOpsReporter implements Reporter {
       testCaseIds: caseIds,
     };
 
+    this._testsAliasToBePublished.push(testCase.testAlias);
+
     const toBePublished: TTestResultsToBePublished = {testCase: testCase, testResult};
     const mappedTestPoints = (await this._getTestPointsOfTestResults(this._planId as number, [toBePublished])).get(toBePublished);
 
@@ -592,12 +594,9 @@ class AzureDevOpsReporter implements Reporter {
       throw new Error(`No test points found for test case [${caseIds}] associated with test plan ${this._planId}. Check, maybe testPlanId, what you specified, is incorrect.`);
     }
 
-    const testAlias = `${shortID()} - ${test.title}`;
-    this._testsAliasToBePublished.push(testAlias);
-
     try {
       const runId = await this._runIdPromise;
-      this._log(chalk.gray(`Start publishing: TCs:${caseIds} - ${test.title}`));
+      this._log(chalk.gray(`Start publishing: ${test.title}`));
 
       const results: TestInterfaces.TestCaseResult[] = mappedTestPoints.map((testPoint) => (
         {
@@ -617,17 +616,18 @@ class AzureDevOpsReporter implements Reporter {
       const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
         this._testApi
       ).addTestResultsToTestRun(results, this._projectName, runId!)) as unknown as TestResultsToTestRun;
+      
       if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
 
       if (this._uploadAttachments && testResult.attachments.length > 0)
         await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
 
-      this._removePublished(testAlias);
+      this._removePublished(testCase.testAlias);
       this._publishedResultsCount++;
-      this._log(chalk.gray(`Result published: TCs:${caseIds} - ${test.title}`));
+      this._log(chalk.gray(`Result published: ${test.title}`));
       return testCaseResult;
     } catch (error: any) {
-      this._removePublished(testAlias);
+      this._removePublished(testCase.testAlias);
       this._warning(chalk.red(error.message));
     }
   }
