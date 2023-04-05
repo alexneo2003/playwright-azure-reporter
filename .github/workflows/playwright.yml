@@ -20,6 +20,6 @@ jobs:
           scope: '@alex_neo'
       - run: yarn
       - run: yarn build
-      - run: yarn npm publish --access public
+      - run: yarn publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
