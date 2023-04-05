@@ -9,6 +9,7 @@ import { AzureReporterOptions } from './src/playwright-azure-reporter';
  */
 const config: PlaywrightTestConfig = {
   testDir: './tests',
+  testIgnore: ['**/config/**', '**/reporter/**'],
   timeout: 30 * 1000,
   expect: {
     timeout: 5000,
@@ -28,7 +29,7 @@ const config: PlaywrightTestConfig = {
         environment: 'AQA',
         testRunTitle: 'Playwright Test Run',
         uploadAttachments: true,
-        logging: false,
+        logging: true,
         attachmentsType: ['screenshot', 'trace', /test.*/],
         publishTestResultsMode: 'testRun',
         testRunConfig: {
