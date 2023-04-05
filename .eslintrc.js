@@ -16,6 +16,8 @@ module.exports = {
     '@typescript-eslint'
   ],
   rules: {
-    'no-async-promise-executor': 0
+    'no-async-promise-executor': 0,
+    'no-control-regex': 0,
+    'no-empty-pattern': 0,
   }
 }
