@@ -1,3 +1,12 @@
+## [1.5.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.2...v1.5.3) (2023-04-05)
+
+
+### Bug Fixes
+
+* fixing bug when test case was not published ([b25096a](https://github.com/alexneo2003/playwright-azure-reporter/commit/b25096a27984ff04cd408e3c6c16d820951160ed))
+
+
+
 ## [1.5.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.1...v1.5.2) (2023-03-27)
 
 
