@@ -24,6 +24,6 @@ jobs:
       - name: Install dependencies
         run: yarn
       - name: Install Playwright
-        run: npx playwright install
+        run: npx playwright install chromium
       - name: Run tests
         run: yarn test:reporter
