@@ -17,17 +17,18 @@
  * limitations under the License.
  */
 
+import type { TestInfo } from '@playwright/test';
+import { expect,test as base } from '@playwright/test';
 import type { JSONReport, JSONReportSpec, JSONReportSuite, JSONReportTest, JSONReportTestResult } from '@playwright/test/reporter';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { rimraf } from 'playwright-core/lib/utilsBundle';
 import { promisify } from 'util';
+
 import type { CommonFixtures, CommonWorkerFixtures, TestChildProcess } from '../config/commonFixtures';
 import { commonFixtures } from '../config/commonFixtures';
-import type { TestInfo } from '@playwright/test';
-import { expect } from '@playwright/test';
-import { test as base } from '@playwright/test';
+import { ServerFixtures, serverFixtures,ServerWorkerOptions } from '../config/serverFixtures';
 
 export const removeFolderAsync = promisify(rimraf);
 
@@ -212,6 +213,7 @@ type Fixtures = {
 
 export const test = base
     .extend<CommonFixtures, CommonWorkerFixtures>(commonFixtures)
+    .extend<ServerFixtures, ServerWorkerOptions>(serverFixtures)
     .extend<Fixtures>({
       runInlineTest: async ({ childProcess }, use, testInfo: TestInfo) => {
         const cacheDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'playwright-test-cache-'));
