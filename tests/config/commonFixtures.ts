@@ -20,7 +20,8 @@ import type { Fixtures } from '@playwright/test';
 import type { ChildProcess } from 'child_process';
 import { execSync, spawn } from 'child_process';
 import net from 'net';
-import { stripAnsi } from './utils';
+
+import { stripAnsi } from '../reporter/test-fixtures';
 
 type TestChildParams = {
   command: string[],
