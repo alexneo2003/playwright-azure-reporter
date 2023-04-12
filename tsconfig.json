@@ -21,7 +21,8 @@
     "**/**.test.ts",
     "**/**.spec.ts",
     "**/playwright.config.ts",
-    "**/webpack.config.ts"
+    "**/webpack.config.ts",
+    "tests"
   ],
   "compilation": {
     "compiler": {
