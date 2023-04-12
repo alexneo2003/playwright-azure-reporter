@@ -1,3 +1,12 @@
+## [1.5.6-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.5...v1.5.6-beta.0) (2023-04-12)
+
+
+### Bug Fixes
+
+* can't import options interface ([de994a7](https://github.com/alexneo2003/playwright-azure-reporter/commit/de994a7173c5025683d5e2808275f2a8e9a9ff4e))
+
+
+
 ## [1.5.5](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.4...v1.5.5) (2023-04-12)
 
 
