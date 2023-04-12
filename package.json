@@ -7,7 +7,7 @@
   "scripts": {
     "test": "npx playwright test",
     "test:reporter": "npx playwright test -c tests/reporter/playwright.config.ts",
-    "lint": "eslint src/** tests/** --ext .ts",
+    "lint": "tsc --noEmit --skipLibCheck --pretty && eslint src/** tests/** --ext .ts",
     "lint:fix": "eslint src/** tests/** --ext .ts --fix",
     "build": "npm run clean && tsc",
     "clean": "rm -rf dist || true",

@@ -39,7 +39,7 @@ export class TestServer {
   private _cachedPathPrefix: string | null;
   private _sockets = new Set<net.Socket>();
   private _routes = new Map<string, (arg0: http.IncomingMessage, arg1: http.ServerResponse) => any>();
-  private _auths = new Map<string, { username: string; password: string; }>();
+  private _auths = new Map<string, { username: string; password: string }>();
   private _csp = new Map<string, string>();
   private _extraHeaders = new Map<string, object>();
   private _gzipRoutes = new Set<string>();
@@ -51,7 +51,7 @@ export class TestServer {
 
   static async create(dirPath: string, port: number, loopback?: string): Promise<TestServer> {
     const server = new TestServer(dirPath, port, loopback);
-    await new Promise(x => server._server.once('listening', x));
+    await new Promise((x) => server._server.once('listening', x));
     return server;
   }
 
@@ -61,16 +61,14 @@ export class TestServer {
       cert: await fs.promises.readFile(path.join(__dirname, 'cert.pem')),
       passphrase: 'aaaa',
     });
-    await new Promise(x => server._server.once('listening', x));
+    await new Promise((x) => server._server.once('listening', x));
     return server;
   }
 
   constructor(dirPath: string, port: number, loopback?: string, sslOptions?: object) {
-    if (sslOptions)
-      this._server = https.createServer(sslOptions, this._onRequest.bind(this));
-    else
-      this._server = http.createServer(this._onRequest.bind(this));
-    this._server.on('connection', socket => this._onSocket(socket));
+    if (sslOptions) this._server = https.createServer(sslOptions, this._onRequest.bind(this));
+    else this._server = http.createServer(this._onRequest.bind(this));
+    this._server.on('connection', (socket) => this._onSocket(socket));
     this._server.on('upgrade', async (request, socket, head) => {
       const pathname = url.parse(request.url!).path;
       if (pathname === '/ws-401') {
@@ -78,8 +76,7 @@ export class TestServer {
         socket.destroy();
         return;
       }
-      if (pathname === '/ws-slow')
-        await new Promise(f => setTimeout(f, 2000));
+      if (pathname === '/ws-slow') await new Promise((f) => setTimeout(f, 2000));
       if (!['/ws', '/ws-slow'].includes(pathname!)) {
         socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
         socket.destroy();
@@ -106,9 +103,8 @@ export class TestServer {
     this._sockets.add(socket);
     // ECONNRESET and HPE_INVALID_EOF_STATE are legit errors given
     // that tab closing aborts outgoing connections to the server.
-    socket.on('error', error => {
-      if ((error as any).code !== 'ECONNRESET' && (error as any).code !== 'HPE_INVALID_EOF_STATE')
-        throw error;
+    socket.on('error', (error) => {
+      if ((error as any).code !== 'ECONNRESET' && (error as any).code !== 'HPE_INVALID_EOF_STATE') throw error;
     });
     socket.once('close', () => this._sockets.delete(socket));
   }
@@ -136,13 +132,16 @@ export class TestServer {
 
   async stop() {
     this.reset();
-    for (const socket of this._sockets)
-      socket.destroy();
+    for (const socket of this._sockets) socket.destroy();
     this._sockets.clear();
-    await new Promise(x => this._server.close(x));
+    await new Promise((x) => this._server.close(x));
   }
 
-  setRoute(path: string, handler: (arg0: http.IncomingMessage & { postBody: Promise<Buffer> }, arg1: http.ServerResponse) => any) {
+  setRoute(
+    path: string,
+    handler: (arg0: http.IncomingMessage & { postBody: Promise<Buffer> }, arg1: http.ServerResponse) => any
+  ) {
+    //@ts-ignore
     this._routes.set(path, handler);
   }
 
@@ -156,8 +155,7 @@ export class TestServer {
 
   waitForRequest(path: string): Promise<http.IncomingMessage & { postBody: Promise<Buffer> }> {
     let promise = this._requestSubscribers.get(path);
-    if (promise)
-      return promise;
+    if (promise) return promise;
     let fulfill, reject;
     promise = new Promise((f, r) => {
       fulfill = f;
@@ -176,21 +174,18 @@ export class TestServer {
     this._extraHeaders.clear();
     this._gzipRoutes.clear();
     const error = new Error('Static Server has been reset');
-    for (const subscriber of this._requestSubscribers.values())
-      subscriber[rejectSymbol].call(null, error);
+    for (const subscriber of this._requestSubscribers.values()) subscriber[rejectSymbol].call(null, error);
     this._requestSubscribers.clear();
   }
 
   _onRequest(request: http.IncomingMessage, response: http.ServerResponse) {
-    request.on('error', error => {
-      if ((error as any).code === 'ECONNRESET')
-        response.end();
-      else
-        throw error;
+    request.on('error', (error) => {
+      if ((error as any).code === 'ECONNRESET') response.end();
+      else throw error;
     });
-    (request as any).postBody = new Promise(resolve => {
+    (request as any).postBody = new Promise((resolve) => {
       const chunks: Buffer[] = [];
-      request.on('data', chunk => {
+      request.on('data', (chunk) => {
         chunks.push(chunk);
       });
       request.on('end', () => resolve(Buffer.concat(chunks)));
@@ -215,17 +210,14 @@ export class TestServer {
       this._requestSubscribers.delete(path!);
     }
     const handler = this._routes.get(path!);
-    if (handler)
-      handler.call(null, request, response);
-    else
-      this.serveFile(request, response);
+    if (handler) handler.call(null, request, response);
+    else this.serveFile(request, response);
   }
 
   async serveFile(request: http.IncomingMessage, response: http.ServerResponse, filePath?: string) {
     let pathName = url.parse(request.url!).path;
     if (!filePath) {
-      if (pathName === '/')
-        pathName = '/index.html';
+      if (pathName === '/') pathName = '/index.html';
       filePath = path.join(this._dirPath, pathName!.substring(1));
     }
 
@@ -240,19 +232,19 @@ export class TestServer {
     } else {
       response.setHeader('Cache-Control', 'no-cache, no-store');
     }
-    if (this._csp.has(pathName!))
-      response.setHeader('Content-Security-Policy', this._csp.get(pathName!)!);
+    if (this._csp.has(pathName!)) response.setHeader('Content-Security-Policy', this._csp.get(pathName!)!);
 
     if (this._extraHeaders.has(pathName!)) {
       const object = this._extraHeaders.get(pathName!);
-      for (const key in object)
-        response.setHeader(key, object[key]);
+      for (const key in object) response.setHeader(key, object[key]);
     }
 
-    const { err, data } = await fs.promises.readFile(filePath).then(data => ({ data, err: undefined })).catch(err => ({ data: undefined, err }));
+    const { err, data } = await fs.promises
+      .readFile(filePath)
+      .then((data) => ({ data, err: undefined }))
+      .catch((err) => ({ data: undefined, err }));
     // The HTTP transaction might be already terminated after async hop here - do nothing in this case.
-    if (response.writableEnded)
-      return;
+    if (response.writableEnded) return;
     if (err) {
       response.statusCode = 404;
       response.setHeader('Content-Type', 'text/plain');
@@ -268,11 +260,9 @@ export class TestServer {
       response.setHeader('Content-Encoding', 'gzip');
       const result = await gzipAsync(data!);
       // The HTTP transaction might be already terminated after async hop here.
-      if (!response.writableEnded)
-        response.end(result);
+      if (!response.writableEnded) response.end(result);
     } else {
       response.end(data);
     }
   }
-
 }
