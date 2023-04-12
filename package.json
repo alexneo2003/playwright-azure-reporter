@@ -1,6 +1,6 @@
 {
   "name": "@alex_neo/playwright-azure-reporter",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Playwright Azure Reporter",
   "main": "./dist/playwright-azure-reporter.js",
   "types": "./dist/playwright-azure-reporter.d.js",
@@ -55,9 +55,9 @@
     "eslint-plugin-prefer-arrow": "^1.2.3",
     "eslint-plugin-promise": "^6.1.1",
     "eslint-plugin-simple-import-sort": "^10.0.0",
+    "husky": "^8.0.3",
     "mime": "^3.0.0",
     "socksv5": "^0.0.6",
-    "typescript": "^5.0.3",
-    "husky": "^8.0.3"
+    "typescript": "^5.0.3"
   }
 }
