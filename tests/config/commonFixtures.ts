@@ -24,10 +24,10 @@ import net from 'net';
 import { stripAnsi } from '../reporter/test-fixtures';
 
 type TestChildParams = {
-  command: string[],
-  cwd?: string,
-  env?: NodeJS.ProcessEnv,
-  shell?: boolean,
+  command: string[];
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  shell?: boolean;
   onOutput?: () => void;
 };
 
@@ -37,7 +37,7 @@ export class TestChildProcess {
   output = '';
   fullOutput = '';
   onOutput?: (chunk: string | Buffer) => void;
-  exited: Promise<{ exitCode: number, signal: string | null }>;
+  exited: Promise<{ exitCode: number; signal: string | null }>;
   exitCode: Promise<number>;
 
   private _outputCallbacks = new Set<() => void>();
@@ -56,19 +56,15 @@ export class TestChildProcess {
       // @see https://nodejs.org/api/child_process.html#child_process_options_detached
       detached: process.platform !== 'win32',
     });
-    if (process.env.PWTEST_DEBUG)
-      process.stdout.write(`\n\nLaunching ${params.command.join(' ')}\n`);
+    if (process.env.PWTEST_DEBUG) process.stdout.write(`\n\nLaunching ${params.command.join(' ')}\n`);
     this.onOutput = params.onOutput;
 
     const appendChunk = (chunk: string | Buffer) => {
       this.output += String(chunk);
-      if (process.env.PWTEST_DEBUG)
-        process.stdout.write(String(chunk));
-      else
-        this.fullOutput += String(chunk);
+      if (process.env.PWTEST_DEBUG) process.stdout.write(String(chunk));
+      else this.fullOutput += String(chunk);
       this.onOutput?.(chunk);
-      for (const cb of this._outputCallbacks)
-        cb();
+      for (const cb of this._outputCallbacks) cb();
       this._outputCallbacks.clear();
     };
 
@@ -77,33 +73,30 @@ export class TestChildProcess {
 
     const killProcessGroup = this._killProcessGroup.bind(this);
     process.on('exit', killProcessGroup);
-    this.exited = new Promise(f => {
+    this.exited = new Promise((f) => {
+      // @ts-ignore
       this.process.on('exit', (exitCode, signal) => f({ exitCode, signal }));
       process.off('exit', killProcessGroup);
     });
-    this.exitCode = this.exited.then(r => r.exitCode);
+    this.exitCode = this.exited.then((r) => r.exitCode);
   }
 
   async close() {
-    if (!this.process.killed)
-      this._killProcessGroup('SIGINT');
+    if (!this.process.killed) this._killProcessGroup('SIGINT');
     return this.exited;
   }
 
   async kill() {
-    if (!this.process.killed)
-      this._killProcessGroup('SIGKILL');
+    if (!this.process.killed) this._killProcessGroup('SIGKILL');
     return this.exited;
   }
 
   private _killProcessGroup(signal: 'SIGINT' | 'SIGKILL') {
-    if (!this.process.pid || this.process.killed)
-      return;
+    if (!this.process.pid || this.process.killed) return;
     try {
       if (process.platform === 'win32')
         execSync(`taskkill /pid ${this.process.pid} /T /F /FI "MEMUSAGE gt 0"`, { stdio: 'ignore' });
-      else
-        process.kill(-this.process.pid, signal);
+      else process.kill(-this.process.pid, signal);
     } catch (e) {
       // the process might have already stopped
     }
@@ -111,15 +104,12 @@ export class TestChildProcess {
 
   async cleanExit() {
     const r = await this.exited;
-    if (r.exitCode)
-      throw new Error(`Process failed with exit code ${r.exitCode}`);
-    if (r.signal)
-      throw new Error(`Process received signal: ${r.signal}`);
+    if (r.exitCode) throw new Error(`Process failed with exit code ${r.exitCode}`);
+    if (r.signal) throw new Error(`Process received signal: ${r.signal}`);
   }
 
   async waitForOutput(substring: string) {
-    while (!stripAnsi(this.output).includes(substring))
-      await new Promise<void>(f => this._outputCallbacks.add(f));
+    while (!stripAnsi(this.output).includes(substring)) await new Promise<void>((f) => this._outputCallbacks.add(f));
   }
 
   clearOutput() {
@@ -143,12 +133,12 @@ export type CommonWorkerFixtures = {
 export const commonFixtures: Fixtures<CommonFixtures, CommonWorkerFixtures> = {
   childProcess: async ({}, use, testInfo) => {
     const processes: TestChildProcess[] = [];
-    await use(params => {
+    await use((params) => {
       const process = new TestChildProcess(params);
       processes.push(process);
       return process;
     });
-    await Promise.all(processes.map(child => child.close()));
+    await Promise.all(processes.map((child) => child.close()));
     if (testInfo.status !== 'passed' && testInfo.status !== 'skipped' && !process.env.PWTEST_DEBUG) {
       for (const process of processes) {
         console.log('====== ' + process.params.command.join(' '));
@@ -158,31 +148,34 @@ export const commonFixtures: Fixtures<CommonFixtures, CommonWorkerFixtures> = {
     }
   },
 
-  daemonProcess: [async ({}, use) => {
-    const processes: TestChildProcess[] = [];
-    await use(params => {
-      const process = new TestChildProcess(params);
-      processes.push(process);
-      return process;
-    });
-    await Promise.all(processes.map(child => child.close()));
-  }, { scope: 'worker' }],
+  daemonProcess: [
+    async ({}, use) => {
+      const processes: TestChildProcess[] = [];
+      await use((params) => {
+        const process = new TestChildProcess(params);
+        processes.push(process);
+        return process;
+      });
+      await Promise.all(processes.map((child) => child.close()));
+    },
+    { scope: 'worker' },
+  ],
 
   waitForPort: async ({}, use) => {
     const token = { canceled: false };
-    await use(async port => {
+    await use(async (port) => {
       while (!token.canceled) {
-        const promise = new Promise<boolean>(resolve => {
-          const conn = net.connect(port, '127.0.0.1')
-              .on('error', () => resolve(false))
-              .on('connect', () => {
-                conn.end();
-                resolve(true);
-              });
+        const promise = new Promise<boolean>((resolve) => {
+          const conn = net
+            .connect(port, '127.0.0.1')
+            .on('error', () => resolve(false))
+            .on('connect', () => {
+              conn.end();
+              resolve(true);
+            });
         });
-        if (await promise)
-          return;
-        await new Promise(x => setTimeout(x, 100));
+        if (await promise) return;
+        await new Promise((x) => setTimeout(x, 100));
       }
     });
     token.canceled = true;
