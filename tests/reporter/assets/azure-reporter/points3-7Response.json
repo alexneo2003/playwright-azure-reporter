@@ -80,8 +80,6 @@
     }
   ],
   "pointsFilter": {
-    "testcaseIds": [
-      3, 7
-    ]
+    "testcaseIds": [3, 7]
   }
 }
