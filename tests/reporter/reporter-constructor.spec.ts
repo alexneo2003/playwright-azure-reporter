@@ -4,19 +4,43 @@ import { setHeaders } from '../config/utils';
 import azureAreas from './assets/azure-reporter/azureAreas';
 import headers from './assets/azure-reporter/azureHeaders';
 import location from './assets/azure-reporter/azureLocationOptionsResponse.json';
-import { expect, test } from "./test-fixtures";
+import { reporterPath } from './reporterPath';
+import { expect, test } from './test-fixtures';
 
-const TEST_OPTIONS_RESPONSE_PATH = path.join(__dirname, '.', 'assets', 'azure-reporter', 'azureTestOptionsResponse.json');
-const CORE_OPTIONS_RESPONSE_PATH = path.join(__dirname, '.', 'assets', 'azure-reporter', 'azureCoreOptionsResponse.json');
-const PROJECT_INVALID_RESPONSE_PATH = path.join(__dirname, '.', 'assets', 'azure-reporter', 'projectInvalidResponse.json');
-const CREATE_RUN_INVALID_RESPONSE_PATH = path.join(__dirname, '.', 'assets', 'azure-reporter', 'createRunInvalidResponse.json');
+const TEST_OPTIONS_RESPONSE_PATH = path.join(
+  __dirname,
+  '.',
+  'assets',
+  'azure-reporter',
+  'azureTestOptionsResponse.json'
+);
+const CORE_OPTIONS_RESPONSE_PATH = path.join(
+  __dirname,
+  '.',
+  'assets',
+  'azure-reporter',
+  'azureCoreOptionsResponse.json'
+);
+const PROJECT_INVALID_RESPONSE_PATH = path.join(
+  __dirname,
+  '.',
+  'assets',
+  'azure-reporter',
+  'projectInvalidResponse.json'
+);
+const CREATE_RUN_INVALID_RESPONSE_PATH = path.join(
+  __dirname,
+  '.',
+  'assets',
+  'azure-reporter',
+  'createRunInvalidResponse.json'
+);
 
-const reporterPath = path.join(__dirname, '../../src/playwright-azure-reporter.ts')
-
-test.describe("Reporter constructor", () => {
+test.describe('Reporter constructor', () => {
   test("'orgUrl' in config expected", async ({ runInlineTest }) => {
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = { 
           reporter: [
             ['line'],
@@ -24,22 +48,25 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('foobar', async () => {
           expect(1).toBe(0);
         });
-      `
-    }, { reporter: '' });
-    
+      `,
+      },
+      { reporter: '' }
+    );
+
     expect(result.output).toContain("azure: 'orgUrl' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
 
   test("'projectName' in config expected", async ({ runInlineTest }) => {
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = { 
           reporter: [
             ['line'],
@@ -49,21 +76,24 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('foobar', async ({}) => {
           expect(1).toBe(0);
         });
-      `
-    }, { reporter: '' });
+      `,
+      },
+      { reporter: '' }
+    );
     expect(result.output).toContain("azure: 'projectName' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
 
   test("'planId' in config expected", async ({ runInlineTest }) => {
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = { 
           reporter: [
             ['line'],
@@ -74,21 +104,24 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('foobar', async ({}) => {
           expect(1).toBe(0);
         });
-      `
-    }, { reporter: '' });
+      `,
+      },
+      { reporter: '' }
+    );
     expect(result.output).toContain("azure: 'planId' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
 
   test("'token' in config expected", async ({ runInlineTest }) => {
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = { 
           reporter: [
             ['line'],
@@ -100,21 +133,24 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('foobar', async ({}) => {
           expect(1).toBe(0);
         });
-      `
-    }, { reporter: '' });
+      `,
+      },
+      { reporter: '' }
+    );
     expect(result.output).toContain("azure: 'token' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
 
   test('correct orgUrl config expected', async ({ runInlineTest }) => {
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = { 
           reporter: [
             ['dot'],
@@ -127,17 +163,19 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('foobar', async ({}) => {
           throw new Error('foobar')
         });
-      `
-    }, { reporter: '' });
+      `,
+      },
+      { reporter: '' }
+    );
     expect(result.output).toContain('Failed to create test run. Check your orgUrl. Reporting is disabled.');
     expect(result.failed).toBe(1);
   });
-  
+
   test('correct orgUrl config, incorrect token', async ({ runInlineTest, server }) => {
     server.setRoute('/_apis/Location', (_, res) => {
       setHeaders(res, headers);
@@ -145,8 +183,9 @@ test.describe("Reporter constructor", () => {
       res.end('');
     });
 
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = {
           reporter: [
             ['line'],
@@ -159,13 +198,15 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('foobar', async ({}) => {
           expect(1).toBe(0);
         });
-      `
-    }, { reporter: '' });
+      `,
+      },
+      { reporter: '' }
+    );
     expect(result.output).toContain('azure: Failed to create test run. Check your token. Reporting is disabled.');
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
@@ -204,8 +245,9 @@ test.describe("Reporter constructor", () => {
       server.serveFile(req, res, CREATE_RUN_INVALID_RESPONSE_PATH);
     });
 
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = { 
           reporter: [
             ['dot'],
@@ -218,13 +260,15 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('[3] foobar', async () => {
           expect(1).toBe(0);
         });
-      `
-    }, { reporter: '' });
+      `,
+      },
+      { reporter: '' }
+    );
 
     expect(result.output).not.toContain('Failed request: (401)');
     expect(result.output).toContain('azure: Project SampleSample does not exist. Reporting is disabled.');
@@ -256,8 +300,9 @@ test.describe("Reporter constructor", () => {
       server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
     });
 
-    const result = await runInlineTest({
-      'playwright.config.ts': `
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
         module.exports = { 
           reporter: [
             ['dot'],
@@ -271,13 +316,15 @@ test.describe("Reporter constructor", () => {
           ]
         };
       `,
-      'a.spec.js': `
+        'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('[3] foobar', async () => {
           expect(1).toBe(1);
         });
-        `
-    }, { reporter: '' });
+        `,
+      },
+      { reporter: '' }
+    );
 
     expect(result.output).not.toContain('Failed request: (401)');
     expect(result.output).not.toContain('azure:');

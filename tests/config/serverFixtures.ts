@@ -16,11 +16,11 @@
  * limitations under the License.
  */
 
-import { Fixtures } from "@playwright/test";
+import { Fixtures } from '@playwright/test';
 import path from 'path';
 import socks from 'socksv5';
 
-import { TestServer } from "./TestServer";
+import { TestServer } from './TestServer';
 
 export type ServerWorkerOptions = {
   loopback?: string;
@@ -36,53 +36,53 @@ export type ServerFixtures = {
 
 export const serverFixtures: Fixtures<ServerFixtures, ServerWorkerOptions> = {
   loopback: [undefined, { scope: 'worker', option: true }],
-  __servers: [async ({ loopback }, run, workerInfo) => {
-    const assetsPath = path.join(__dirname, '..', 'assets');
-    const cachedPath = path.join(__dirname, '..', 'assets', 'cached');
+  __servers: [
+    async ({ loopback }, run, workerInfo) => {
+      const assetsPath = path.join(__dirname, '..', 'assets');
+      const cachedPath = path.join(__dirname, '..', 'assets', 'cached');
 
+      const port = 8907 + workerInfo.workerIndex * 4;
+      const server = await TestServer.create(assetsPath, port, loopback);
+      server.enableHTTPCache(cachedPath);
 
-    const port = 8907 + workerInfo.workerIndex * 4;
-    const server = await TestServer.create(assetsPath, port, loopback);
-    server.enableHTTPCache(cachedPath);
+      const httpsPort = port + 1;
+      const httpsServer = await TestServer.createHTTPS(assetsPath, httpsPort, loopback);
+      httpsServer.enableHTTPCache(cachedPath);
 
-    const httpsPort = port + 1;
-    const httpsServer = await TestServer.createHTTPS(assetsPath, httpsPort, loopback);
-    httpsServer.enableHTTPCache(cachedPath);
+      const socksServer = socks.createServer((info, accept, deny) => {
+        const socket = accept(true);
+        if (socket) {
+          // Catch and ignore ECONNRESET errors.
+          socket.on('error', () => {});
+          const body = '<html><title>Served by the SOCKS proxy</title></html>';
+          socket.end(
+            [
+              'HTTP/1.1 200 OK',
+              'Connection: close',
+              'Content-Type: text/html',
+              'Content-Length: ' + Buffer.byteLength(body),
+              '',
+              body,
+            ].join('\r\n')
+          );
+        }
+      });
+      const socksPort = port + 2;
+      socksServer.listen(socksPort, 'localhost');
+      socksServer.useAuth(socks.auth.None());
 
-    const socksServer = socks.createServer((info, accept, deny) => {
-      const socket = accept(true);
-      if (socket) {
-        // Catch and ignore ECONNRESET errors.
-        socket.on('error', () => {});
-        const body = '<html><title>Served by the SOCKS proxy</title></html>';
-        socket.end([
-          'HTTP/1.1 200 OK',
-          'Connection: close',
-          'Content-Type: text/html',
-          'Content-Length: ' + Buffer.byteLength(body),
-          '',
-          body
-        ].join('\r\n'));
-      }
-    });
-    const socksPort = port + 2;
-    socksServer.listen(socksPort, 'localhost');
-    socksServer.useAuth(socks.auth.None());
+      await run({
+        asset: (p: string) => path.join(__dirname, '..', 'assets', ...p.split('/')),
+        server,
+        httpsServer,
+        socksPort,
+        socksServer,
+      });
 
-    await run({
-      asset: (p: string) => path.join(__dirname, '..', 'assets', ...p.split('/')),
-      server,
-      httpsServer,
-      socksPort,
-      socksServer,
-    });
-
-    await Promise.all([
-      server.stop(),
-      httpsServer.stop(),
-      socksServer.close(),
-    ]);
-  }, { scope: 'worker' }],
+      await Promise.all([server.stop(), httpsServer.stop(), socksServer.close()]);
+    },
+    { scope: 'worker' },
+  ],
 
   server: async ({ __servers }, run) => {
     __servers.server.reset();
