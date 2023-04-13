@@ -1,7 +1,7 @@
-import { getExtensionFromContentType, getExtensionFromFilename, getMimeTypeFromFilename } from "../../src/utils";
-import { expect, test } from "./test-fixtures";
+import { getExtensionFromContentType, getExtensionFromFilename, getMimeTypeFromFilename } from '../../src/utils';
+import { expect, test } from './test-fixtures';
 
-test.describe("Reporter utils", () => {
+test.describe('Reporter utils', () => {
   test('getMimeTypeFromFilename', async () => {
     expect(getMimeTypeFromFilename('test.png')).toBe('image/png');
     expect(getMimeTypeFromFilename('test.jpg')).toBe('image/jpeg');
@@ -26,7 +26,7 @@ test.describe("Reporter utils", () => {
     expect(getExtensionFromFilename('test.json')).toBe('json');
     expect(getExtensionFromFilename('test.pdf')).toBe('pdf');
     expect(getExtensionFromFilename('')).toBe('bin');
-  })
+  });
 
   test('getExtensionFromContentType', async () => {
     expect(getExtensionFromContentType('image/png')).toBe('png');
@@ -38,5 +38,5 @@ test.describe("Reporter utils", () => {
     expect(getExtensionFromContentType('application/json')).toBe('json');
     expect(getExtensionFromContentType('application/pdf')).toBe('pdf');
     expect(getExtensionFromContentType('')).toBe('bin');
-  })
+  });
 });

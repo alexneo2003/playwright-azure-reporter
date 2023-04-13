@@ -38,5 +38,5 @@ module.exports = [
   'Date',
   'Wed, 29 Jun 2022 14:11:33 GMT',
   'Connection',
-  'close'
-]
+  'close',
+];

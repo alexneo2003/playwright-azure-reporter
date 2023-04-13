@@ -41,8 +41,6 @@
     }
   ],
   "pointsFilter": {
-    "testcaseIds": [
-      3
-    ]
+    "testcaseIds": [3]
   }
 }
