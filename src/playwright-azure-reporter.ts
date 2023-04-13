@@ -25,7 +25,7 @@ enum EAzureTestStatuses {
 
 const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 
-type TAttachmentType = Array<typeof attachmentTypesArray[number] | RegExp>;
+type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
 type TPublishTestResults = 'testResult' | 'testRun';

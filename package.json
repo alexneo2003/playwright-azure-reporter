@@ -7,11 +7,14 @@
   "scripts": {
     "test": "npx playwright test",
     "test:reporter": "npx playwright test -c tests/reporter/playwright.config.ts",
-    "lint": "tsc --noEmit --skipLibCheck --pretty && eslint src/** tests/** --ext .ts",
+    "lint": "tsc --noEmit --skipLibCheck --pretty && eslint --ext .ts .",
     "lint:fix": "eslint src/** tests/** --ext .ts --fix",
-    "build": "npm run clean && tsc",
+    "format": "prettier --write src/**/*.ts tests/**/*.ts",
+    "build": "yarn run clean && yarn run dev",
     "clean": "rm -rf dist || true",
     "prepublishOnly": "tsc",
+    "dev": "yarn run lint && tsc",
+    "dev:watch": "nodemon --watch src --exec \"yarn run build\"",
     "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md",
     "release": "conventional-github-releaser -p angular",
     "prepare": "husky install"
@@ -57,6 +60,7 @@
     "eslint-plugin-promise": "^6.1.1",
     "eslint-plugin-simple-import-sort": "^10.0.0",
     "husky": "^8.0.3",
+    "prettier": "^2.8.7",
     "socksv5": "^0.0.6",
     "typescript": "^5.0.3"
   }

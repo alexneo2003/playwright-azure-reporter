@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test'
+import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: __dirname,
@@ -10,8 +10,8 @@ export default defineConfig({
   fullyParallel: true,
   projects: [
     {
-      name: 'playwright-azure-reporter-test'
+      name: 'playwright-azure-reporter-test',
     },
   ],
   reporter: process.env.CI ? [['dot']] : [['list']],
-})
+});
