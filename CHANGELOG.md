@@ -1,3 +1,12 @@
+## [1.5.7](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.6...v1.5.7) (2023-04-21)
+
+
+### Bug Fixes
+
+* last symbol was sliced at console message ([56c8228](https://github.com/alexneo2003/playwright-azure-reporter/commit/56c8228d858ca43d3a1a502a17188d6728654c8a))
+
+
+
 ## [1.5.6](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.6-beta.1...v1.5.6) (2023-04-12)
 
 
