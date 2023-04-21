@@ -4,6 +4,9 @@ import { getRequestBody, setHeaders } from '../config/utils';
 import azureAreas from './assets/azure-reporter/azureAreas';
 import headers from './assets/azure-reporter/azureHeaders';
 import location from './assets/azure-reporter/azureLocationOptionsResponse.json';
+import pointsResponseMapper from './assets/azure-reporter/pointsResponseMapper';
+import testResultsByQueryResponseMapping from './assets/azure-reporter/testResultsByQueryResponseMapping';
+import testRunResultsMapper from './assets/azure-reporter/testRunResultsMapper';
 import { reporterPath } from './reporterPath';
 import { expect, test } from './test-fixtures';
 
@@ -829,5 +832,130 @@ test.describe('Publish results - testRun', () => {
     expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(0);
     expect(result.passed).toBe(1);
+  });
+
+  test('check logging. do not slice symbol', async ({ runInlineTest, server }) => {
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CREATE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Points', async (req, res) => {
+      const body = await getRequestBody(req);
+      const pointsResponse = pointsResponseMapper(body);
+
+      setHeaders(res, headers);
+      expect(body.pointsFilter?.testcaseIds.length).toBeGreaterThan(0);
+      expect(pointsResponse.points.length).toBeGreaterThan(0);
+      res.end(JSON.stringify(pointsResponse));
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results', async (req, res) => {
+      const body = await getRequestBody(req);
+      const testRunResultsResponse = testRunResultsMapper(body);
+
+      setHeaders(res, headers);
+      expect(body[0].testPoint?.id).toBeDefined();
+      expect(testRunResultsResponse.count).toBeGreaterThan(0);
+      res.end(JSON.stringify(testRunResultsResponse));
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results/100001/Attachments', async (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, RUN_RESULTS_ATTACHMENTS_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Results', async (req, res) => {
+      const body = await getRequestBody(req);
+      const testResultsResponse = testResultsByQueryResponseMapping(body);
+      setHeaders(res, headers);
+      expect(body.results.length).toBeGreaterThan(0);
+      res.end(JSON.stringify(testResultsResponse));
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = {
+          reporter: [
+            ['dot'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'token',
+              publishTestResultsMode: 'testRun',
+              uploadAttachments: true,
+              attachmentsType: ['screenshot'],
+            }]
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        const tests = Array.from({ length: 125 }, (_, i) => i + 1);
+        tests.forEach((testId) => {
+          test('[' + testId + '] foobar', async () => {
+            if (testId % 10 === 0) {
+              test.info().attachments.push({ name: 'attachment', contentType: 'application/json', body: Buffer.from('{"foo": "bar"}') });
+              expect(1).toBe(2);
+            } else {
+              expect(1).toBe(1);
+            }
+          });
+        });
+      `,
+      },
+      { reporter: '' },
+      { DEBUG_COLORS: '0', NO_COLOR: '0', NODE_DISABLE_COLORS: '0', FORCE_COLOR: '0' } // disable colors in output
+    );
+
+    expect(result.output).not.toContain('Failed request: (401)');
+    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
+    expect(result.output).toContain(
+      'azure: Start publishing test results for 125 test(s)\nazure: Starting to uploading attachments for 5 testpoint(s)\nazure: Uploading attachments for test: [10] foobar\nazure: Uploaded attachments'
+    );
+    expect(result.output).toContain(
+      'azure: Left to publish: 75\nazure: Starting to uploading attachments for 5 testpoint(s)\nazure: Uploading attachments for test: [60] foobar\nazure: Uploaded attachments'
+    );
+    expect(result.output).toContain(
+      'azure: Uploading attachments for test: [100] foobar\nazure: Uploaded attachments\nazure: Left to publish: 25\nazure: Starting to uploading attachments for 2 testpoint(s)'
+    );
+    expect(result.output).toContain(
+      'azure: Left to publish: 0\nazure: Test results published for 125 test(s)\nazure: Run 150 - Completed'
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.failed).toBe(12);
+    expect(result.passed).toBe(113);
   });
 });
