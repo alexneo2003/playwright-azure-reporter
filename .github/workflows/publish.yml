@@ -19,7 +19,7 @@ jobs:
           node-version: '16.x'
           registry-url: 'https://registry.npmjs.org'
           # Defaults to the user or organization that owns the workflow file
-          scope: '@alex_neo'
+          scope: '@daniel_terceros'
       - name: Install dependencies
         run: yarn
       - name: Build
