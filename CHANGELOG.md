@@ -1,3 +1,7 @@
+## [1.5.8](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.8-beta.2...v1.5.8) (2023-07-05)
+
+
+
 ## [1.5.8-beta.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.5.8-beta.1...v1.5.8-beta.2) (2023-07-05)
 
 
