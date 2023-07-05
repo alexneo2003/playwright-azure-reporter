@@ -629,8 +629,8 @@ class AzureDevOpsReporter implements Reporter {
                   .join('\n\n')}`
               : undefined,
             stackTrace: `${testResult.errors
-              ?.map((error, idx) => `STACK #${idx + 1}:\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
-              .join('\n\n')}`,
+              ?.map((error, idx) => `STACK #${idx + 1}:\\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+              .join('\\n\\n')}`,
           } as TestInterfaces.TestCaseResult)
       );
 
@@ -692,8 +692,8 @@ class AzureDevOpsReporter implements Reporter {
                       .join('\n\n')}`
                   : undefined,
                 stackTrace: `${testResult.errors
-                  ?.map((error, idx) => `STACK #${idx + 1}:\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
-                  .join('\n\n')}`,
+                  ?.map((error, idx) => `STACK #${idx + 1}:\\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+                  .join('\\n\\n')}`,
               }))
             );
 
