@@ -86,7 +86,7 @@ export async function writeFiles(testInfo: TestInfo, files: Files, initial: bool
   return baseDir;
 }
 
-export const cliEntrypoint = path.join(__dirname, '../../node_modules/playwright-core/cli.js');
+export const cliEntrypoint = path.join(__dirname, '../../node_modules/@playwright/test/cli.js');
 
 async function runPlaywrightTest(
   childProcess: CommonFixtures['childProcess'],
