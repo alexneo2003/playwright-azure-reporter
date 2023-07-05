@@ -624,9 +624,13 @@ class AzureDevOpsReporter implements Reporter {
             state: 'Completed',
             durationInMs: testResult.duration,
             errorMessage: testResult.error
-              ? `${test.title}: ${testResult.error?.message?.replace(/\u001b\[.*?m/g, '') as string}`
+              ? `${test.title}:\n\n${testResult.errors
+                  ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
+                  .join('\n\n')}`
               : undefined,
-            stackTrace: testResult.error?.stack?.replace(/\u001b\[.*?m/g, ''),
+            stackTrace: `${testResult.errors
+              ?.map((error, idx) => `STACK #${idx + 1}:\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+              .join('\n\n')}`,
           } as TestInterfaces.TestCaseResult)
       );
 
@@ -683,9 +687,13 @@ class AzureDevOpsReporter implements Reporter {
                 state: 'Completed',
                 durationInMs: testResult.duration,
                 errorMessage: testResult.error
-                  ? `${testCase.title}: ${testResult.error?.message?.replace(/\u001b\[.*?m/g, '') as string}`
+                  ? `${testCase.title}:\n\n${testResult.errors
+                      ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
+                      .join('\n\n')}`
                   : undefined,
-                stackTrace: testResult.error?.stack?.replace(/\u001b\[.*?m/g, ''),
+                stackTrace: `${testResult.errors
+                  ?.map((error, idx) => `STACK #${idx + 1}:\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+                  .join('\n\n')}`,
               }))
             );
 
