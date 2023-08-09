@@ -638,7 +638,7 @@ class AzureDevOpsReporter implements Reporter {
           ({
             // the testPoint is the testCase + configuration, there is not need to set these
             testPoint: { id: String(testPoint.id) },
-            outcome: _mapToAzureState(test, testResult),
+            outcome: this._mapToAzureState(test, testResult),
             state: 'Completed',
             durationInMs: testResult.duration,
             errorMessage: testResult.error
@@ -701,7 +701,7 @@ class AzureDevOpsReporter implements Reporter {
               ...testPoints.map((testPoint) => ({
                 // the testPoint is the testCase + configuration, there is not need to set these
                 testPoint: { id: String(testPoint.id) },
-                outcome: _mapToAzureState(testCase, testResult),
+                outcome: this._mapToAzureState(testCase, testResult),
                 state: 'Completed',
                 durationInMs: testResult.duration,
                 errorMessage: testResult.error
