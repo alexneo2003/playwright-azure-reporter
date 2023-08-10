@@ -15,14 +15,15 @@ import { existsSync, readFileSync } from 'fs';
 import debug from './debug';
 import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID } from './utils';
 
+// https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
 enum EAzureTestStatuses {
   passed = 'Passed',
   failed = 'Failed',
   fixme = 'Paused',
-  skipped = 'Not Applicable',
+  skipped = 'NotApplicable',
   other = 'Blocked',
-  timedOut = 'Failed',
-  interrupted = 'Failed',
+  timedOut = 'Timeout',
+  interrupted = 'Aborted',
 }
 
 const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
