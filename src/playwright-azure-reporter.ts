@@ -15,12 +15,15 @@ import { existsSync, readFileSync } from 'fs';
 import debug from './debug';
 import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID } from './utils';
 
+// https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
 enum EAzureTestStatuses {
   passed = 'Passed',
   failed = 'Failed',
-  skipped = 'Paused',
-  timedOut = 'Failed',
-  interrupted = 'Failed',
+  fixme = 'Paused',
+  skipped = 'NotApplicable',
+  other = 'Blocked',
+  timedOut = 'Timeout',
+  interrupted = 'Aborted',
 }
 
 const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
@@ -589,6 +592,22 @@ class AzureDevOpsReporter implements Reporter {
     return attachmentsResult;
   }
 
+  private _mapToAzureState(test: TestCase, testResult: TestResult): string {
+    let status = testResult.status;
+
+    if (status == 'skipped') {
+      if (test.annotations.findIndex((e) => e.type === 'fixme') != -1) {
+        return EAzureTestStatuses['fixme'];
+      } else if (test.annotations.findIndex((e) => e.type === 'skip') != -1) {
+        return EAzureTestStatuses['skipped'];
+      } else {
+        return EAzureTestStatuses['other'];
+      }
+    } else {
+      return EAzureTestStatuses[status];
+    }
+  }
+
   private async _publishCaseResult(test: TestCase, testResult: TestResult): Promise<TestResultsToTestRun | void> {
     const caseIds = this._getCaseIds(test);
     if (!caseIds || !caseIds.length) return;
@@ -620,7 +639,7 @@ class AzureDevOpsReporter implements Reporter {
           ({
             // the testPoint is the testCase + configuration, there is not need to set these
             testPoint: { id: String(testPoint.id) },
-            outcome: EAzureTestStatuses[testResult.status],
+            outcome: this._mapToAzureState(test, testResult),
             state: 'Completed',
             durationInMs: testResult.duration,
             errorMessage: testResult.error
@@ -683,7 +702,7 @@ class AzureDevOpsReporter implements Reporter {
               ...testPoints.map((testPoint) => ({
                 // the testPoint is the testCase + configuration, there is not need to set these
                 testPoint: { id: String(testPoint.id) },
-                outcome: EAzureTestStatuses[testResult.status],
+                outcome: this._mapToAzureState(testCase, testResult),
                 state: 'Completed',
                 durationInMs: testResult.duration,
                 errorMessage: testResult.error
