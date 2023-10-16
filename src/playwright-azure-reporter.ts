@@ -549,7 +549,7 @@ class AzureDevOpsReporter implements Reporter {
     const attachmentsResult: string[] = [];
 
     if (!runId) {
-      throw new Error('Could not find test run id. Check, maybe testPlanId, what you specified, is incorrect.');
+      throw new Error('Could not find test run id. Check, maybe planId, what you specified, is incorrect.');
     }
 
     for (const attachment of testResult.attachments) {
