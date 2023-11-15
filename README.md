@@ -164,3 +164,7 @@ Reporter options (\* - required):
   - `testResult` - Published results of tests, at the end of each test, parallel to test run..
   - `testRun` - Published test results to test run, at the end of test run.
     > **Note:** If you use `testRun` mode and using same test cases in different tests (yes i know it sounds funny), it will be overwritten with last test result.
+
+## Usefulness
+
+- **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use.
