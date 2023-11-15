@@ -1,3 +1,12 @@
+# [1.7.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.6.1...v1.7.0-beta.0) (2023-11-15)
+
+
+### Features
+
+* AZURE_PW_TEST_RUN_ID env variable ([5e51679](https://github.com/alexneo2003/playwright-azure-reporter/commit/5e5167930f21c11ee6a445177b4a922509b38b4a))
+
+
+
 ## [1.6.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.6.0...v1.6.1) (2023-10-16)
 
 
