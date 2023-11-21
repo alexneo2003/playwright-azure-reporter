@@ -167,3 +167,7 @@ Reporter options (\* - required):
 - `isExistingTestRun` [true/false] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion.
  > **Note:** If you use `isExistingTestRun` mode, `testRunId` should be specified.
 - `testRunId` - Id of test run. Used only for `existingTestRun` publishing mode.
+
+## Usefulness
+
+- **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use.
