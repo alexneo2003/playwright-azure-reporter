@@ -7,7 +7,7 @@ import location from './assets/azure-reporter/azureLocationOptionsResponse.json'
 import pointsResponseMapper from './assets/azure-reporter/pointsResponseMapper';
 import testResultsByQueryResponseMapping from './assets/azure-reporter/testResultsByQueryResponseMapping';
 import testRunResultsMapper from './assets/azure-reporter/testRunResultsMapper';
-import { reporterPath } from './reporterPath';
+import { customReporterTestRunPath, reporterPath } from './reporterPath';
 import { expect, test } from './test-fixtures';
 
 const TEST_OPTIONS_RESPONSE_PATH = path.join(
@@ -957,5 +957,97 @@ test.describe('Publish results - testRun', () => {
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(12);
     expect(result.passed).toBe(113);
+  });
+
+  test('should set process.env.AZURE_PW_TEST_RUN_ID for publishTestResultsMode: "testRun"', async ({
+    runInlineTest,
+    server,
+  }) => {
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CREATE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Points', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, POINTS_3_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_RUN_RESULTS_3_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = { 
+          reporter: [
+            ['line'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'token',
+              logging: true,
+              publishTestResultsMode: 'testRun',
+            }],
+            ['${customReporterTestRunPath}']
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[3] foobar', async () => {
+          expect(1).toBe(0);
+        });
+      `,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.output).not.toContain('Failed request: (401)');
+    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).toContain('azure: [3] foobar - failed');
+    expect(result.output).toContain('azure: Start publishing test results for 1 test(s)');
+    expect(result.output).toContain('azure: Left to publish: 0');
+    expect(result.output).toContain('azure: Test results published for 1 test(s)');
+    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).not.toContain('Error in reporter');
+    expect(result.output).not.toContain('expect(received).toBeDefined()');
+    expect(result.output).not.toContain('Expected: "150"\nReceived: undefined');
+    expect(result.exitCode).toBe(1);
+    expect(result.failed).toBe(1);
   });
 });
