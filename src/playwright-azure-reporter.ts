@@ -264,6 +264,8 @@ class AzureDevOpsReporter implements Reporter {
         if (run?.id) {
           this._resolveRunId(run.id);
           this._log(chalk.green(`Using run ${run.id} to publish test results`));
+          process.env.AZURE_PW_TEST_RUN_ID = String(run.id);
+          this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
         } else {
           this._isDisabled = true;
           this._rejectRunId('Failed to create test run. Reporting is disabled.');
@@ -346,6 +348,8 @@ class AzureDevOpsReporter implements Reporter {
           if (runId) {
             this._resolveRunId(runId);
             this._log(chalk.green(`Using run ${runId} to publish test results`));
+            process.env.AZURE_PW_TEST_RUN_ID = String(runId);
+            this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
             await this._publishTestResults(runId, this._testResultsToBePublished);
           } else {
             this._isDisabled = true;

@@ -4,7 +4,7 @@ import { getRequestBody, setHeaders } from '../config/utils';
 import azureAreas from './assets/azure-reporter/azureAreas';
 import headers from './assets/azure-reporter/azureHeaders';
 import location from './assets/azure-reporter/azureLocationOptionsResponse.json';
-import { reporterPath } from './reporterPath';
+import { customReporterTestResultPath, reporterPath } from './reporterPath';
 import { expect, test } from './test-fixtures';
 
 const TEST_OPTIONS_RESPONSE_PATH = path.join(
@@ -799,5 +799,95 @@ test.describe('Publish results - testResult', () => {
     expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(0);
     expect(result.passed).toBe(1);
+  });
+
+  test('should set process.env.AZURE_PW_TEST_RUN_ID for publishTestResultsMode: "testResult"', async ({
+    runInlineTest,
+    server,
+  }) => {
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CREATE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Points', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, POINTS_3_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_RUN_RESULTS_3_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = { 
+          reporter: [
+            ['line'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'token',
+              logging: true,
+            }],
+            ['${customReporterTestResultPath}']
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+
+        test('[3] foobar', async () => {
+          expect(1).toBe(0);
+        });
+      `,
+      },
+      { reporter: '' }
+    );
+    expect(result.output).not.toContain('Failed request: (401)');
+    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).toContain('azure: [3] foobar - failed');
+    expect(result.output).toContain('azure: Start publishing: [3] foobar');
+    expect(result.output).toContain('azure: Result published: [3] foobar');
+    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).not.toContain('Error in reporter');
+    expect(result.output).not.toContain('expect(received).toBeDefined()');
+    expect(result.output).not.toContain('Expected: "150"\nReceived: undefined');
+    expect(result.exitCode).toBe(1);
+    expect(result.failed).toBe(1);
   });
 });
