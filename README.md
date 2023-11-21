@@ -1,18 +1,22 @@
 # Playwright Azure Reporter
+
 ![GitHub](https://img.shields.io/github/license/alexneo2003/playwright-azure-reporter) ![npm (scoped)](https://img.shields.io/npm/v/@alex_neo/playwright-azure-reporter) ![npm](https://img.shields.io/npm/dw/@alex_neo/playwright-azure-reporter) ![npm](https://img.shields.io/npm/dt/@alex_neo/playwright-azure-reporter)
 
 ## A must read!
+
 **Since version 1.5.0 reporter allows using configurationIds to publish results for different configurations e.g. different browsers**
 **Necessarily defining `testRun.configurationIds` or/and `testPointMapper` function in reporter config, otherwise reporter will be publishing results for all configurations**
 
-
 ## How to integrate
+
 Install package
 
 ```bash
 npm install @alex_neo/playwright-azure-reporter
 ```
-or 
+
+or
+
 ```bash
 yarn add @alex_neo/playwright-azure-reporter
 ```
@@ -108,11 +112,11 @@ const config: PlaywrightTestConfig = {
             displayName: 'Alex Neo',
           },
           comment: 'Playwright Test Run',
-          // the configuration ids of this test run, use 
+          // the configuration ids of this test run, use
           // https://dev.azure.com/{organization}/{project}/_apis/test/configurations to get the ids of  your project.
-          // if multiple configuration ids are used in one run a testPointMapper should be used to pick the correct one, 
+          // if multiple configuration ids are used in one run a testPointMapper should be used to pick the correct one,
           // otherwise the results are pushed to all.
-          configurationIds: [ 1 ],
+          configurationIds: [1],
         },
       } as AzureReporterOptions,
     ],
@@ -146,6 +150,7 @@ Reporter options (\* - required):
 - `testRunTitle` - Title of test run using to create new test run. Default: `Playwright Test Run`.
 - `testRunConfig` - Extra data to pass when Test Run creating. Read [doc](https://learn.microsoft.com/en-us/rest/api/azure/devops/test/runs/create?view=azure-devops-rest-7.1&tabs=HTTP#request-body) from more information. Default: `empty`.
 - `testPointMapper` - A callback to map the test runs to test configurations, e.g. by browser
+
 ```
   testPointMapper: async (testCase: TestCase, testPoints: TestPoint[]) => {
     switch(testCase.parent.project()?.use.browserName) {
@@ -160,13 +165,18 @@ Reporter options (\* - required):
     }
   }
 ```
+
 - `publishTestResultsMode` - Mode of publishing test results. Default: `'testResult'`. Available options:
   - `testResult` - Published results of tests, at the end of each test, parallel to test run..
   - `testRun` - Published test results to test run, at the end of test run.
     > **Note:** If you use `testRun` mode and using same test cases in different tests (yes i know it sounds funny), it will be overwritten with last test result.
-- `isExistingTestRun` [true/false] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion.
- > **Note:** If you use `isExistingTestRun` mode, `testRunId` should be specified.
-- `testRunId` - Id of test run. Used only for `existingTestRun` publishing mode.
+- `isExistingTestRun` [true/false] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion. Default: `false`.
+  > **Note:** If you use `isExistingTestRun` mode, `testRunId` should be specified.
+- `testRunId` [number] - Id of test run. Used only for `existingTestRun` publishing mode. Also can be set by `AZURE_PW_TEST_RUN_ID` environment variable. Default: `undefined`.
+
+  > **Note:** If you set existing test run ID from reporter options and from environment variable - reporter options will be used
+
+  > **Note:** If you use `isExistingTestRun` mode, test run doesn't complete automatically. You should complete it manually.
 
 ## Usefulness
 
