@@ -1,3 +1,12 @@
+# [1.8.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.7.0...v1.8.0) (2023-11-21)
+
+
+### Features
+
+* set existing test run ID ([3c2bfb3](https://github.com/alexneo2003/playwright-azure-reporter/commit/3c2bfb31fad8427dd1206202d934812a78290b27))
+
+
+
 # [1.7.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.7.0-beta.0...v1.7.0) (2023-11-21)
 
 

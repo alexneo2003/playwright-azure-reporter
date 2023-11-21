@@ -52,6 +52,8 @@ export interface AzureReporterOptions {
   attachmentsType?: TAttachmentType | undefined;
   testRunConfig?: TTestRunConfig;
   testPointMapper?: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
+  isExistingTestRun?: boolean;
+  testRunId?: number;
 }
 
 interface TestResultsToTestRun {
@@ -137,6 +139,8 @@ class AzureDevOpsReporter implements Reporter {
     maxRetries: 20,
   } as IRequestOptions;
   private _publishTestResultsMode: TPublishTestResults = 'testResult';
+  private _testRunId: number | undefined;
+  private _isExistingTestRun = false;
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -199,6 +203,17 @@ class AzureDevOpsReporter implements Reporter {
       this._isDisabled = true;
       return;
     }
+    this._testRunId = options.testRunId || Number(process.env.AZURE_PW_TEST_RUN_ID) || undefined;
+    if (options?.isExistingTestRun && !this._testRunId) {
+      this._warning(
+        "'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
+      );
+      this._isDisabled = true;
+      return;
+    }
+    if (this._testRunId) {
+      process.env.AZURE_PW_TEST_RUN_ID = String(this._testRunId);
+    }
     if (options?.uploadAttachments) {
       if (!options?.attachmentsType) {
         this._warning("'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default.");
@@ -234,6 +249,8 @@ class AzureDevOpsReporter implements Reporter {
     if (options.testPointMapper) {
       this._testPointMapper = options.testPointMapper;
     }
+    this._isExistingTestRun = options.isExistingTestRun || false;
+
     if (this._logging) {
       debug.enable('azure');
     }
@@ -241,6 +258,12 @@ class AzureDevOpsReporter implements Reporter {
 
   async onBegin(): Promise<void> {
     if (this._isDisabled) return;
+    if (this._isExistingTestRun) {
+      this._resolveRunId(this._testRunId!);
+      this._log(chalk.green(`Using existing run ${this._testRunId} to publish test results`));
+      this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
+      return;
+    }
     try {
       this._testApi = await this._connection.getTestApi();
 
@@ -324,8 +347,12 @@ class AzureDevOpsReporter implements Reporter {
           this._log(chalk.gray('No test results to publish'));
           return;
         } else {
-          const createRunResponse = await this._createRun(this._testRunTitle);
-          runId = createRunResponse?.id;
+          if (!this._isExistingTestRun) {
+            const createRunResponse = await this._createRun(this._testRunTitle);
+            runId = createRunResponse?.id;
+          } else {
+            runId = this._testRunId;
+          }
           if (runId) {
             this._resolveRunId(runId);
             this._log(chalk.green(`Using run ${runId} to publish test results`));
@@ -346,6 +373,7 @@ class AzureDevOpsReporter implements Reporter {
         return;
       }
 
+      if (this._isExistingTestRun) return;
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       const runUpdatedResponse = await this._testApi.updateTestRun({ state: 'Completed' }, this._projectName, runId!);
       this._log(chalk.green(`Run ${runId} - ${runUpdatedResponse.state}`));
