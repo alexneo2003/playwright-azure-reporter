@@ -164,6 +164,6 @@ Reporter options (\* - required):
   - `testResult` - Published results of tests, at the end of each test, parallel to test run..
   - `testRun` - Published test results to test run, at the end of test run.
     > **Note:** If you use `testRun` mode and using same test cases in different tests (yes i know it sounds funny), it will be overwritten with last test result.
-  - `existingTestRun` - Published test results to the existing test run, at the end of each test, parallel to test run. In this mode test results only added to the existing test run without its creation and completion.
-    > **Note:** If you use `existingTestRun` mode, `testRunId` should be specified.
+- `isExistingTestRun` [true/false] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion.
+ > **Note:** If you use `isExistingTestRun` mode, `testRunId` should be specified.
 - `testRunId` - Id of test run. Used only for `existingTestRun` publishing mode.

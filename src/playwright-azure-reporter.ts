@@ -31,7 +31,7 @@ const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
-type TPublishTestResults = 'testResult' | 'testRun' | 'existingTestRun';
+type TPublishTestResults = 'testResult' | 'testRun';
 
 interface ITestCaseExtended extends TestCase {
   testAlias: string;
@@ -52,6 +52,7 @@ export interface AzureReporterOptions {
   attachmentsType?: TAttachmentType | undefined;
   testRunConfig?: TTestRunConfig;
   testPointMapper?: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
+  isExistingTestRun?: boolean;
   testRunId?: number;
 }
 
@@ -139,6 +140,7 @@ class AzureDevOpsReporter implements Reporter {
   } as IRequestOptions;
   private _publishTestResultsMode: TPublishTestResults = 'testResult';
   private _testRunId = 0;
+  private _isExistingTestRun = false;
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -201,11 +203,8 @@ class AzureDevOpsReporter implements Reporter {
       this._isDisabled = true;
       return;
     }
-    if (
-      options.publishTestResultsMode === 'existingTestRun' &&
-      (!options?.testRunId || !Number.isInteger(options?.testRunId))
-    ) {
-      this._warning("'testRunId' is not set for 'existingTestRun' mode. Reporting is disabled.");
+    if (options?.isExistingTestRun && !Number.isInteger(options?.testRunId)) {
+      this._warning("'testRunId' is not set for 'isExistingTestRun'=true mode. Reporting is disabled.");
       this._isDisabled = true;
       return;
     }
@@ -248,11 +247,12 @@ class AzureDevOpsReporter implements Reporter {
       debug.enable('azure');
     }
     this._testRunId = options.testRunId || 0;
+    this._isExistingTestRun = options.isExistingTestRun || false;
   }
 
   async onBegin(): Promise<void> {
     if (this._isDisabled) return;
-    if (this._publishTestResultsMode === 'existingTestRun') {
+    if (this._isExistingTestRun) {
       this._resolveRunId(this._testRunId);
       this._log(chalk.green(`Using run ${this._testRunId} to publish test results`));
     }
@@ -286,7 +286,7 @@ class AzureDevOpsReporter implements Reporter {
   async onTestEnd(test: TestCase, testResult: TestResult): Promise<void> {
     if (this._isDisabled) return;
     try {
-      if (this._publishTestResultsMode === 'testResult' || this._publishTestResultsMode === 'existingTestRun') {
+      if (this._publishTestResultsMode === 'testResult') {
         const runId = await this._runIdPromise;
 
         if (!runId) return;
@@ -337,8 +337,12 @@ class AzureDevOpsReporter implements Reporter {
           this._log(chalk.gray('No test results to publish'));
           return;
         } else {
-          const createRunResponse = await this._createRun(this._testRunTitle);
-          runId = createRunResponse?.id;
+          if (!this._isExistingTestRun) {
+            const createRunResponse = await this._createRun(this._testRunTitle);
+            runId = createRunResponse?.id;
+          } else {
+            runId = this._testRunId;
+          }
           if (runId) {
             this._resolveRunId(runId);
             this._log(chalk.green(`Using run ${runId} to publish test results`));
@@ -357,7 +361,7 @@ class AzureDevOpsReporter implements Reporter {
         return;
       }
 
-      if (this._publishTestResultsMode === 'existingTestRun') return;
+      if (this._isExistingTestRun) return;
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       const runUpdatedResponse = await this._testApi.updateTestRun({ state: 'Completed' }, this._projectName, runId!);
       this._log(chalk.green(`Run ${runId} - ${runUpdatedResponse.state}`));
