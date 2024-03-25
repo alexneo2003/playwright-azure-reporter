@@ -398,16 +398,28 @@ class AzureDevOpsReporter implements Reporter {
     this._debugWarning(`${chalk.yellow(message)}`);
   }
 
+  private _extractMatches(text: string): string[] {
+    const regex = new RegExp(/\[([\d,\s]+)\]/, 'gm');
+    const matchesAll = text.matchAll(regex);
+    return [...matchesAll].map((match) => match[1]);
+  }
+
   private _getCaseIds(test: TestCase): string[] {
     const result: string[] = [];
-    const regex = new RegExp(/\[([\d,\s]+)\]/, 'gm');
-    const matchesAll = test.title.matchAll(regex);
-    const matches = [...matchesAll].map((match) => match[1]);
+    const matches = this._extractMatches(test.title);
     matches.forEach((match) => {
       const ids = match.split(',').map((id) => id.trim());
       result.push(...ids);
     });
-    return result;
+    if (test.tags) {
+      test.tags.forEach((tag) => {
+        const ids = this._extractMatches(tag);
+        ids.forEach((id) => {
+          result.push(id);
+        });
+      });
+    }
+    return [...new Set(result)];
   }
 
   private _logTestItem(test: TestCase, testResult: TestResult) {
@@ -662,7 +674,11 @@ class AzureDevOpsReporter implements Reporter {
 
       if (!mappedTestPoints || mappedTestPoints.length == 0) {
         throw new Error(
-          `No test points found for test case [${caseIds}] associated with test plan ${this._planId}. Check, maybe testPlanId, what you specified, is incorrect.`
+          `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
+            this._testRunConfig?.configurationIds
+              ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
+              : ''
+          }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.`
         );
       }
 
@@ -762,7 +778,11 @@ class AzureDevOpsReporter implements Reporter {
             }
           } else {
             this._warning(
-              `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId}. Check, maybe testPlanId, what you specified, is incorrect.`
+              `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
+                this._testRunConfig?.configurationIds
+                  ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
+                  : ''
+              }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.`
             );
           }
         }
