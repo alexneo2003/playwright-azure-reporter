@@ -29,14 +29,16 @@ import type {
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { rimraf } from 'playwright-core/lib/utilsBundle';
-import { promisify } from 'util';
 
 import type { CommonFixtures, CommonWorkerFixtures, TestChildProcess } from '../config/commonFixtures';
 import { commonFixtures } from '../config/commonFixtures';
 import { ServerFixtures, serverFixtures, ServerWorkerOptions } from '../config/serverFixtures';
 
-export const removeFolderAsync = promisify(rimraf);
+export async function removeFolders(dirs: string[]): Promise<Error[]> {
+  return await Promise.all(
+    dirs.map((dir: string) => fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10 }).catch((e) => e))
+  );
+}
 
 export type CliRunResult = {
   exitCode: number;
@@ -72,6 +74,13 @@ export async function writeFiles(testInfo: TestInfo, files: Files, initial: bool
     files = {
       ...files,
       'package.json': `{ "name": "test-project" }`,
+    };
+  }
+
+  if (initial && !Object.keys(files).some((name) => name.includes('tsconfig.json') || name.includes('jsconfig.json'))) {
+    files = {
+      ...files,
+      'tsconfig.json': `{}`,
     };
   }
 
@@ -114,7 +123,7 @@ async function runPlaywrightTest(
     cwd,
     args,
     {
-      PW_TEST_REPORTER: path.join(__dirname, '../../node_modules/@playwright/test/lib/reporters/json.js'),
+      PW_TEST_REPORTER: path.join(__dirname, '../../node_modules/playwright/lib/reporters/json.js'),
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
       ...env,
     },
@@ -243,7 +252,7 @@ export const test = base
         const baseDir = await writeFiles(testInfo, files, true);
         return await runPlaywrightTest(childProcess, baseDir, params, { ...env, PWTEST_CACHE_DIR: cacheDir }, options);
       });
-      await removeFolderAsync(cacheDir);
+      await removeFolders([cacheDir]);
     },
   });
 

@@ -1,6 +1,6 @@
 {
   "name": "@alex_neo/playwright-azure-reporter",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Playwright Azure Reporter",
   "main": "./dist/playwright-azure-reporter.js",
   "types": "./dist/playwright-azure-reporter.d.js",
@@ -44,9 +44,10 @@
     "mime": "^3.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.35.1",
+    "@playwright/test": "^1.42.1",
     "@types/debug": "^4.1.7",
     "@types/mime": "^3.0.1",
+    "@types/node": "^20.11.25",
     "@typescript-eslint/eslint-plugin": "^5.57.1",
     "@typescript-eslint/eslint-plugin-tslint": "^5.57.1",
     "@typescript-eslint/parser": "^5.57.1",

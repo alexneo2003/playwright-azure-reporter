@@ -1,3 +1,16 @@
+# [1.9.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.9.0-beta.0...v1.9.0) (2024-03-25)
+
+
+
+# [1.9.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.8.0...v1.9.0-beta.0) (2024-03-11)
+
+
+### Features
+
+* add ability to define test id using pw tags config ([ef999a1](https://github.com/alexneo2003/playwright-azure-reporter/commit/ef999a1cf42fbfadb7b61150990aff6f3ab71015))
+
+
+
 # [1.8.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.7.0...v1.8.0) (2023-11-21)
 
 

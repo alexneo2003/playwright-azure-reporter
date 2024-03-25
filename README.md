@@ -7,6 +7,23 @@
 **Since version 1.5.0 reporter allows using configurationIds to publish results for different configurations e.g. different browsers**
 **Necessarily defining `testRun.configurationIds` or/and `testPointMapper` function in reporter config, otherwise reporter will be publishing results for all configurations**
 
+**Since version 1.9.0 reporter allows you to use test tags as Playwright it implemented in version [1.42.0](https://playwright.dev/docs/test-annotations#tag-tests)**
+**You can define test cases ids in new format, but you still can use old format with test case id in test name**
+
+**Example:**
+
+```typescript
+test.describe('Test suite', () => {
+  test('Test name @tag1 @tag2', {
+    tag: ['@[1]'] // <<-- test case id
+  } () => {
+    expect(true).toBe(true);
+  });
+});
+```
+
+**but you should define your Azure DevOps test case id in format `@[1]` where `1` is your test case id in square brackets and `@` is required prefix for playwright to recognize tags**
+
 ## How to integrate
 
 Install package
@@ -67,6 +84,18 @@ describe('Test suite', () => {
   });
 
   test('[16, 17, 18] Test sixteen, seventeen, eighteen [19] Test nineteen', () => {
+    expect(true).toBe(true);
+  });
+});
+```
+
+Or you can use tags to define test cases ids (since v1.9.0) (read more [here](https://playwright.dev/docs/test-annotations#tag-tests)):
+
+```typescript
+test.describe('Test suite', () => {
+  test('Test name', {
+    tag: ['@[1]', '@smoke', '@slow']
+  } () => {
     expect(true).toBe(true);
   });
 });
