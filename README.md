@@ -181,6 +181,9 @@ Reporter options (\* - required):
 - `testPointMapper` - A callback to map the test runs to test configurations, e.g. by browser
 
 ```
+  import { TestCase } from '@playwright/test/reporter'
+  import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces'
+
   testPointMapper: async (testCase: TestCase, testPoints: TestPoint[]) => {
     switch(testCase.parent.project()?.use.browserName) {
       case 'chromium':

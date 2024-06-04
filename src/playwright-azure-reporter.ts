@@ -12,7 +12,7 @@ import * as Test from 'azure-devops-node-api/TestApi';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
 
-import debug from './debug';
+import Logger from './logger';
 import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID } from './utils';
 
 // https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
@@ -108,8 +108,7 @@ interface Headers {
 }
 
 class AzureDevOpsReporter implements Reporter {
-  private _debug = debug('azure');
-  private _debugWarning = debug('azure:warning');
+  private _logger: Logger | undefined;
   private _testApi!: Test.ITestApi;
   private _coreApi!: ICoreApi;
   private _publishedResultsCount = 0;
@@ -122,6 +121,7 @@ class AzureDevOpsReporter implements Reporter {
   private _planId = 0;
   private _logging = false;
   private _isDisabled = false;
+  private _setIsDisable: (state: boolean) => void = () => {};
   private _testRunTitle = '';
   private _uploadAttachments = false;
   private _attachmentsType: RegExp[] = [];
@@ -151,8 +151,8 @@ class AzureDevOpsReporter implements Reporter {
         return runId;
       })
       .catch((error) => {
-        this._warning(error);
-        this._isDisabled = true;
+        this._logger?.error(error);
+        this._setIsDisable(true);
       });
     this._publishResultsPromise = new Promise<void>((resolve, reject) => {
       this._resolvePublishResults = resolve;
@@ -162,13 +162,13 @@ class AzureDevOpsReporter implements Reporter {
         return runId;
       })
       .catch((error) => {
-        this._warning(error);
-        this._isDisabled = true;
+        this._logger?.error(error);
+        this._setIsDisable(true);
       });
     // this is the default implementation, might be replaced by the options
     this._testPointMapper = async (testCase, testPoints) => {
       if (testPoints.length > 1) {
-        this._warning(
+        this._logger?.warn(
           `There are ${testPoints.length} testPoints found for the test case \n\t ${testCase.title}, \n\t you should set testRunConfig.configurationIds and/or use set a testPointMapper!`
         );
       }
@@ -179,36 +179,45 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   _validateOptions(options: AzureReporterOptions): void {
+    this._setIsDisable = (state: boolean) => {
+      process.env.AZURE_PW_DISABLED = String(state);
+      this._isDisabled = state;
+    };
+    this._logging = options.logging || false;
+    this._logger = new Logger(this._logging);
+
+    this._logger?.debug('Validating options');
+    this._logger?.debug(this._anonymizeObject(options, ['token']));
     if (options?.isDisabled) {
-      this._isDisabled = true;
+      this._setIsDisable(true);
       return;
     }
     if (!options?.orgUrl) {
-      this._warning("'orgUrl' is not set. Reporting is disabled.");
-      this._isDisabled = true;
+      this._logger?.warn("'orgUrl' is not set. Reporting is disabled.");
+      this._setIsDisable(true);
       return;
     }
     if (!options?.projectName) {
-      this._warning("'projectName' is not set. Reporting is disabled.");
-      this._isDisabled = true;
+      this._logger?.warn("'projectName' is not set. Reporting is disabled.");
+      this._setIsDisable(true);
       return;
     }
     if (!options?.planId) {
-      this._warning("'planId' is not set. Reporting is disabled.");
-      this._isDisabled = true;
+      this._logger?.warn("'planId' is not set. Reporting is disabled.");
+      this._setIsDisable(true);
       return;
     }
     if (!options?.token) {
-      this._warning("'token' is not set. Reporting is disabled.");
-      this._isDisabled = true;
+      this._logger?.warn("'token' is not set. Reporting is disabled.");
+      this._setIsDisable(true);
       return;
     }
     this._testRunId = options.testRunId || Number(process.env.AZURE_PW_TEST_RUN_ID) || undefined;
     if (options?.isExistingTestRun && !this._testRunId) {
-      this._warning(
+      this._logger?.warn(
         "'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
       );
-      this._isDisabled = true;
+      this._setIsDisable(true);
       return;
     }
     if (this._testRunId) {
@@ -216,7 +225,7 @@ class AzureDevOpsReporter implements Reporter {
     }
     if (options?.uploadAttachments) {
       if (!options?.attachmentsType) {
-        this._warning("'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default.");
+        this._logger?.warn("'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default.");
         this._attachmentsType = [new RegExp('screenshot')];
       } else {
         this._attachmentsType = options.attachmentsType.map((pattern) => {
@@ -232,7 +241,6 @@ class AzureDevOpsReporter implements Reporter {
     this._orgUrl = options.orgUrl;
     this._projectName = options.projectName;
     this._planId = options.planId;
-    this._logging = options.logging || false;
     this._token = options.token;
     this._environment = options?.environment || undefined;
     this._testRunTitle =
@@ -250,18 +258,14 @@ class AzureDevOpsReporter implements Reporter {
       this._testPointMapper = options.testPointMapper;
     }
     this._isExistingTestRun = options.isExistingTestRun || false;
-
-    if (this._logging) {
-      debug.enable('azure');
-    }
   }
 
   async onBegin(): Promise<void> {
     if (this._isDisabled) return;
     if (this._isExistingTestRun) {
       this._resolveRunId(this._testRunId!);
-      this._log(chalk.green(`Using existing run ${this._testRunId} to publish test results`));
-      this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
+      this._logger?.log(`Using existing run ${this._testRunId} to publish test results`);
+      this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
       return;
     }
     try {
@@ -271,25 +275,24 @@ class AzureDevOpsReporter implements Reporter {
         const run = await this._createRun(this._testRunTitle);
         if (run?.id) {
           this._resolveRunId(run.id);
-          this._log(chalk.green(`Using run ${run.id} to publish test results`));
+          this._logger?.log(`Using run ${run.id} to publish test results`);
           process.env.AZURE_PW_TEST_RUN_ID = String(run.id);
-          this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
+          this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
         } else {
-          this._isDisabled = true;
           this._rejectRunId('Failed to create test run. Reporting is disabled.');
         }
       }
     } catch (error: any) {
-      this._isDisabled = true;
+      this._logger?.debug(error.message);
       if (error.message.includes('401')) {
-        this._warning('Failed to create test run. Check your token. Reporting is disabled.');
+        this._logger?.error('Failed to create test run. Check your token. Reporting is disabled.');
       } else if (error.message.includes('getaddrinfo ENOTFOUND')) {
-        this._warning('Failed to create test run. Check your orgUrl. Reporting is disabled.');
+        this._logger?.error('Failed to create test run. Check your orgUrl. Reporting is disabled.');
       } else {
-        this._warning('Failed to create test run. Reporting is disabled.');
-        const parsedError = JSON.parse(String(error.message.trim()));
-        this._warning(parsedError?.message || error.message);
+        this._logger?.error('Failed to create test run. Reporting is disabled.');
+        this._logger?.error(error.message);
       }
+      this._setIsDisable(true);
     }
   }
 
@@ -315,7 +318,7 @@ class AzureDevOpsReporter implements Reporter {
         this._testResultsToBePublished.push({ testCase: testCase, testResult });
       }
     } catch (error: any) {
-      this._warning(`Failed to publish test result. \n ${error.message}`);
+      this._logger?.error(`Failed to publish test result. \n ${error.message}`);
     }
   }
 
@@ -331,20 +334,16 @@ class AzureDevOpsReporter implements Reporter {
         while (this._testsAliasToBePublished.length > 0) {
           // need wait all results to be published
           if (prevCount > this._testsAliasToBePublished.length) {
-            this._log(
-              chalk.gray(
-                `Waiting for all results to be published. Remaining ${this._testsAliasToBePublished.length} results`
-              )
+            this._logger?.log(
+              `Waiting for all results to be published. Remaining ${this._testsAliasToBePublished.length} results`
             );
             prevCount--;
           }
           await new Promise((resolve) => setTimeout(resolve, 250));
         }
       } else {
-        this._logging = true;
-
         if (this._testResultsToBePublished.length === 0) {
-          this._log(chalk.gray('No test results to publish'));
+          this._logger?.log('No test results to publish');
           return;
         } else {
           if (!this._isExistingTestRun) {
@@ -355,12 +354,12 @@ class AzureDevOpsReporter implements Reporter {
           }
           if (runId) {
             this._resolveRunId(runId);
-            this._log(chalk.green(`Using run ${runId} to publish test results`));
+            this._logger?.log(`Using run ${runId} to publish test results`);
             process.env.AZURE_PW_TEST_RUN_ID = String(runId);
-            this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
+            this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
             await this._publishTestResults(runId, this._testResultsToBePublished);
           } else {
-            this._isDisabled = true;
+            this._setIsDisable(true);
             this._rejectRunId('Failed to create test run. Reporting is disabled.');
           }
 
@@ -369,16 +368,16 @@ class AzureDevOpsReporter implements Reporter {
       }
 
       if (this._publishedResultsCount === 0 && !runId) {
-        this._log(chalk.gray('No testcases were matched. Ensure that your tests are declared correctly.'));
+        this._logger?.log(chalk.gray('No testcases were matched. Ensure that your tests are declared correctly.'));
         return;
       }
 
       if (this._isExistingTestRun) return;
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       const runUpdatedResponse = await this._testApi.updateTestRun({ state: 'Completed' }, this._projectName, runId!);
-      this._log(chalk.green(`Run ${runId} - ${runUpdatedResponse.state}`));
+      this._logger?.log(`Run ${runId} - ${runUpdatedResponse.state}`);
     } catch (error: any) {
-      this._warning(chalk.red(`Error on completing run ${error as string}`));
+      this._logger?.error(`Error on completing run ${error as string}`);
     }
   }
 
@@ -386,16 +385,24 @@ class AzureDevOpsReporter implements Reporter {
     return true;
   }
 
-  private _log(message: any) {
-    if (this._logging) {
-      debug.enable('azure');
-      this._debug(message);
-    }
+  private _anonymizeString(str: string): string {
+    return str.replace(/./g, '*');
   }
 
-  private _warning(message: any) {
-    debug.enable('azure:warning');
-    this._debugWarning(`${chalk.yellow(message)}`);
+  private _anonymizeObject(obj: any, keys: string[]): any {
+    if (typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+      return obj.map((item) => this._anonymizeObject(item, keys));
+    }
+    const result: any = {};
+    for (const key in obj) {
+      if (keys.includes(key)) {
+        result[key] = this._anonymizeString(obj[key]);
+      } else {
+        result[key] = this._anonymizeObject(obj[key], keys);
+      }
+    }
+    return result;
   }
 
   private _extractMatches(text: string): string[] {
@@ -425,22 +432,22 @@ class AzureDevOpsReporter implements Reporter {
   private _logTestItem(test: TestCase, testResult: TestResult) {
     switch (testResult.status) {
       case 'passed':
-        this._log(chalk.green(`${test.title} - ${testResult.status}`));
+        this._logger?.log(chalk.green(`${test.title} - ${testResult.status}`));
         break;
       case 'failed':
-        this._log(chalk.red(`${test.title} - ${testResult.status}`));
+        this._logger?.log(chalk.red(`${test.title} - ${testResult.status}`));
         break;
       case 'timedOut':
-        this._log(chalk.yellow(`${test.title} - ${testResult.status}`));
+        this._logger?.log(chalk.yellow(`${test.title} - ${testResult.status}`));
         break;
       case 'skipped':
-        this._log(chalk.yellow(`${test.title} - ${testResult.status}`));
+        this._logger?.log(chalk.yellow(`${test.title} - ${testResult.status}`));
         break;
       case 'interrupted':
-        this._log(chalk.red(`${test.title} - ${testResult.status}`));
+        this._logger?.log(chalk.red(`${test.title} - ${testResult.status}`));
         break;
       default:
-        this._log(`${test.title} - ${testResult.status}`);
+        this._logger?.log(`${test.title} - ${testResult.status}`);
         break;
     }
   }
@@ -467,8 +474,8 @@ class AzureDevOpsReporter implements Reporter {
         else throw new Error('Failed to create test run');
       }
     } catch (error: any) {
-      this._warning(chalk.red(error.message));
-      this._isDisabled = true;
+      this._logger?.error(error.message);
+      this._setIsDisable(true);
     }
   }
 
@@ -484,8 +491,8 @@ class AzureDevOpsReporter implements Reporter {
       if (project) return project;
       else throw new Error(`Project ${projectName} does not exist. Reporting is disabled.`);
     } catch (error: any) {
-      this._warning(chalk.red(error.message));
-      this._isDisabled = true;
+      this._logger?.error(error.message);
+      this._setIsDisable(true);
     }
   }
 
@@ -544,7 +551,7 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
     } catch (error: any) {
-      this._warning(chalk.red(error.message));
+      this._logger?.error(error.message);
     }
     return result;
   }
@@ -588,7 +595,7 @@ class AzureDevOpsReporter implements Reporter {
     testCaseResultId: number,
     test: ITestCaseExtended | TestCase
   ): Promise<string[]> {
-    this._log(chalk.gray(`Uploading attachments for test: ${test.title}`));
+    this._logger?.log(chalk.gray(`Uploading attachments for test: ${test.title}`));
     const runId = await this._runIdPromise;
     const attachmentsResult: string[] = [];
 
@@ -629,10 +636,10 @@ class AzureDevOpsReporter implements Reporter {
           attachmentsResult.push(response.url);
         }
       } catch (error: any) {
-        this._warning(chalk.red(error.message));
+        this._logger?.error(error.message);
       }
     }
-    this._log(chalk.gray('Uploaded attachments'));
+    this._logger?.log(chalk.gray('Uploaded attachments'));
     return attachmentsResult;
   }
 
@@ -666,7 +673,7 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       const runId = await this._runIdPromise;
-      this._log(chalk.gray(`Start publishing: ${test.title}`));
+      this._logger?.log(chalk.gray(`Start publishing: ${test.title}`));
       const toBePublished: TTestResultsToBePublished = { testCase: testCase, testResult };
       const mappedTestPoints = (await this._getTestPointsOfTestResults(this._planId as number, [toBePublished])).get(
         toBePublished
@@ -713,11 +720,11 @@ class AzureDevOpsReporter implements Reporter {
 
       this._removePublished(testCase.testAlias);
       this._publishedResultsCount++;
-      this._log(chalk.gray(`Result published: ${test.title}`));
+      this._logger?.log(chalk.gray(`Result published: ${test.title}`));
       return testCaseResult;
     } catch (error: any) {
       this._removePublished(testCase.testAlias);
-      this._warning(chalk.red(error.message));
+      this._logger?.error(error.message);
     }
   }
 
@@ -730,7 +737,7 @@ class AzureDevOpsReporter implements Reporter {
       testsResults.slice(i * testsPackSize, (i + 1) * testsPackSize)
     );
 
-    this._log(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`));
+    this._logger?.log(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`));
 
     try {
       for (const testsPack of testsPacksArray) {
@@ -777,7 +784,7 @@ class AzureDevOpsReporter implements Reporter {
               }
             }
           } else {
-            this._warning(
+            this._logger?.warn(
               `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
                 this._testRunConfig?.configurationIds
                   ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
@@ -796,13 +803,13 @@ class AzureDevOpsReporter implements Reporter {
         ).addTestResultsToTestRun(testCaseResults, this._projectName, runId!)) as unknown as TestResultsToTestRun;
 
         if (!testCaseResult.result) {
-          this._warning(`Failed to publish test result for test cases [${testCaseIds.join(', ')}]`);
+          this._logger?.warn(`Failed to publish test result for test cases [${testCaseIds.join(', ')}]`);
         } else if (testCaseResult.result.count !== testCaseResults.length) {
-          this._warning(`Not all test result for test cases [${testCaseIds.join(', ')}] are published`);
+          this._logger?.warn(`Not all test result for test cases [${testCaseIds.join(', ')}] are published`);
         }
 
         if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
-          this._log(
+          this._logger?.log(
             chalk.gray(`Starting to uploading attachments for ${withAttachmentsByTestPoint.size} testpoint(s)`)
           );
 
@@ -819,7 +826,7 @@ class AzureDevOpsReporter implements Reporter {
             const testResult = resultData.results?.find((result) => result.testPoint?.id === String(key.id));
 
             if (!testResult) {
-              this._warning(`Test result for test point [${key.id}] is missing, attachments are not uploaded!`);
+              this._logger?.warn(`Test result for test point [${key.id}] is missing, attachments are not uploaded!`);
               continue;
             }
 
@@ -830,12 +837,12 @@ class AzureDevOpsReporter implements Reporter {
         }
 
         this._publishedResultsCount += testsPack.length;
-        this._log(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount}`));
+        this._logger?.log(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount}`));
       }
-      this._log(chalk.gray(`Test results published for ${this._publishedResultsCount} test(s)`));
+      this._logger?.log(chalk.gray(`Test results published for ${this._publishedResultsCount} test(s)`));
       this._resolvePublishResults();
     } catch (error: any) {
-      this._warning(chalk.red(error.message));
+      this._logger?.error(error.message);
       this._rejectPublishResults(error);
     }
   }

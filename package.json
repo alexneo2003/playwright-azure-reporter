@@ -14,7 +14,7 @@
     "clean": "rm -rf dist || true",
     "prepublishOnly": "tsc",
     "dev": "yarn run lint && tsc",
-    "dev:watch": "nodemon --watch src --exec \"yarn run build\"",
+    "dev:watch": "nodemon --watch './src/*' -e ts --exec \"yarn run build\"",
     "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md",
     "release": "conventional-github-releaser -p angular",
     "prepare": "husky install"
