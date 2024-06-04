@@ -44,7 +44,7 @@
     "mime": "^3.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.42.1",
+    "@playwright/test": "^1.44.1",
     "@types/debug": "^4.1.7",
     "@types/mime": "^3.0.1",
     "@types/node": "^20.11.25",
