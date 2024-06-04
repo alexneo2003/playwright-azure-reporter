@@ -58,7 +58,7 @@ test.describe('Reporter constructor', () => {
       { reporter: '' }
     );
 
-    expect(result.output).toContain("azure: 'orgUrl' is not set. Reporting is disabled.");
+    expect(result.output).toContain("azure:pw:warn 'orgUrl' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -85,7 +85,7 @@ test.describe('Reporter constructor', () => {
       },
       { reporter: '' }
     );
-    expect(result.output).toContain("azure: 'projectName' is not set. Reporting is disabled.");
+    expect(result.output).toContain("azure:pw:warn 'projectName' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -113,7 +113,7 @@ test.describe('Reporter constructor', () => {
       },
       { reporter: '' }
     );
-    expect(result.output).toContain("azure: 'planId' is not set. Reporting is disabled.");
+    expect(result.output).toContain("azure:pw:warn 'planId' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -142,7 +142,7 @@ test.describe('Reporter constructor', () => {
       },
       { reporter: '' }
     );
-    expect(result.output).toContain("azure: 'token' is not set. Reporting is disabled.");
+    expect(result.output).toContain("azure:pw:warn 'token' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -170,8 +170,12 @@ test.describe('Reporter constructor', () => {
         });
       `,
       },
-      { reporter: '' }
+      { reporter: '' },
+      {
+        AZUREPWDEBUG: '1',
+      }
     );
+    expect(result.output).toContain('"token": "*****"');
     expect(result.output).toContain('Failed to create test run. Check your orgUrl. Reporting is disabled.');
     expect(result.failed).toBe(1);
   });
@@ -207,7 +211,9 @@ test.describe('Reporter constructor', () => {
       },
       { reporter: '' }
     );
-    expect(result.output).toContain('azure: Failed to create test run. Check your token. Reporting is disabled.');
+    expect(result.output).toContain(
+      'azure:pw:error Failed to create test run. Check your token. Reporting is disabled.'
+    );
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -271,10 +277,9 @@ test.describe('Reporter constructor', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toContain('azure: Project SampleSample does not exist. Reporting is disabled.');
-    expect(result.output).toContain('azure: Failed to create test run. Reporting is disabled.');
-    expect(result.output).not.toContain('azure: Using run');
-    expect(result.output).not.toContain('azure: Start publishing:');
+    expect(result.output).toContain('azure:pw:error Project SampleSample does not exist. Reporting is disabled.');
+    expect(result.output).not.toContain('azure:pw:log Using run');
+    expect(result.output).not.toContain('azure:pw:log Start publishing:');
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -327,7 +332,7 @@ test.describe('Reporter constructor', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).not.toContain('azure:');
+    expect(result.output).not.toContain('azure:pw');
     expect(result.exitCode).toBe(0);
     expect(result.passed).toBe(1);
   });
