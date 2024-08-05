@@ -30,12 +30,20 @@ class Logger {
       if (['warn', 'error'].includes(level) || this.namespace === 'azure:pw:*') {
         enabled = debug.enabled(`${this.rootNamespace}:${level}`);
         debug.enable(`${this.rootNamespace}:${level}`);
-        debug(this.rootNamespace).extend(level)(colorFunc(message));
+        const log = debug(this.rootNamespace).extend(level);
+        log.log = console.log.bind(console);
+        log(colorFunc(message));
+        if (!enabled) {
+          debug.disable();
+        }
       } else {
-        debug(this.rootNamespace).extend(level)(colorFunc(message));
+        const log = debug(this.rootNamespace).extend(level);
+        log.log = console.log.bind(console);
+        log(colorFunc(message));
       }
-      if (!enabled) {
-        debug.disable();
+
+      if (this.isLogging && !this.isDisabled()) {
+        debug.enable(this.namespace);
       }
     }
   }
