@@ -135,14 +135,14 @@ test.describe('Publish results - testResult', () => {
       { reporter: '' }
     );
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: [33] foobar - failed');
-    expect(result.output).toContain('azure: Start publishing: [33] foobar');
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log [33] foobar - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [33] foobar');
     expect(result.output).toContain('No test points found for test case [33] associated with test plan 4');
     expect(result.output).toContain(
       'Check, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.'
     );
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -219,11 +219,11 @@ test.describe('Publish results - testResult', () => {
       { reporter: '' }
     );
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: [3] foobar - failed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -299,7 +299,7 @@ test.describe('Publish results - testResult', () => {
       { reporter: '' }
     );
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).not.toMatch(/azure: (.*)/);
+    expect(result.output).not.toMatch(/azure:(.*)/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -376,11 +376,11 @@ test.describe('Publish results - testResult', () => {
       { reporter: '' }
     );
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: foobar - failed');
-    expect(result.output).not.toContain('azure: Start publishing: foobar');
-    expect(result.output).not.toContain('azure: Result published: foobar');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log foobar - failed');
+    expect(result.output).not.toContain('azure:pw:log Start publishing: foobar');
+    expect(result.output).not.toContain('azure:pw:log Result published: foobar');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -460,16 +460,16 @@ test.describe('Publish results - testResult', () => {
       { reporter: '' }
     );
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: [3] foobar - failed');
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - failed');
     expect(result.output).toContain(
       'No test points found for test case [3] associated with test plan 44 for configurations [1, 2, 3]'
     );
     expect(result.output).toContain(
       'Check, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.'
     );
-    expect(result.output).not.toContain('azure: Result published: [3] foobar');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).not.toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -575,16 +575,16 @@ test.describe('Publish results - testResult', () => {
     expect(result.output).toContain(
       "'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default."
     );
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: [3] foobar - passed');
-    expect(result.output).toContain('azure: [7] with screenshot - failed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Start publishing: [7] with screenshot');
-    expect(result.output).toContain('azure: Uploading attachments for test: [7] with screenshot');
-    expect(result.output).toContain('azure: Uploaded attachment');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).toContain('azure: Result published: [7] with screenshot');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - passed');
+    expect(result.output).toContain('azure:pw:log [7] with screenshot - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Start publishing: [7] with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploading attachments for test: [7] with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploaded attachment');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Result published: [7] with screenshot');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.passed).toBe(1);
     expect(result.failed).toBe(1);
@@ -687,18 +687,18 @@ test.describe('Publish results - testResult', () => {
 
     expect(result.output).not.toContain('Failed request: (401)');
     expect(result.output).not.toContain(
-      "azure: 'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default."
+      "'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default."
     );
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: [3] foobar - passed');
-    expect(result.output).toContain('azure: [7] with screenshot - failed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Start publishing: [7] with screenshot');
-    expect(result.output).toContain('azure: Uploading attachments for test: [7] with screenshot');
-    expect(result.output).toContain('azure: Uploaded attachment');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).toContain('azure: Result published: [7] with screenshot');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - passed');
+    expect(result.output).toContain('azure:pw:log [7] with screenshot - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Start publishing: [7] with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploading attachments for test: [7] with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploaded attachment');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Result published: [7] with screenshot');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.passed).toBe(1);
     expect(result.failed).toBe(1);
@@ -797,13 +797,13 @@ test.describe('Publish results - testResult', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: [3] foobar - passed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Uploading attachments for test: [3] foobar');
-    expect(result.output).toContain('azure: Uploaded attachment');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - passed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Uploading attachments for test: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Uploaded attachment');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(0);
     expect(result.passed).toBe(1);
   });
@@ -885,12 +885,12 @@ test.describe('Publish results - testResult', () => {
       { reporter: '' }
     );
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
-    expect(result.output).toContain('azure: [3] foobar - failed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.output).not.toContain('Error in reporter');
     expect(result.output).not.toContain('expect(received).toBeDefined()');
     expect(result.output).not.toContain('Expected: "150"\nReceived: undefined');
@@ -1000,16 +1000,16 @@ test.describe('Publish results - testResult', () => {
     expect(result.output).toContain(
       "'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default."
     );
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: foobar - passed');
-    expect(result.output).toContain('azure: with screenshot - failed');
-    expect(result.output).toContain('azure: Start publishing: foobar');
-    expect(result.output).toContain('azure: Start publishing: with screenshot');
-    expect(result.output).toContain('azure: Uploading attachments for test: with screenshot');
-    expect(result.output).toContain('azure: Uploaded attachment');
-    expect(result.output).toContain('azure: Result published: foobar');
-    expect(result.output).toContain('azure: Result published: with screenshot');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log foobar - passed');
+    expect(result.output).toContain('azure:pw:log with screenshot - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: foobar');
+    expect(result.output).toContain('azure:pw:log Start publishing: with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploading attachments for test: with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploaded attachment');
+    expect(result.output).toContain('azure:pw:log Result published: foobar');
+    expect(result.output).toContain('azure:pw:log Result published: with screenshot');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.passed).toBe(1);
     expect(result.failed).toBe(1);
@@ -1117,16 +1117,16 @@ test.describe('Publish results - testResult', () => {
     expect(result.output).toContain(
       "'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default."
     );
-    expect(result.output).toMatch(/azure: Using run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: [3] foobar - passed');
-    expect(result.output).toContain('azure: [7] with screenshot - failed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Start publishing: [7] with screenshot');
-    expect(result.output).toContain('azure: Uploading attachments for test: [7] with screenshot');
-    expect(result.output).toContain('azure: Uploaded attachment');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).toContain('azure: Result published: [7] with screenshot');
-    expect(result.output).toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - passed');
+    expect(result.output).toContain('azure:pw:log [7] with screenshot - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Start publishing: [7] with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploading attachments for test: [7] with screenshot');
+    expect(result.output).toContain('azure:pw:log Uploaded attachment');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Result published: [7] with screenshot');
+    expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.passed).toBe(1);
     expect(result.failed).toBe(1);

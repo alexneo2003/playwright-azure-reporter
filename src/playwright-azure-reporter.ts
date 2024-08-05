@@ -342,6 +342,8 @@ class AzureDevOpsReporter implements Reporter {
           await new Promise((resolve) => setTimeout(resolve, 250));
         }
       } else {
+        this._logger = new Logger(true);
+
         if (this._testResultsToBePublished.length === 0) {
           this._logger?.log('No test results to publish');
           return;
