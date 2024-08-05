@@ -9,6 +9,7 @@ import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces';
 import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces';
 import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
 import * as Test from 'azure-devops-node-api/TestApi';
+import { setVariable } from 'azure-pipelines-task-lib';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
 
@@ -212,7 +213,7 @@ class AzureDevOpsReporter implements Reporter {
       return;
     }
     if (this._testRunId) {
-      process.env.AZURE_PW_TEST_RUN_ID = String(this._testRunId);
+      this._setAzurePWTestRunId(this._testRunId);
     }
     if (options?.uploadAttachments) {
       if (!options?.attachmentsType) {
@@ -272,7 +273,7 @@ class AzureDevOpsReporter implements Reporter {
         if (run?.id) {
           this._resolveRunId(run.id);
           this._log(chalk.green(`Using run ${run.id} to publish test results`));
-          process.env.AZURE_PW_TEST_RUN_ID = String(run.id);
+          this._setAzurePWTestRunId(run.id);
           this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
         } else {
           this._isDisabled = true;
@@ -356,7 +357,7 @@ class AzureDevOpsReporter implements Reporter {
           if (runId) {
             this._resolveRunId(runId);
             this._log(chalk.green(`Using run ${runId} to publish test results`));
-            process.env.AZURE_PW_TEST_RUN_ID = String(runId);
+            this._setAzurePWTestRunId(runId);
             this._log(chalk.green(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`));
             await this._publishTestResults(runId, this._testResultsToBePublished);
           } else {
@@ -838,6 +839,11 @@ class AzureDevOpsReporter implements Reporter {
       this._warning(chalk.red(error.message));
       this._rejectPublishResults(error);
     }
+  }
+
+  private _setAzurePWTestRunId(runId: number): void {
+    process.env.AZURE_PW_TEST_RUN_ID = String(runId);
+    setVariable('AZURE_PW_TEST_RUN_ID', String(runId), false, true);
   }
 }
 
