@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: '>=18'
       - name: Install dependencies
-        run: yarn
+        run: yarn --ignore-engines
       - name: Install Playwright
         run: npx playwright install chromium
       - name: Build project
