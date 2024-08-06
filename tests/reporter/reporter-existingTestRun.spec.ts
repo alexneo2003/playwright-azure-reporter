@@ -121,16 +121,16 @@ test.describe('testRun - Publish results - isExistingTestRun', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).not.toMatch(/azure: Using existing run (\d.*) to publish test results/);
-    expect(result.output).not.toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).not.toMatch(/azure:pw:log Using existing run (\d.*) to publish test results/);
+    expect(result.output).not.toContain('azure:pw:log AZURE_PW_TEST_RUN_ID: 150');
     expect(result.output).toContain(
-      "azure: 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
+      "azure:pw:warn 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
     );
-    expect(result.output).not.toContain('azure: [3] foobar - failed');
-    expect(result.output).not.toContain('azure: Start publishing test results for 1 test(s)');
-    expect(result.output).not.toContain('azure: Left to publish: 0');
-    expect(result.output).not.toContain('azure: Test results published for 1 test(s)');
-    expect(result.output).not.toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).not.toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).not.toContain('azure:pw:log Start publishing test results for 1 test(s)');
+    expect(result.output).not.toContain('azure:pw:log Left to publish: 0');
+    expect(result.output).not.toContain('azure:pw:log Test results published for 1 test(s)');
+    expect(result.output).not.toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -211,16 +211,16 @@ test.describe('testRun - Publish results - isExistingTestRun', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using existing run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).toMatch(/azure:pw:log Using existing run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log AZURE_PW_TEST_RUN_ID: 150');
     expect(result.output).not.toContain(
-      "azure: 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
+      "azure:pw:warn 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
     );
-    expect(result.output).toContain('azure: [3] foobar - failed');
-    expect(result.output).toContain('azure: Start publishing test results for 1 test(s)');
-    expect(result.output).toContain('azure: Left to publish: 0');
-    expect(result.output).toContain('azure: Test results published for 1 test(s)');
-    expect(result.output).not.toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing test results for 1 test(s)');
+    expect(result.output).toContain('azure:pw:log Left to publish: 0');
+    expect(result.output).toContain('azure:pw:log Test results published for 1 test(s)');
+    expect(result.output).not.toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -301,16 +301,16 @@ test.describe('testRun - Publish results - isExistingTestRun', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using existing run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).toMatch(/azure:pw:log Using existing run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log AZURE_PW_TEST_RUN_ID: 150');
     expect(result.output).not.toContain(
-      "azure: 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
+      "azure:pw:warn 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
     );
-    expect(result.output).toContain('azure: [3] foobar - failed');
-    expect(result.output).toContain('azure: Start publishing test results for 1 test(s)');
-    expect(result.output).toContain('azure: Left to publish: 0');
-    expect(result.output).toContain('azure: Test results published for 1 test(s)');
-    expect(result.output).not.toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing test results for 1 test(s)');
+    expect(result.output).toContain('azure:pw:log Left to publish: 0');
+    expect(result.output).toContain('azure:pw:log Test results published for 1 test(s)');
+    expect(result.output).not.toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -392,16 +392,16 @@ test.describe('testResult - Publish results - isExistingTestRun', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).not.toMatch(/azure: Using existing run (\d.*) to publish test results/);
-    expect(result.output).not.toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).not.toMatch(/azure:pw:log Using existing run (\d.*) to publish test results/);
+    expect(result.output).not.toContain('azure:pw:log AZURE_PW_TEST_RUN_ID: 150');
     expect(result.output).toContain(
-      "azure: 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
+      "azure:pw:warn 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
     );
-    expect(result.output).not.toContain('azure: [3] foobar - failed');
-    expect(result.output).not.toContain('azure: Start publishing test results for 1 test(s)');
-    expect(result.output).not.toContain('azure: Left to publish: 0');
-    expect(result.output).not.toContain('azure: Test results published for 1 test(s)');
-    expect(result.output).not.toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).not.toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).not.toContain('azure:pw:log Start publishing test results for 1 test(s)');
+    expect(result.output).not.toContain('azure:pw:log Left to publish: 0');
+    expect(result.output).not.toContain('azure:pw:log Test results published for 1 test(s)');
+    expect(result.output).not.toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -482,15 +482,15 @@ test.describe('testResult - Publish results - isExistingTestRun', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using existing run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).toMatch(/azure:pw:log Using existing run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log AZURE_PW_TEST_RUN_ID: 150');
     expect(result.output).not.toContain(
-      "azure: 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
+      "azure:pw:warn 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
     );
-    expect(result.output).toContain('azure: [3] foobar - failed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).not.toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).not.toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -571,15 +571,15 @@ test.describe('testResult - Publish results - isExistingTestRun', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure: Using existing run (\d.*) to publish test results/);
-    expect(result.output).toContain('azure: AZURE_PW_TEST_RUN_ID: 150');
+    expect(result.output).toMatch(/azure:pw:log Using existing run (\d.*) to publish test results/);
+    expect(result.output).toContain('azure:pw:log AZURE_PW_TEST_RUN_ID: 150');
     expect(result.output).not.toContain(
-      "azure: 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
+      "azure:pw:warn 'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
     );
-    expect(result.output).toContain('azure: [3] foobar - failed');
-    expect(result.output).toContain('azure: Start publishing: [3] foobar');
-    expect(result.output).toContain('azure: Result published: [3] foobar');
-    expect(result.output).not.toMatch(/azure: Run (\d.*) - Completed/);
+    expect(result.output).toContain('azure:pw:log [3] foobar - failed');
+    expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
+    expect(result.output).toContain('azure:pw:log Result published: [3] foobar');
+    expect(result.output).not.toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });

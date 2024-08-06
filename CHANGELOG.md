@@ -1,3 +1,21 @@
+# [1.10.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.10.0-beta.0...v1.10.0) (2024-08-06)
+
+
+### Features
+
+* rework logger and reporter ([1186113](https://github.com/alexneo2003/playwright-azure-reporter/commit/118611375dac554c6671fd19b6a3d036e7052ad5))
+
+
+
+# [1.10.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.9.1...v1.10.0-beta.0) (2024-08-05)
+
+
+### Features
+
+* AZURE_PW_TEST_RUN_ID as Task variable ([8c7693a](https://github.com/alexneo2003/playwright-azure-reporter/commit/8c7693a510bf93ac2cb10c801a7d3b71295af420))
+
+
+
 ## [1.9.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.9.0...v1.9.1) (2024-06-04)
 
 
