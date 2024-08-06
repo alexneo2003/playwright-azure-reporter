@@ -28,7 +28,7 @@ test.describe('Reporter build', () => {
       { reporter: '' }
     );
 
-    expect(result.output).toContain("azure: 'orgUrl' is not set. Reporting is disabled.");
+    expect(result.output).toContain("azure:pw:warn 'orgUrl' is not set. Reporting is disabled.");
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
