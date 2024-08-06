@@ -21,7 +21,7 @@ jobs:
           # Defaults to the user or organization that owns the workflow file
           scope: '@alex_neo'
       - name: Install dependencies
-        run: yarn
+        run: yarn --ignore-engines
       - name: Build
         run: yarn build
       - name: Publish
