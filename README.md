@@ -210,4 +210,18 @@ Reporter options (\* - required):
 ## Usefulness
 
 - **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution.
+
   > **Since version 1.10.0 you have access to `AZURE_PW_TEST_RUN_ID` environment variable in your ADO pipeline. You can get it from the Task Variables.**
+
+  Example of usage in Azure DevOps pipeline:
+
+  ```yaml
+  - script: npx playwright test
+    displayName: 'Run Playwright tests'
+    name: 'playwright'
+    env:
+      CI: 'true'
+
+  - script: echo $(playwright.AZURE_PW_TEST_RUN_ID)
+    displayName: 'Print test run id'
+  ```
