@@ -4,3 +4,4 @@ playwright-report/
 dist
 yarn-error.log
 .vscode
+.taskkey
