@@ -1,3 +1,12 @@
+## [1.10.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.10.0...v1.10.1) (2024-08-09)
+
+
+### Bug Fixes
+
+* Cannot read properties of undefined (reading 'replace') ([8a5115d](https://github.com/alexneo2003/playwright-azure-reporter/commit/8a5115d8fcc8e6be5b4ee476261eff2b8706e4a1))
+
+
+
 # [1.10.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.10.0-beta.0...v1.10.0) (2024-08-06)
 
 
