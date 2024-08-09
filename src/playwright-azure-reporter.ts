@@ -388,7 +388,10 @@ class AzureDevOpsReporter implements Reporter {
     return true;
   }
 
-  private _anonymizeString(str: string): string {
+  private _anonymizeString(str: string | undefined): string {
+    if (typeof str !== 'string') {
+      return '';
+    }
     return str.replace(/./g, '*');
   }
 
