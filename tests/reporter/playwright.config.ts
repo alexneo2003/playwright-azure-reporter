@@ -1,4 +1,9 @@
 import { defineConfig } from '@playwright/test';
+import dotenv from 'dotenv';
+
+dotenv.config({
+  path: require.resolve('../../.env'),
+});
 
 export default defineConfig({
   testDir: __dirname,
