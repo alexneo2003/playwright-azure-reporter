@@ -136,6 +136,7 @@ const config: PlaywrightTestConfig = {
         publishTestResultsMode: 'testRun',
         uploadAttachments: true,
         attachmentsType: ['screenshot', 'video', 'trace'],
+        testCaseIdMatcher: /@\[(\d+)\]/,
         testRunConfig: {
           owner: {
             displayName: 'Alex Neo',
@@ -209,6 +210,48 @@ Reporter options (\* - required):
   > **Note:** If you set existing test run ID from reporter options and from environment variable - reporter options will be used
 
   > **Note:** If you use `isExistingTestRun` mode, test run doesn't complete automatically. You should complete it manually.
+
+- `testCaseIdMatcher` [string|RegExp|string[]|RegExp[]] - A string or a regular expression to match the name of the test case to extract the test case id. Default: `/\[([\d,\s]+)\]/`
+
+  #### Example Test Titles
+
+  - Test title: `Test case @tag1=123`
+
+    - `testCaseIdMatcher: /@tag1=(\d+)/`
+    - Extracted tags: `['123']`
+
+  - Test title: `Test case @TestCase=123 [@TestCase=456]`
+
+    - `testCaseIdMatcher: /@TestCase=(\d+)/`
+    - Extracted tags: `['123', '456']`
+
+  - Test title: `Test case test123 TEST456`
+    - `testCaseIdMatcher: [/[a-z]+(\d+)/, /[A-Z]+(\d+)/]`
+    - Extracted tags: `['123', '456']`
+  - Test title: `Test case @tag1=123 @tag2=456`
+    - `testCaseIdMatcher: ['@tag1=(\\d+)', '@tag2=(\\d+)']`
+    - Extracted tags: `['123', '456']`
+
+  #### Error Handling
+
+  If an invalid `testCaseIdMatcher` is provided, an error will be thrown. For example:
+
+  ```typescript
+   reporter: [
+    ['list'],
+    [
+      '@alex_neo/playwright-azure-reporter',
+      {
+        orgUrl: 'http://localhost:4000',
+        projectName: 'SampleProject',
+        planId: 4,
+        token: 'your-token',
+        isDisabled: false,
+        testCaseIdMatcher: 1234, // Invalid pattern
+      }
+    ],
+  // This will throw an error: "Invalid testCaseIdMatcher. Must be a string or RegExp. Actual: 1234"
+  ```
 
 ## Usefulness
 

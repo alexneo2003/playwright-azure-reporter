@@ -1,4 +1,15 @@
 import { defineConfig } from '@playwright/test';
+import dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const envPath = path.resolve(__dirname, '../../.env');
+
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  console.warn(`.env file not found at ${envPath}, skipping dotenv configuration.`);
+}
 
 export default defineConfig({
   testDir: __dirname,

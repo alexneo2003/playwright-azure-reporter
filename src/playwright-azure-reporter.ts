@@ -12,6 +12,7 @@ import * as Test from 'azure-devops-node-api/TestApi';
 import { setVariable } from 'azure-pipelines-task-lib';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
+import { isRegExp } from 'util/types';
 
 import Logger from './logger';
 import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID } from './utils';
@@ -55,6 +56,7 @@ export interface AzureReporterOptions {
   testPointMapper?: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
   isExistingTestRun?: boolean;
   testRunId?: number;
+  testCaseIdMatcher?: string | RegExp | Array<string | RegExp>;
 }
 
 interface TestResultsToTestRun {
@@ -142,6 +144,7 @@ class AzureDevOpsReporter implements Reporter {
   private _publishTestResultsMode: TPublishTestResults = 'testResult';
   private _testRunId: number | undefined;
   private _isExistingTestRun = false;
+  private _testCaseIdMatcher: string | RegExp | Array<string | RegExp> = new RegExp(/\[([\d,\s]+)\]/, 'g');
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -259,6 +262,7 @@ class AzureDevOpsReporter implements Reporter {
       this._testPointMapper = options.testPointMapper;
     }
     this._isExistingTestRun = options.isExistingTestRun || false;
+    this._testCaseIdMatcher = options.testCaseIdMatcher || new RegExp(/\[([\d,\s]+)\]/, 'g');
   }
 
   async onBegin(): Promise<void> {
@@ -396,10 +400,9 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   private _anonymizeObject(obj: any, keys: string[]): any {
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) {
-      return obj.map((item) => this._anonymizeObject(item, keys));
-    }
+    if (typeof obj !== 'object' || obj === null) return obj;
+    if (Array.isArray(obj)) return obj.map((item) => this._anonymizeObject(item, keys));
+    if (isRegExp(obj)) return obj.toString();
     const result: any = {};
     for (const key in obj) {
       if (keys.includes(key)) {
@@ -412,14 +415,39 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   private _extractMatches(text: string): string[] {
-    const regex = new RegExp(/\[([\d,\s]+)\]/, 'gm');
-    const matchesAll = text.matchAll(regex);
-    return [...matchesAll].map((match) => match[1]);
+    const reList = (Array.isArray(this._testCaseIdMatcher) ? this._testCaseIdMatcher : [this._testCaseIdMatcher]).map(
+      (re) => {
+        if (typeof re === 'string') {
+          return new RegExp(re, 'g');
+        } else if (!isRegExp(re)) {
+          throw new Error(`Invalid testCaseIdMatcher. Must be a string or RegExp. Actual: ${re}`);
+        }
+        return re;
+      }
+    );
+
+    this._logger?.debug(`Extracting matches from text: ${text}`);
+    this._logger?.debug(`Using matchers: ${reList}`);
+
+    const matchesResult: string[] = [];
+    for (const re of reList) {
+      this._logger?.debug(`Using matcher: ${re}`);
+      const matchesAll = text.matchAll(new RegExp(re, 'g'));
+      for (const match of matchesAll) {
+        this._logger?.debug(`[_extractMatches] Whole matches found: ${match}`);
+        if (match && match[1]) {
+          this._logger?.debug(`[_extractMatches] Matches found: ${match[1]}`);
+          matchesResult.push(match[1]);
+        }
+      }
+    }
+    return matchesResult;
   }
 
   private _getCaseIds(test: TestCase): string[] {
     const result: string[] = [];
     const matches = this._extractMatches(test.title);
+    this._logger?.debug(`[_getCaseIds] Matches found: ${matches}`);
     matches.forEach((match) => {
       const ids = match.split(',').map((id) => id.trim());
       result.push(...ids);
@@ -427,6 +455,7 @@ class AzureDevOpsReporter implements Reporter {
     if (test.tags) {
       test.tags.forEach((tag) => {
         const ids = this._extractMatches(tag);
+        this._logger?.debug(`[_getCaseIds] Matches found in tag: ${ids}`);
         ids.forEach((id) => {
           result.push(id);
         });
