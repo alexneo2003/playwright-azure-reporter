@@ -378,45 +378,45 @@ test.describe('Reporter constructor', () => {
   });
 });
 
-let tagsMatchers: {
-  tagsMatcher?: RegExp | RegExp[] | string | string[] | undefined;
+let testCaseIdMatchers: {
+  testCaseIdMatcher?: RegExp | RegExp[] | string | string[] | undefined;
   testTitle: string;
   tagsSection?: string;
   expected: string[];
 }[] = [
   {
-    tagsMatcher: /@tag1=(\d+)/,
+    testCaseIdMatcher: /@tag1=(\d+)/,
     testTitle: 'Test case @tag1=123',
     tagsSection: "['@tag1=7']",
     expected: ['123'],
   },
   {
-    tagsMatcher: /@TestCase=(\d+)/,
+    testCaseIdMatcher: /@TestCase=(\d+)/,
     testTitle: 'Test case @TestCase=123 [@TestCase=456]',
     tagsSection: "['@TestCase=7', '@TestCase=7']",
     expected: ['123', '456'],
   },
   {
-    tagsMatcher: [/[a-z]+(\d+)/, /[A-Z]+(\d+)/],
+    testCaseIdMatcher: [/[a-z]+(\d+)/, /[A-Z]+(\d+)/],
     testTitle: 'Test case test123 TEST456',
     tagsSection: "['@test7', '@TEST7']",
     expected: ['123', '456'],
   },
   {
-    tagsMatcher: ['@tag1=(\\d+)', '@tag2=(\\d+)'],
+    testCaseIdMatcher: ['@tag1=(\\d+)', '@tag2=(\\d+)'],
     testTitle: 'Test case @tag1=123 @tag2=456',
     tagsSection: "['@tag1=7', '@tag2=7']",
     expected: ['123', '456'],
   },
   {
-    tagsMatcher: undefined,
+    testCaseIdMatcher: undefined,
     testTitle: 'Test case [12345]',
     tagsSection: "['@[7]']",
     expected: ['12345'],
   },
 ];
 
-tagsMatchers.forEach((item) => {
+testCaseIdMatchers.forEach((item) => {
   test(`_extractMatches should return ${item.expected} for ${item.testTitle}`, () => {
     const reporter = new AzureDevOpsReporter({
       orgUrl: 'http://localhost:4000',
@@ -424,7 +424,7 @@ tagsMatchers.forEach((item) => {
       planId: 4,
       token: 'token',
       isDisabled: false,
-      tagsMatcher: item.tagsMatcher,
+      testCaseIdMatcher: item.testCaseIdMatcher,
     });
 
     const matches = (reporter as any)._extractMatches(item.testTitle);
@@ -507,13 +507,13 @@ tagsMatchers.forEach((item) => {
               uploadAttachments: true,
               logging: true,
               ${
-                item.tagsMatcher
-                  ? `tagsMatcher: ${
-                      Array.isArray(item.tagsMatcher)
-                        ? `[${item.tagsMatcher
+                item.testCaseIdMatcher
+                  ? `testCaseIdMatcher: ${
+                      Array.isArray(item.testCaseIdMatcher)
+                        ? `[${item.testCaseIdMatcher
                             .map((tag) => `${isRegExp(tag) ? tag.toString() : `'${tag.replace(/\\/g, '\\\\')}'`}`)
                             .join(',')}]`
-                        : `[${item.tagsMatcher}]`
+                        : `[${item.testCaseIdMatcher}]`
                     }`
                   : ''
               } 
@@ -524,7 +524,7 @@ tagsMatchers.forEach((item) => {
         'a.spec.js': `
         import { test, expect } from '@playwright/test';
         test('[7] with screenshot', ${
-          item.tagsMatcher !== undefined ? `{ tag: ${item.tagsSection} }, ` : ''
+          item.testCaseIdMatcher !== undefined ? `{ tag: ${item.tagsSection} }, ` : ''
         } async ({ page }) => {
           await page.goto('https://playwright.dev/')
           await page.locator('text=Get started').click()
@@ -551,17 +551,17 @@ tagsMatchers.forEach((item) => {
   });
 });
 
-tagsMatchers = [
+testCaseIdMatchers = [
   {
     //@ts-ignore
-    tagsMatcher: [3432, 3944],
+    testCaseIdMatcher: [3432, 3944],
     testTitle: 'Test case [12345]',
     expected: ['12345'],
   },
 ];
 
-tagsMatchers.forEach((tagsMatcher) => {
-  test(`Test should throw an error for invalid tagsMatcher: ${tagsMatcher.tagsMatcher}`, () => {
+testCaseIdMatchers.forEach((testCaseIdMatcher) => {
+  test(`Test should throw an error for invalid testCaseIdMatcher: ${testCaseIdMatcher.testCaseIdMatcher}`, () => {
     try {
       new AzureDevOpsReporter({
         orgUrl: 'http://localhost:4000',
@@ -569,10 +569,10 @@ tagsMatchers.forEach((tagsMatcher) => {
         planId: 4,
         token: 'token',
         isDisabled: false,
-        tagsMatcher: tagsMatcher.tagsMatcher,
+        testCaseIdMatcher: testCaseIdMatcher.testCaseIdMatcher,
       });
     } catch (error) {
-      expect(error.message).toContain('Invalid tagsMatcher. Must be a string or RegExp. Actual: 3432');
+      expect(error.message).toContain('Invalid testCaseIdMatcher. Must be a string or RegExp. Actual: 3432');
     }
   });
 });

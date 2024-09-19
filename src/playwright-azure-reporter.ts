@@ -56,7 +56,7 @@ export interface AzureReporterOptions {
   testPointMapper?: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
   isExistingTestRun?: boolean;
   testRunId?: number;
-  tagsMatcher?: string | RegExp | Array<string | RegExp>;
+  testCaseIdMatcher?: string | RegExp | Array<string | RegExp>;
 }
 
 interface TestResultsToTestRun {
@@ -144,7 +144,7 @@ class AzureDevOpsReporter implements Reporter {
   private _publishTestResultsMode: TPublishTestResults = 'testResult';
   private _testRunId: number | undefined;
   private _isExistingTestRun = false;
-  private _tagsMatcher: string | RegExp | Array<string | RegExp> = new RegExp(/\[([\d,\s]+)\]/, 'g');
+  private _testCaseIdMatcher: string | RegExp | Array<string | RegExp> = new RegExp(/\[([\d,\s]+)\]/, 'g');
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -262,7 +262,7 @@ class AzureDevOpsReporter implements Reporter {
       this._testPointMapper = options.testPointMapper;
     }
     this._isExistingTestRun = options.isExistingTestRun || false;
-    this._tagsMatcher = options.tagsMatcher || new RegExp(/\[([\d,\s]+)\]/, 'g');
+    this._testCaseIdMatcher = options.testCaseIdMatcher || new RegExp(/\[([\d,\s]+)\]/, 'g');
   }
 
   async onBegin(): Promise<void> {
@@ -415,14 +415,16 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   private _extractMatches(text: string): string[] {
-    const reList = (Array.isArray(this._tagsMatcher) ? this._tagsMatcher : [this._tagsMatcher]).map((re) => {
-      if (typeof re === 'string') {
-        return new RegExp(re, 'g');
-      } else if (!isRegExp(re)) {
-        throw new Error(`Invalid tagsMatcher. Must be a string or RegExp. Actual: ${re}`);
+    const reList = (Array.isArray(this._testCaseIdMatcher) ? this._testCaseIdMatcher : [this._testCaseIdMatcher]).map(
+      (re) => {
+        if (typeof re === 'string') {
+          return new RegExp(re, 'g');
+        } else if (!isRegExp(re)) {
+          throw new Error(`Invalid testCaseIdMatcher. Must be a string or RegExp. Actual: ${re}`);
+        }
+        return re;
       }
-      return re;
-    });
+    );
 
     this._logger?.debug(`Extracting matches from text: ${text}`);
     this._logger?.debug(`Using matchers: ${reList}`);
