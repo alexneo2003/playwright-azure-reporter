@@ -253,6 +253,27 @@ Reporter options (\* - required):
   // This will throw an error: "Invalid testCaseIdMatcher. Must be a string or RegExp. Actual: 1234"
   ```
 
+- `testCaseIdZone` [string] - Specifies where to look for the test case IDs. It can be either `'title'` or `'annotation'`. When set to `'title'`, the reporter will extract test case IDs from the test title and tag test section also. When set to `'annotation'`, it will extract test case IDs only from the test annotations. Default: `'title'`.
+
+  **Pay attention that if you use `testCaseIdZone: 'annotation'` and `testCaseIdMatcher` is not defined, the reporter will not extract test case IDs from the test annotations. You should define `testCaseIdMatcher` to extract test case IDs from the test annotations. Matcher should match the annotation type not the annotation description!**
+
+  #### Example Usage
+
+  - Test title: `Test case [12345]`
+
+    - `testCaseIdZone: 'title'`
+    - Extracted tags: `['12345']`
+
+  - Test annotations:
+    ```typescript
+    test('Test case', { annotations: [{ type: 'TestCase', description: '12345' }] }, () => {
+      expect(true).toBe(true);
+    });
+    ```
+    - `testCaseIdZone: 'annotation'`
+    - `testCaseIdMatcher: /(TestCase)/`
+    - Extracted tags: `['12345']`]
+
 ## Usefulness
 
 - **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution.
@@ -270,4 +291,17 @@ Reporter options (\* - required):
 
   - script: echo $(playwright.AZURE_PW_TEST_RUN_ID)
     displayName: 'Print test run id'
+  ```
+
+- **AZUREPWDEBUG** - Enable debug logging from reporter `0` - disabled, `1` - enabled. Default: `0`.
+
+  Example of usage in Azure DevOps pipeline:
+
+  ```yaml
+  - script: npx playwright test
+    displayName: 'Run Playwright tests'
+    name: 'playwright'
+    env:
+      CI: 'true'
+      AZUREPWDEBUG: '1'
   ```
