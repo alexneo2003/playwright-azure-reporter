@@ -20,9 +20,16 @@
     "prepare": "husky install"
   },
   "nodemonConfig": {
-    "watch": ["src"],
+    "watch": [
+      "src"
+    ],
     "ext": "ts",
-    "ignore": ["**/test/**", "**/docs/**", "**/dist/**", "**/node_modules/**"],
+    "ignore": [
+      "**/test/**",
+      "**/docs/**",
+      "**/dist/**",
+      "**/node_modules/**"
+    ],
     "delay": 2500,
     "exec": "yarn run build"
   },
