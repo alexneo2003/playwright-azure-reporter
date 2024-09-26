@@ -1,6 +1,6 @@
 {
   "name": "@alex_neo/playwright-azure-reporter",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Playwright Azure Reporter",
   "main": "./dist/playwright-azure-reporter.js",
   "types": "./dist/playwright-azure-reporter.d.js",
@@ -14,10 +14,24 @@
     "clean": "rm -rf dist || true",
     "prepublishOnly": "tsc",
     "dev": "yarn run lint && tsc",
-    "dev:watch": "nodemon --watch './src/*' -e ts --exec \"yarn run build\"",
+    "dev:watch": "nodemon",
     "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md",
     "release": "conventional-github-releaser -p angular",
     "prepare": "husky install"
+  },
+  "nodemonConfig": {
+    "watch": [
+      "src"
+    ],
+    "ext": "ts",
+    "ignore": [
+      "**/test/**",
+      "**/docs/**",
+      "**/dist/**",
+      "**/node_modules/**"
+    ],
+    "delay": 2500,
+    "exec": "yarn run build"
   },
   "keywords": [
     "playwright",
