@@ -1,3 +1,12 @@
+# [1.12.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.11.0...v1.12.0) (2024-09-26)
+
+
+### Features
+
+* match test case IDs from test annotations ([ffb0d54](https://github.com/alexneo2003/playwright-azure-reporter/commit/ffb0d5484a436e96837992d55925876621790a11))
+
+
+
 # [1.12.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.11.0...v1.12.0-beta.0) (2024-09-22)
 
 
