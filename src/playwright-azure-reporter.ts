@@ -66,6 +66,7 @@ export interface AzureReporterOptions {
   testCaseIdMatcher?: string | RegExp | Array<string | RegExp>;
   testCaseIdZone?: TTestCaseIdZone;
   rootSuiteId?: number;
+  uploadLogs?: boolean;
 }
 
 interface TestResultsToTestRun {
@@ -167,6 +168,7 @@ class AzureDevOpsReporter implements Reporter {
   private _testCaseIdZone: TTestCaseIdZone = 'title';
   private _rootSuiteId: number | undefined;
   private _expectedTestPointsByRootSuite: Array<TestPlanInterfaces.TestPoint> = [];
+  private _uploadLogs = false;
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -299,6 +301,7 @@ class AzureDevOpsReporter implements Reporter {
       );
     }
     this._rootSuiteId = options.rootSuiteId || Number(process.env.AZURE_PW_ROOT_SUITE_ID) || undefined;
+    this._uploadLogs = options.uploadLogs || false;
   }
 
   async onBegin(): Promise<void> {
@@ -877,6 +880,23 @@ class AzureDevOpsReporter implements Reporter {
           if (!response?.id) throw new Error(`Failed to upload attachment for test: ${test.title}`);
           attachmentsResult.push(response.url);
         }
+
+        if (this._uploadLogs && ['stdout.txt', 'stderr.txt'].includes(attachment.name)) {
+          const attachmentRequestModel: TestInterfaces.TestAttachmentRequestModel = {
+            attachmentType: 'GeneralAttachment',
+            fileName: attachment.name,
+            stream: attachment.body!.toString('base64'),
+          };
+          if (!this._testApi) this._testApi = await this._connection.getTestApi();
+          const response = await this._testApi.createTestResultAttachment(
+            attachmentRequestModel,
+            this._projectName,
+            runId!,
+            testCaseResultId
+          );
+          if (!response?.id) throw new Error(`Failed to upload log attachment for test: ${test.title}`);
+          attachmentsResult.push(response.url);
+        }
       } catch (error: any) {
         this._logger?.error(error.message);
       }
@@ -966,6 +986,27 @@ class AzureDevOpsReporter implements Reporter {
       if (this._uploadAttachments && testResult.attachments.length > 0)
         await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
 
+      if (this._uploadLogs && testResult.stdout.length > 0) {
+        this._logger?.log(chalk.gray(`Uploading stdout.log for test: ${test.title}`));
+        const logAttachment = [
+          {
+            name: 'stdout.txt',
+            contentType: 'text/plain',
+            body: Buffer.from(testResult.stdout.join('')),
+          },
+          {
+            name: 'stderr.txt',
+            contentType: 'text/plain',
+            body: Buffer.from(testResult.stderr.join('')),
+          },
+        ];
+        await this._uploadAttachmentsFunc(
+          { ...testResult, attachments: logAttachment },
+          testCaseResult.result.value![0].id,
+          test
+        );
+      }
+
       this._removePublished(testCase.testAlias);
       this._publishedResultsCount.tests++;
       this._logger?.log(chalk.gray(`Result published: ${test.title}`));
@@ -984,6 +1025,9 @@ class AzureDevOpsReporter implements Reporter {
     const testsPacksArray = Array.from({ length: testsEndPack }, (_, i) =>
       testsResults.slice(i * testsPackSize, (i + 1) * testsPackSize)
     );
+
+    let testResultsQuery: TestInterfaces.TestResultsQuery;
+    let resultData: TestInterfaces.TestResultsQuery = { results: [] };
 
     this._logger?.log(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`));
 
@@ -1048,19 +1092,20 @@ class AzureDevOpsReporter implements Reporter {
           this._logger?.warn(`Not all test result for test cases [${testCaseIds.join(', ')}] are published`);
         }
 
-        if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
-          this._logger?.log(
-            chalk.gray(`Starting to uploading attachments for ${withAttachmentsByTestPoint.size} testpoint(s)`)
-          );
-
-          const testResultsQuery: TestInterfaces.TestResultsQuery = {
+        if ((this._uploadAttachments && withAttachmentsByTestPoint.size > 0) || this._uploadLogs) {
+          testResultsQuery = {
             fields: [''],
             results: testCaseResult.result.value?.map((r) => {
               return { id: r.id, testRun: { id: r.testRun?.id } };
             }),
           };
+          resultData = await this._testApi.getTestResultsByQuery(testResultsQuery, this._projectName);
+        }
 
-          const resultData = await this._testApi.getTestResultsByQuery(testResultsQuery, this._projectName);
+        if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
+          this._logger?.log(
+            chalk.gray(`Starting to uploading attachments for ${withAttachmentsByTestPoint.size} testpoint(s)`)
+          );
 
           for (const [key, value] of withAttachmentsByTestPoint.entries()) {
             const testResult = resultData.results?.find((result) => result.testPoint?.id === String(key.id));
@@ -1072,6 +1117,37 @@ class AzureDevOpsReporter implements Reporter {
 
             for (const withAttachments of value) {
               await this._uploadAttachmentsFunc(withAttachments.testResult, testResult.id!, withAttachments.testCase);
+            }
+          }
+        }
+
+        if (this._uploadLogs && testsPack.length > 0) {
+          this._logger?.log(chalk.gray(`Starting to uploading logs for ${testsPack.length} test(s)`));
+          for (const [testWithResult, testPoints] of testsPointsByTestCase.entries()) {
+            for (const testPoint of testPoints) {
+              const testResult = resultData.results?.find((result) => result.testPoint?.id === String(testPoint.id));
+              if (!testResult) {
+                this._logger?.warn(`Test result for test point [${testPoint.id}] is missing, logs are not uploaded!`);
+                continue;
+              }
+
+              const logAttachment = [
+                {
+                  name: 'stdout.txt',
+                  contentType: 'text/plain',
+                  body: Buffer.from(testWithResult.testResult.stdout.join('')),
+                },
+                {
+                  name: 'stderr.txt',
+                  contentType: 'text/plain',
+                  body: Buffer.from(testWithResult.testResult.stderr.join('')),
+                },
+              ];
+              await this._uploadAttachmentsFunc(
+                { ...testWithResult.testResult, attachments: logAttachment },
+                testResult.id!,
+                testWithResult.testCase
+              );
             }
           }
         }
