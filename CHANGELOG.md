@@ -1,3 +1,13 @@
+# [1.13.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.12.0...v1.13.0-beta.0) (2024-12-18)
+
+
+### Features
+
+* rootSuiteId config added ([7ff9dd3](https://github.com/alexneo2003/playwright-azure-reporter/commit/7ff9dd3130f86013d7d36cf85bbb5f3f6f71e1e5))
+* uploadLogs config option ([e76ce76](https://github.com/alexneo2003/playwright-azure-reporter/commit/e76ce76b263dd1fe52a5311804f090e13964d953))
+
+
+
 # [1.12.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.11.0...v1.12.0) (2024-09-26)
 
 
