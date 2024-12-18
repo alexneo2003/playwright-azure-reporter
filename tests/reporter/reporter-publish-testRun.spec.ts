@@ -959,7 +959,7 @@ test.describe('Publish results - testRun', () => {
       'azure:pw:log Uploading attachments for test: [100] foobar\nazure:pw:log Uploaded attachments\nazure:pw:log Left to publish: 25\nazure:pw:log Starting to uploading attachments for 2 testpoint(s)'
     );
     expect(result.output).toContain(
-      'azure:pw:log Left to publish: 0\nazure:pw:log Test results published for 125 test(s)\nazure:pw:log Run 150 - Completed'
+      'azure:pw:log Left to publish: 0\nazure:pw:log Test results published for 125 test(s), 125 test point(s)\nazure:pw:log Run 150 - Completed'
     );
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(12);

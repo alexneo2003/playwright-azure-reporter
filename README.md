@@ -136,7 +136,7 @@ const config: PlaywrightTestConfig = {
         publishTestResultsMode: 'testRun',
         uploadAttachments: true,
         attachmentsType: ['screenshot', 'video', 'trace'],
-        testCaseIdMatcher: /@\[(\d+)\]/,
+        testCaseIdMatcher: /@\[(\d+)\]/, // please use this pattern to extract test case id from test name, be careful with the pattern!!!
         testRunConfig: {
           owner: {
             displayName: 'Alex Neo',
@@ -273,6 +273,27 @@ Reporter options (\* - required):
     - `testCaseIdZone: 'annotation'`
     - `testCaseIdMatcher: /(TestCase)/`
     - Extracted tags: `['12345']`]
+
+- `rootSuiteId` [number] - The ID of the root test suite under which the test results will be published. This can be useful when you have some test suites for different test packages, like `smoke`, `integration`, `e2e`, etc., with the same test cases. In this case, you can specify the root suite ID to publish test results under the root suite. Also can be defined by the `AZURE_PW_ROOT_SUITE_ID` environment variable. Default: `undefined`.
+
+  > **Note:** If you set root suite ID from reporter options and from environment variable - reporter options will be used
+
+  > **Example:**
+  > Let's say you have the following test suites/cases structure
+  >
+  > ```
+  > Automation Tests
+  >   - Smoke Tests (suiteId: 5)
+  >     - Test 1 (caseId: 1)
+  >     - Test 2 (caseId: 2)
+  >   - Integration Tests (suiteId: 6)
+  >     - Test 1 (caseId: 1)
+  >     - Test 2 (caseId: 2)
+  >     - Test 3 (caseId: 3)
+  >     - Test 4 (caseId: 4)
+  > ```
+  >
+  > And when you run tests with the `Smoke Tests` project without specifying the `rootSuiteId`, the test results will be published under the root suite `Automation Tests` for test cases in the `Smoke Tests` suite and `Integration Tests` suite. It will look like you have redundant results inside the test run for the same test cases in different suites. To avoid this, you can specify the `rootSuiteId: 5` to publish test results only under the `Smoke Tests` suite.
 
 ## Usefulness
 

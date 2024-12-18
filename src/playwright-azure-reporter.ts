@@ -5,13 +5,16 @@ import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
 import { IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
+import VSSInterfaces from 'azure-devops-node-api/interfaces/common/VSSInterfaces';
 import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces';
 import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces';
-import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
+import * as TestPlanInterfaces from 'azure-devops-node-api/interfaces/TestPlanInterfaces';
 import * as Test from 'azure-devops-node-api/TestApi';
+import * as TestPlanApi from 'azure-devops-node-api/TestPlanApi';
 import { setVariable } from 'azure-pipelines-task-lib';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
+import * as restm from 'typed-rest-client/RestClient';
 import { isRegExp } from 'util/types';
 
 import Logger from './logger';
@@ -54,11 +57,15 @@ export interface AzureReporterOptions {
   uploadAttachments?: boolean | undefined;
   attachmentsType?: TAttachmentType | undefined;
   testRunConfig?: TTestRunConfig;
-  testPointMapper?: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
+  testPointMapper?: (
+    testCase: TestCase,
+    testPoints: (TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint)[]
+  ) => Promise<(TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint)[] | undefined>;
   isExistingTestRun?: boolean;
   testRunId?: number;
   testCaseIdMatcher?: string | RegExp | Array<string | RegExp>;
   testCaseIdZone?: TTestCaseIdZone;
+  rootSuiteId?: number;
 }
 
 interface TestResultsToTestRun {
@@ -115,8 +122,15 @@ interface Headers {
 class AzureDevOpsReporter implements Reporter {
   private _logger: Logger | undefined;
   private _testApi!: Test.ITestApi;
+  private _testPlanApi!: TestPlanApi.ITestPlanApi;
   private _coreApi!: ICoreApi;
-  private _publishedResultsCount = 0;
+  private _publishedResultsCount: {
+    tests: number;
+    points: number;
+  } = {
+    tests: 0,
+    points: 0,
+  };
   private _testsAliasToBePublished: string[] = [];
   private _testResultsToBePublished: TTestResultsToBePublished[] = [];
   private _connection!: WebApi;
@@ -138,7 +152,10 @@ class AzureDevOpsReporter implements Reporter {
   private _resolvePublishResults: () => void = () => {};
   private _rejectPublishResults: (reason: any) => void = () => {};
   private _testRunConfig: TTestRunConfig = {} as TTestRunConfig;
-  private _testPointMapper: (testCase: TestCase, testPoints: TestPoint[]) => Promise<TestPoint[] | undefined>;
+  private _testPointMapper: (
+    testCase: TestCase,
+    testPoints: (TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint)[]
+  ) => Promise<(TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint)[] | undefined>;
   private _azureClientOptions = {
     allowRetries: true,
     maxRetries: 20,
@@ -148,6 +165,8 @@ class AzureDevOpsReporter implements Reporter {
   private _isExistingTestRun = false;
   private _testCaseIdMatcher: string | RegExp | Array<string | RegExp> = new RegExp(/\[([\d,\s]+)\]/, 'g');
   private _testCaseIdZone: TTestCaseIdZone = 'title';
+  private _rootSuiteId: number | undefined;
+  private _expectedTestPointsByRootSuite: Array<TestPlanInterfaces.TestPoint> = [];
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -279,6 +298,7 @@ class AzureDevOpsReporter implements Reporter {
         'This means you need to define your own testCaseIdMatcher, specifically for the "annotation" area'
       );
     }
+    this._rootSuiteId = options.rootSuiteId || Number(process.env.AZURE_PW_ROOT_SUITE_ID) || undefined;
   }
 
   async onBegin(): Promise<void> {
@@ -287,6 +307,9 @@ class AzureDevOpsReporter implements Reporter {
       this._resolveRunId(this._testRunId!);
       this._logger?.log(`Using existing run ${this._testRunId} to publish test results`);
       this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
+
+      await this._retrieveTestPoints();
+
       return;
     }
     try {
@@ -299,6 +322,8 @@ class AzureDevOpsReporter implements Reporter {
           this._logger?.log(`Using run ${run.id} to publish test results`);
           this._setAzurePWTestRunId(run.id);
           this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
+
+          await this._retrieveTestPoints();
         } else {
           this._rejectRunId('Failed to create test run. Reporting is disabled.');
         }
@@ -380,7 +405,7 @@ class AzureDevOpsReporter implements Reporter {
             this._logger?.log(`Using run ${runId} to publish test results`);
             this._setAzurePWTestRunId(runId);
             this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
-            await this._publishTestResults(runId, this._testResultsToBePublished);
+            await this._publishTestRunResults(runId, this._testResultsToBePublished);
           } else {
             this._setIsDisable(true);
             this._rejectRunId('Failed to create test run. Reporting is disabled.');
@@ -390,9 +415,15 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
 
-      if (this._publishedResultsCount === 0 && !runId) {
+      if (this._publishedResultsCount.tests === 0 && !runId) {
         this._logger?.log(chalk.gray('No testcases were matched. Ensure that your tests are declared correctly.'));
         return;
+      } else {
+        this._logger?.log(
+          chalk.gray(
+            `Test results published for ${this._publishedResultsCount.tests} test(s), ${this._publishedResultsCount.points} test point(s)`
+          )
+        );
       }
 
       if (this._isExistingTestRun) return;
@@ -583,11 +614,75 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  private _filterTestTestPoints(
+    testPoints: TestInterfaces.TestPoint[],
+    testsResult: TTestResultsToBePublished
+  ): TestInterfaces.TestPoint[] {
+    return testPoints?.filter((testPoint) => {
+      if (!testPoint.testPlan!.id || parseInt(testPoint.testPlan!.id, 10) !== this._planId) {
+        return false;
+      } else if (
+        !testPoint.testCase.id ||
+        !testsResult.testCase.testCaseIds.find((testCaseId) => testPoint.testCase.id == testCaseId)
+      ) {
+        return false;
+      } else if (this._testRunConfig && this._testRunConfig.configurationIds?.length) {
+        return (
+          testPoint.configuration.id &&
+          this._testRunConfig!.configurationIds.includes(parseInt(testPoint.configuration.id, 10))
+        );
+      } else {
+        return true;
+      }
+    });
+  }
+
+  private _filterTestPlanTestPoints(
+    testPoints: TestPlanInterfaces.TestPoint[],
+    testsResult: TTestResultsToBePublished
+  ): TestPlanInterfaces.TestPoint[] {
+    return testPoints?.filter((testPoint) => {
+      if (!testPoint.testPlan!.id || testPoint.testPlan!.id !== this._planId) {
+        return false;
+      } else if (
+        !testPoint.testCaseReference.id ||
+        !testsResult.testCase.testCaseIds.find(
+          (testCaseId) => testPoint.testCaseReference.id == parseInt(testCaseId, 10)
+        )
+      ) {
+        return false;
+      } else if (this._testRunConfig && this._testRunConfig.configurationIds?.length) {
+        return testPoint.configuration.id && this._testRunConfig!.configurationIds.includes(testPoint.configuration.id);
+      } else {
+        return true;
+      }
+    });
+  }
+
   private async _getTestPointsOfTestResults(
-    planId: number,
     testsResults: TTestResultsToBePublished[]
-  ): Promise<Map<TTestResultsToBePublished, TestPoint[]>> {
-    const result = new Map<TTestResultsToBePublished, TestPoint[]>();
+  ): Promise<Map<TTestResultsToBePublished, (TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint)[]>> {
+    const result = new Map<TTestResultsToBePublished, (TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint)[]>();
+
+    if (this._rootSuiteId) {
+      for (const testsResult of testsResults) {
+        const currentTestPoints = this._filterTestPlanTestPoints(this._expectedTestPointsByRootSuite, testsResult);
+
+        if (currentTestPoints && currentTestPoints.length > 0) {
+          const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
+          if (mappedTestPoints && mappedTestPoints.length > 0) {
+            result.set(testsResult, mappedTestPoints);
+          } else {
+            result.set(testsResult, []);
+          }
+        } else {
+          result.set(testsResult, []);
+        }
+      }
+
+      return result;
+    }
+
     try {
       const testcaseIds = testsResults.map((t) => t.testCase.testCaseIds.map((id) => parseInt(id, 10))).flat();
       const pointsQuery: TestInterfaces.TestPointsQuery = {
@@ -600,27 +695,7 @@ class AzureDevOpsReporter implements Reporter {
       );
       if (pointsQueryResult.points) {
         for (const testsResult of testsResults) {
-          const currentTestPoints = pointsQueryResult.points?.filter((testPoint) => {
-            if (!testPoint.testPlan!.id || parseInt(testPoint.testPlan!.id, 10) !== planId) {
-              // the testPlan id is not matching
-              return false;
-            } else if (
-              !testPoint.testCase.id ||
-              !testsResult.testCase.testCaseIds.find((testCaseId) => testPoint.testCase.id == testCaseId)
-            ) {
-              // the testCase id is not matching
-              return false;
-            } else if (this._testRunConfig && this._testRunConfig.configurationIds?.length) {
-              // configuration ids are set, so they must match
-              return (
-                testPoint.configuration.id &&
-                this._testRunConfig!.configurationIds.includes(parseInt(testPoint.configuration.id, 10))
-              );
-            } else {
-              // no configuration ids to filter, ignore them
-              return true;
-            }
-          });
+          const currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);
 
           if (currentTestPoints && currentTestPoints.length > 0) {
             const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
@@ -628,11 +703,9 @@ class AzureDevOpsReporter implements Reporter {
             if (mappedTestPoints && mappedTestPoints.length > 0) {
               result.set(testsResult, mappedTestPoints);
             } else {
-              // logging will happen outside
               result.set(testsResult, []);
             }
           } else {
-            // logging will happen outside
             result.set(testsResult, []);
           }
         }
@@ -676,6 +749,88 @@ class AzureDevOpsReporter implements Reporter {
     };
     return api;
   };
+
+  // prettier-ignore
+  private async _getPointsList(testPlanApi: TestPlanApi.ITestPlanApi, project: string, planId: number, suiteId: number, testPointIds?: string, testCaseId?: string, continuationToken?: string, returnIdentityRef?: boolean, includePointDetails?: boolean, isRecursive?: boolean): Promise<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>> {
+    testPlanApi.getPointsList = function (project, planId, suiteId, testPointIds, testCaseId, continuationToken, returnIdentityRef, includePointDetails, isRecursive) {
+      return new Promise(async (resolve, reject) => {
+        try {
+          const routeValues = { project, planId, suiteId };
+          const queryValues = { testPointIds, testCaseId, continuationToken, returnIdentityRef, includePointDetails, isRecursive };
+          const verData = await testPlanApi.vsoClient.getVersioningData(
+            '7.2-preview.2',
+            'testplan',
+            '52df686e-bae4-4334-b0ee-b6cf4e6f6b73',
+            routeValues,
+            queryValues
+          );
+
+          let url: string = verData.requestUrl!;
+          let options = this.createRequestOptions('application/json', verData.apiVersion);
+
+          let res: restm.IRestResponse<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>>;
+          res = await this.rest.get<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>>(url, options);
+
+          let ret = this.formatResponse(res.result, TestPlanInterfaces.TypeInfo.TestPoint, true);
+
+          // Handle the continuation token
+          if (res.headers['x-ms-continuationtoken']) {
+            ret.continuationToken = res.headers['x-ms-continuationtoken'];
+          }
+
+          resolve(ret);
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    };
+
+    const testPlanApiWithOverride = testPlanApi as TestPlanApi.ITestPlanApi;
+    return testPlanApiWithOverride.getPointsList(project, planId, suiteId, testPointIds, testCaseId, continuationToken, returnIdentityRef, includePointDetails, isRecursive);
+  }
+
+  // prettier-ignore
+  private _recursiveGetPointsList = async (project: string, planId: number, suiteId: number, continuationToken?: string): Promise<TestPlanInterfaces.TestPoint[]> => {
+    this._logger?.log(chalk.gray(`${continuationToken ? 'Fetching next' : 'Fetching'} test points`));
+    try {
+      const testPlanApi = await this._connection.getTestPlanApi();
+      const pointsList = await this._getPointsList(testPlanApi, project, planId, suiteId, undefined, undefined, continuationToken, false, true, true);
+      let points: TestPlanInterfaces.TestPoint[] = pointsList;
+      if (pointsList.continuationToken) {
+        const nextPoints = await this._recursiveGetPointsList(project, planId, suiteId, pointsList.continuationToken);
+        points = points.concat(nextPoints);
+      }
+      return points;
+    } catch (error: any) {
+      this._logger?.error(error.message);
+      return [];
+    }
+  };
+
+  private async _retrieveTestPoints() {
+    if (this._rootSuiteId) {
+      this._logger?.log(`Fetching test points for the root suite ${this._rootSuiteId}`);
+      this._logger?.log('This may take a while...');
+      this._expectedTestPointsByRootSuite = await this._recursiveGetPointsList(
+        this._projectName,
+        this._planId,
+        this._rootSuiteId
+      );
+      if (this._expectedTestPointsByRootSuite.length === 0) {
+        this._logger?.warn(
+          'No test points found for the specified root suite. Try to ensure that the rootSuiteId, planId are correct and the suite is not empty. Reporting is disabled.'
+        );
+        this._setIsDisable(true);
+      } else {
+        this._logger?.log(
+          `Fetched test points for the root suite ${this._rootSuiteId}. Total: ${this._expectedTestPointsByRootSuite.length}`
+        );
+        this._logger?.debug(
+          `First 3 Test points: ${JSON.stringify(this._expectedTestPointsByRootSuite.slice(0, 3), null, 2)}`
+        );
+      }
+    }
+  }
 
   private async _uploadAttachmentsFunc(
     testResult: TestResult,
@@ -746,6 +901,27 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  private _createTestCaseResult(
+    testCase: ITestCaseExtended,
+    testResult: TestResult,
+    testPoint: TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint
+  ): TestInterfaces.TestCaseResult {
+    return {
+      testPoint: { id: String(testPoint.id) },
+      outcome: this._mapToAzureState(testCase, testResult),
+      state: 'Completed',
+      durationInMs: testResult.duration,
+      errorMessage: testResult.error
+        ? `${testCase.title}:\n\n${testResult.errors
+            ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
+            .join('\n\n')}`
+        : undefined,
+      stackTrace: `${testResult.errors
+        ?.map((error, idx) => `STACK #${idx + 1}:\n\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+        .join('\n\n\n')}`,
+    };
+  }
+
   private async _publishCaseResult(test: TestCase, testResult: TestResult): Promise<TestResultsToTestRun | void> {
     const caseIds = this._getCaseIds(test);
     if (!caseIds || !caseIds.length) return;
@@ -762,9 +938,9 @@ class AzureDevOpsReporter implements Reporter {
       const runId = await this._runIdPromise;
       this._logger?.log(chalk.gray(`Start publishing: ${test.title}`));
       const toBePublished: TTestResultsToBePublished = { testCase: testCase, testResult };
-      const mappedTestPoints = (await this._getTestPointsOfTestResults(this._planId as number, [toBePublished])).get(
-        toBePublished
-      );
+      const mappedTestPoints = (await this._getTestPointsOfTestResults([toBePublished])).get(toBePublished);
+      this._publishedResultsCount.points += mappedTestPoints?.length || 0;
+      this._logger?.debug(`[publishCaseResult] Mapped test points: ${JSON.stringify(mappedTestPoints, null, 2)}`);
 
       if (!mappedTestPoints || mappedTestPoints.length == 0) {
         throw new Error(
@@ -772,27 +948,12 @@ class AzureDevOpsReporter implements Reporter {
             this._testRunConfig?.configurationIds
               ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
               : ''
-          }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.`
+          }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`
         );
       }
 
-      const results: TestInterfaces.TestCaseResult[] = mappedTestPoints.map(
-        (testPoint) =>
-          ({
-            // the testPoint is the testCase + configuration, there is not need to set these
-            testPoint: { id: String(testPoint.id) },
-            outcome: this._mapToAzureState(test, testResult),
-            state: 'Completed',
-            durationInMs: testResult.duration,
-            errorMessage: testResult.error
-              ? `${test.title}:\n\n${testResult.errors
-                  ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
-                  .join('\n\n')}`
-              : undefined,
-            stackTrace: `${testResult.errors
-              ?.map((error, idx) => `STACK #${idx + 1}:\n\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
-              .join('\n\n\n')}`,
-          } as TestInterfaces.TestCaseResult)
+      const results: TestInterfaces.TestCaseResult[] = mappedTestPoints.map((testPoint) =>
+        this._createTestCaseResult(testCase, testResult, testPoint)
       );
 
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
@@ -806,7 +967,7 @@ class AzureDevOpsReporter implements Reporter {
         await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
 
       this._removePublished(testCase.testAlias);
-      this._publishedResultsCount++;
+      this._publishedResultsCount.tests++;
       this._logger?.log(chalk.gray(`Result published: ${test.title}`));
       return testCaseResult;
     } catch (error: any) {
@@ -815,7 +976,7 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
-  private async _publishTestResults(runId: number, testsResults: TTestResultsToBePublished[]) {
+  private async _publishTestRunResults(runId: number, testsResults: TTestResultsToBePublished[]) {
     if (!this._testApi) this._testApi = await this._connection.getTestApi();
 
     const testsPackSize = 50;
@@ -826,11 +987,17 @@ class AzureDevOpsReporter implements Reporter {
 
     this._logger?.log(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`));
 
+    await this._retrieveTestPoints();
+
     try {
       for (const testsPack of testsPacksArray) {
         let testCaseIds: string[] = [];
-        const withAttachmentsByTestPoint = new Map<TestPoint, TTestResultsToBePublished[]>();
-        const testsPointsByTestCase = await this._getTestPointsOfTestResults(this._planId as number, testsPack);
+        const withAttachmentsByTestPoint = new Map<
+          TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint,
+          TTestResultsToBePublished[]
+        >();
+        const testsPointsByTestCase = await this._getTestPointsOfTestResults(testsPack);
+        this._publishedResultsCount.points += testsPointsByTestCase.size;
         const testCaseResults: TestInterfaces.TestCaseResult[] = [];
 
         for (const [key, value] of testsPointsByTestCase.entries()) {
@@ -841,21 +1008,7 @@ class AzureDevOpsReporter implements Reporter {
           if (testPoints && testPoints.length > 0) {
             testCaseIds.push(...testCase.testCaseIds);
             testCaseResults.push(
-              ...testPoints.map((testPoint) => ({
-                // the testPoint is the testCase + configuration, there is not need to set these
-                testPoint: { id: String(testPoint.id) },
-                outcome: this._mapToAzureState(testCase, testResult),
-                state: 'Completed',
-                durationInMs: testResult.duration,
-                errorMessage: testResult.error
-                  ? `${testCase.title}:\n\n${testResult.errors
-                      ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
-                      .join('\n\n')}`
-                  : undefined,
-                stackTrace: `${testResult.errors
-                  ?.map((error, idx) => `STACK #${idx + 1}:\n\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
-                  .join('\n\n\n')}`,
-              }))
+              ...testPoints.map((testPoint) => this._createTestCaseResult(testCase, testResult, testPoint))
             );
 
             if (this._uploadAttachments && testResult.attachments.length > 0) {
@@ -876,7 +1029,7 @@ class AzureDevOpsReporter implements Reporter {
                 this._testRunConfig?.configurationIds
                   ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
                   : ''
-              }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.`
+              }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`
             );
           }
         }
@@ -923,10 +1076,10 @@ class AzureDevOpsReporter implements Reporter {
           }
         }
 
-        this._publishedResultsCount += testsPack.length;
-        this._logger?.log(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount}`));
+        this._publishedResultsCount.tests += testsPack.length;
+        this._logger?.log(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount.tests}`));
       }
-      this._logger?.log(chalk.gray(`Test results published for ${this._publishedResultsCount} test(s)`));
+
       this._resolvePublishResults();
     } catch (error: any) {
       this._logger?.error(error.message);
