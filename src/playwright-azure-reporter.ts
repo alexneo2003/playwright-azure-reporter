@@ -905,6 +905,45 @@ class AzureDevOpsReporter implements Reporter {
     return attachmentsResult;
   }
 
+  private async _uploadLogsAttachmentsFunc(
+    testResult: TestResult,
+    testCaseResultId: number,
+    test: ITestCaseExtended | TestCase
+  ): Promise<string[]> {
+    this._logger?.log(chalk.gray(`Uploading logs attachments for test: ${test.title}`));
+    const runId = await this._runIdPromise;
+    const attachmentsResult: string[] = [];
+
+    if (!runId) {
+      throw new Error('Could not find test run id. Check, maybe planId, what you specified, is incorrect.');
+    }
+
+    for (const attachment of testResult.attachments) {
+      try {
+        if (this._uploadLogs && ['stdout.txt', 'stderr.txt'].includes(attachment.name)) {
+          const attachmentRequestModel: TestInterfaces.TestAttachmentRequestModel = {
+            attachmentType: 'GeneralAttachment',
+            fileName: attachment.name,
+            stream: attachment.body!.toString('base64'),
+          };
+          if (!this._testApi) this._testApi = await this._connection.getTestApi();
+          const response = await this._testApi.createTestResultAttachment(
+            attachmentRequestModel,
+            this._projectName,
+            runId!,
+            testCaseResultId
+          );
+          if (!response?.id) throw new Error(`Failed to upload log attachment for test: ${test.title}`);
+          attachmentsResult.push(response.url);
+        }
+      } catch (error: any) {
+        this._logger?.error(error.message);
+      }
+    }
+    this._logger?.log(chalk.gray('Uploaded logs attachments'));
+    return attachmentsResult;
+  }
+
   private _mapToAzureState(test: TestCase, testResult: TestResult): string {
     let status = testResult.status;
 
@@ -1000,7 +1039,7 @@ class AzureDevOpsReporter implements Reporter {
             body: Buffer.from(testResult.stderr.join('')),
           },
         ];
-        await this._uploadAttachmentsFunc(
+        await this._uploadLogsAttachmentsFunc(
           { ...testResult, attachments: logAttachment },
           testCaseResult.result.value![0].id,
           test
@@ -1143,7 +1182,7 @@ class AzureDevOpsReporter implements Reporter {
                   body: Buffer.from(testWithResult.testResult.stderr.join('')),
                 },
               ];
-              await this._uploadAttachmentsFunc(
+              await this._uploadLogsAttachmentsFunc(
                 { ...testWithResult.testResult, attachments: logAttachment },
                 testResult.id!,
                 testWithResult.testCase
