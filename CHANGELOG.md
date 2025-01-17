@@ -1,3 +1,14 @@
+# [1.13.0-beta.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.0...v1.13.0-beta.1) (2025-01-17)
+
+
+### Bug Fixes
+
+* fixed continuationToken null ([c2cdd7f](https://github.com/alexneo2003/playwright-azure-reporter/commit/c2cdd7faf4809fc8e536d306688601196eaa8201))
+* fixed duclicate logs attachments ([f9d4e83](https://github.com/alexneo2003/playwright-azure-reporter/commit/f9d4e83e9ce745ddd3f4507646b5e1b76b54fcd4))
+* fixed upload logs function ([1b7e4b3](https://github.com/alexneo2003/playwright-azure-reporter/commit/1b7e4b3d5c20325e0c9bf9d6e001333799325244))
+
+
+
 # [1.13.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.12.0...v1.13.0-beta.0) (2024-12-18)
 
 
