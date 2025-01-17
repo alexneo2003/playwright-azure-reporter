@@ -799,8 +799,8 @@ class AzureDevOpsReporter implements Reporter {
       const testPlanApi = await this._connection.getTestPlanApi();
       const pointsList = await this._getPointsList(testPlanApi, project, planId, suiteId, undefined, undefined, continuationToken, false, true, true);
       let points: TestPlanInterfaces.TestPoint[] = pointsList;
-      if (pointsList.continuationToken) {
-        const nextPoints = await this._recursiveGetPointsList(project, planId, suiteId, pointsList.continuationToken);
+      if (pointsList?.continuationToken) {
+        const nextPoints = await this._recursiveGetPointsList(project, planId, suiteId, pointsList?.continuationToken);
         points = points.concat(nextPoints);
       }
       return points;
