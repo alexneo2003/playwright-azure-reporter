@@ -106,8 +106,8 @@ Configure Playwright Azure Reporter with `playwright-azure-reporter` package.
 `playwright.config.ts`
 
 ```typescript
-import { PlaywrightTestConfig } from '@playwright/test';
-import { AzureReporterOptions } from '@alex_neo/playwright-azure-reporter/dist/playwright-azure-reporter';
+import type { PlaywrightTestConfig } from '@playwright/test';
+import type { AzureReporterOptions } from '@alex_neo/playwright-azure-reporter/dist/playwright-azure-reporter';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
