@@ -1,9 +1,9 @@
-import { PlaywrightTestConfig } from '@playwright/test';
+import type { PlaywrightTestConfig } from '@playwright/test';
 import { TestCase } from '@playwright/test/reporter';
 import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
 import dotenv from 'dotenv';
 
-import { AzureReporterOptions } from './dist/playwright-azure-reporter';
+import type { AzureReporterOptions } from './dist/playwright-azure-reporter';
 
 dotenv.config();
 
