@@ -1,3 +1,12 @@
+# [1.13.0-beta.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.1...v1.13.0-beta.2) (2025-01-31)
+
+
+### Bug Fixes
+
+* root suite test points awaiting ([c466fed](https://github.com/alexneo2003/playwright-azure-reporter/commit/c466fedc01e64d47a7dadadabd847eb1c58be4a5))
+
+
+
 # [1.13.0-beta.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.0...v1.13.0-beta.1) (2025-01-17)
 
 
