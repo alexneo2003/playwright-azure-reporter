@@ -325,8 +325,8 @@ class AzureDevOpsReporter implements Reporter {
     try {
       if (this._isExistingTestRun) {
         this._resolveRunId(this._testRunId!);
-        this._logger?.log(`Using existing run ${this._testRunId} to publish test results`);
-        this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
+        this._logger?.info(`Using existing run ${this._testRunId} to publish test results`);
+        this._logger?.info(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
 
         if (this._rootSuiteId) {
           await this._retrieveTestPoints();
@@ -340,9 +340,9 @@ class AzureDevOpsReporter implements Reporter {
         const run = await this._createRun(this._testRunTitle);
         if (run?.id) {
           this._resolveRunId(run.id);
-          this._logger?.log(`Using run ${run.id} to publish test results`);
+          this._logger?.info(`Using run ${run.id} to publish test results`);
           this._setAzurePWTestRunId(run.id);
-          this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
+          this._logger?.info(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
 
           if (this._rootSuiteId) {
             await this._retrieveTestPoints();
@@ -410,7 +410,7 @@ class AzureDevOpsReporter implements Reporter {
         while (this._testsAliasToBePublished.length > 0) {
           // need wait all results to be published
           if (prevCount > this._testsAliasToBePublished.length) {
-            this._logger?.log(
+            this._logger?.info(
               `Waiting for all results to be published. Remaining ${this._testsAliasToBePublished.length} results`
             );
             prevCount--;
@@ -418,10 +418,8 @@ class AzureDevOpsReporter implements Reporter {
           await new Promise((resolve) => setTimeout(resolve, 250));
         }
       } else {
-        this._logger = new Logger(true);
-
         if (this._testResultsToBePublished.length === 0) {
-          this._logger?.log('No test results to publish');
+          this._logger?.info('No test results to publish', true);
           return;
         } else {
           if (!this._isExistingTestRun) {
@@ -432,9 +430,9 @@ class AzureDevOpsReporter implements Reporter {
           }
           if (runId) {
             this._resolveRunId(runId);
-            this._logger?.log(`Using run ${runId} to publish test results`);
+            this._logger?.info(`Using run ${runId} to publish test results`);
             this._setAzurePWTestRunId(runId);
-            this._logger?.log(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
+            this._logger?.info(`AZURE_PW_TEST_RUN_ID: ${process.env.AZURE_PW_TEST_RUN_ID}`);
             await this._publishTestRunResults(runId, this._testResultsToBePublished);
           } else {
             this._setIsDisable(true);
@@ -445,21 +443,20 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
 
+      const shouldForceLogs = this._publishTestResultsMode === 'testRun';
+
       if (this._publishedResultsCount.tests === 0 && !runId) {
-        this._logger?.log(chalk.gray('No testcases were matched. Ensure that your tests are declared correctly.'));
+        this._logger?.warn('No testcases were matched. Ensure that your tests are declared correctly.');
         return;
       } else {
-        this._logger?.log(
-          chalk.gray(
-            `Test results published for ${this._publishedResultsCount.tests} test(s), ${this._publishedResultsCount.points} test point(s)`
-          )
-        );
+        const { tests, points } = this._publishedResultsCount;
+        this._logger?.info(`Test results published for ${tests} test(s), ${points} test point(s)`, shouldForceLogs);
       }
 
       if (this._isExistingTestRun) return;
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       const runUpdatedResponse = await this._testApi.updateTestRun({ state: 'Completed' }, this._projectName, runId!);
-      this._logger?.log(`Run ${runId} - ${runUpdatedResponse.state}`);
+      this._logger?.info(`Run ${runId} - ${runUpdatedResponse.state}`, shouldForceLogs);
     } catch (error: any) {
       this._logger?.error(`Error on onEnd hook ${error as string}`);
     }
@@ -580,22 +577,22 @@ class AzureDevOpsReporter implements Reporter {
   private _logTestItem(test: TestCase, testResult: TestResult) {
     switch (testResult.status) {
       case 'passed':
-        this._logger?.log(chalk.green(`${test.title} - ${testResult.status}`));
+        this._logger?.info(chalk.green(`${test.title} - ${testResult.status}`));
         break;
       case 'failed':
-        this._logger?.log(chalk.red(`${test.title} - ${testResult.status}`));
+        this._logger?.info(chalk.red(`${test.title} - ${testResult.status}`));
         break;
       case 'timedOut':
-        this._logger?.log(chalk.yellow(`${test.title} - ${testResult.status}`));
+        this._logger?.info(chalk.yellow(`${test.title} - ${testResult.status}`));
         break;
       case 'skipped':
-        this._logger?.log(chalk.yellow(`${test.title} - ${testResult.status}`));
+        this._logger?.info(chalk.yellow(`${test.title} - ${testResult.status}`));
         break;
       case 'interrupted':
-        this._logger?.log(chalk.red(`${test.title} - ${testResult.status}`));
+        this._logger?.info(chalk.red(`${test.title} - ${testResult.status}`));
         break;
       default:
-        this._logger?.log(`${test.title} - ${testResult.status}`);
+        this._logger?.info(`${test.title} - ${testResult.status}`);
         break;
     }
   }
@@ -881,7 +878,7 @@ class AzureDevOpsReporter implements Reporter {
 
   // prettier-ignore
   private _recursivelyGetPointsList = async (project: string, planId: number, suiteId: number, continuationToken?: string): Promise<TestPlanInterfaces.TestPoint[]> => {
-    this._logger?.log(chalk.gray(`${continuationToken ? 'Fetching next' : 'Fetching'} test points.`));
+    this._logger?.info(chalk.gray(`${continuationToken ? 'Fetching next' : 'Fetching'} test points.`));
     try {
       const testPlanApi = await this._connection.getTestPlanApi();
       const pointsList = await this._getPointsList(testPlanApi, project, planId, suiteId, undefined, undefined, continuationToken, false, true, true);
@@ -899,8 +896,8 @@ class AzureDevOpsReporter implements Reporter {
 
   private async _retrieveTestPoints() {
     if (this._rootSuiteId) {
-      this._logger?.log(`Fetching test points for the root suite ${this._rootSuiteId}`);
-      this._logger?.log('This may take a while...');
+      this._logger?.info(`Fetching test points for the root suite ${this._rootSuiteId}`);
+      this._logger?.info('This may take a while...');
       this._expectedTestPointsByRootSuite = await this._recursivelyGetPointsList(
         this._projectName,
         this._planId,
@@ -912,7 +909,7 @@ class AzureDevOpsReporter implements Reporter {
         );
         this._setIsDisable(true);
       } else {
-        this._logger?.log(
+        this._logger?.info(
           `Fetched test points for the root suite ${this._rootSuiteId}. Total: ${this._expectedTestPointsByRootSuite.length}`
         );
         this._logger?.debug(
@@ -929,7 +926,7 @@ class AzureDevOpsReporter implements Reporter {
     testCaseResultId: number,
     test: ITestCaseExtended | TestCase
   ): Promise<string[]> {
-    this._logger?.log(chalk.gray(`Uploading attachments for test: ${test.title}`));
+    this._logger?.info(chalk.gray(`Uploading attachments for test: ${test.title}`));
     const runId = await this._runIdPromise;
     const attachmentsResult: string[] = [];
 
@@ -973,7 +970,7 @@ class AzureDevOpsReporter implements Reporter {
         this._logger?.error(error.message);
       }
     }
-    this._logger?.log(chalk.gray('Uploaded attachments'));
+    this._logger?.info(chalk.gray('Uploaded attachments'));
     return attachmentsResult;
   }
 
@@ -982,7 +979,7 @@ class AzureDevOpsReporter implements Reporter {
     testCaseResultId: number,
     test: ITestCaseExtended | TestCase
   ): Promise<string[]> {
-    this._logger?.log(chalk.gray(`Uploading logs attachments for test: ${test.title}`));
+    this._logger?.info(chalk.gray(`Uploading logs attachments for test: ${test.title}`));
     const runId = await this._runIdPromise;
     const attachmentsResult: string[] = [];
 
@@ -1012,7 +1009,7 @@ class AzureDevOpsReporter implements Reporter {
             throw new Error(`Attachment ${attachment.name} does not have body`);
           }
         }
-        this._logger?.log(chalk.gray('Uploaded logs attachments'));
+        this._logger?.info(chalk.gray('Uploaded logs attachments'));
       } catch (error: any) {
         this._logger?.error(error.message);
       }
@@ -1097,7 +1094,7 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       const runId = await this._runIdPromise;
-      this._logger?.log(chalk.gray(`Start publishing: ${test.title}`));
+      this._logger?.info(chalk.gray(`Start publishing: ${test.title}`));
       const toBePublished: TTestResultsToBePublished = { testCase: testCase, testResult };
       const mappedTestPoints = (await this._getTestPointsOfTestResults([toBePublished])).get(toBePublished);
       this._logger?.debug(`[publishCaseResult] Mapped test points: ${JSON.stringify(mappedTestPoints, null, 2)}`);
@@ -1128,7 +1125,7 @@ class AzureDevOpsReporter implements Reporter {
         await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
 
       if (this._uploadLogs) {
-        this._logger?.log(chalk.gray(`Uploading stdout.log for test: ${test.title}`));
+        this._logger?.info(chalk.gray(`Uploading stdout.log for test: ${test.title}`));
         const logAttachment = this._prepareLogAttachments(testResult);
         await this._uploadLogsAttachmentsFunc(
           { ...testResult, attachments: logAttachment },
@@ -1139,7 +1136,7 @@ class AzureDevOpsReporter implements Reporter {
 
       this._removePublished(testCase.testAlias);
       this._publishedResultsCount.tests++;
-      this._logger?.log(chalk.gray(`Result published: ${test.title}`));
+      this._logger?.info(chalk.gray(`Result published: ${test.title}`));
       return testCaseResult;
     } catch (error: any) {
       this._removePublished(testCase.testAlias);
@@ -1159,7 +1156,7 @@ class AzureDevOpsReporter implements Reporter {
     let testResultsQuery: TestInterfaces.TestResultsQuery;
     let resultData: TestInterfaces.TestResultsQuery = { results: [] };
 
-    this._logger?.log(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`));
+    this._logger?.info(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`), true);
 
     if (this._rootSuiteId) {
       await this._retrieveTestPoints();
@@ -1236,7 +1233,7 @@ class AzureDevOpsReporter implements Reporter {
         }
 
         if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
-          this._logger?.log(
+          this._logger?.info(
             chalk.gray(`Starting to uploading attachments for ${withAttachmentsByTestPoint.size} testpoint(s)`)
           );
 
@@ -1255,7 +1252,7 @@ class AzureDevOpsReporter implements Reporter {
         }
 
         if (this._uploadLogs && testsPack.length > 0) {
-          this._logger?.log(chalk.gray(`Starting to uploading logs for ${testsPack.length} test(s)`));
+          this._logger?.info(chalk.gray(`Starting to uploading logs for ${testsPack.length} test(s)`));
           for (const [testWithResult, testPoints] of testsPointsByTestCase.entries()) {
             for (const testPoint of testPoints) {
               const testResult = resultData.results?.find((result) => result.testPoint?.id === String(testPoint.id));
@@ -1275,7 +1272,7 @@ class AzureDevOpsReporter implements Reporter {
         }
 
         this._publishedResultsCount.tests += testsPack.length;
-        this._logger?.log(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount.tests}`));
+        this._logger?.info(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount.tests}`));
       }
 
       this._resolvePublishResults();

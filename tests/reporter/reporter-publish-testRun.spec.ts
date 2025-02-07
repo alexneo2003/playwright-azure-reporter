@@ -251,7 +251,10 @@ test.describe('Publish results - testRun', () => {
     expect(result.failed).toBe(1);
   });
 
-  test('logging default is disabled but enabled in testRun mode', async ({ runInlineTest, server }) => {
+  test('logging default is disabled but show some logs at the end in testRun mode', async ({
+    runInlineTest,
+    server,
+  }) => {
     server.setRoute('/_apis/Location', (_, res) => {
       setHeaders(res, headers);
       res.end(JSON.stringify(location));
@@ -323,10 +326,11 @@ test.describe('Publish results - testRun', () => {
       { reporter: '' }
     );
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).not.toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
     expect(result.output).toContain('azure:pw:log Start publishing test results for 1 test(s)');
-    expect(result.output).toContain('azure:pw:log Left to publish: 0');
-    expect(result.output).toContain('azure:pw:log Test results published for 1 test(s)');
+    expect(result.output).not.toContain('azure:pw:log Starting to uploading attachments for');
+    expect(result.output).not.toContain('azure:pw:log Left to publish: 0');
+    expect(result.output).toContain('azure:pw:log Test results published for 1 test(s), 1 test point(s)');
     expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
@@ -469,6 +473,7 @@ test.describe('Publish results - testRun', () => {
               projectName: 'SampleSample',
               planId: 44,
               token: 'token',
+              logging: true,
               publishTestResultsMode: 'testRun',
               testRunConfig: {
                 configurationIds: [1, 2, 3],
@@ -582,6 +587,7 @@ test.describe('Publish results - testRun', () => {
               projectName: 'SampleSample',
               planId: 4,
               token: 'token',
+              logging: true,
               uploadAttachments: true,
               publishTestResultsMode: 'testRun',
             }]
@@ -696,6 +702,7 @@ test.describe('Publish results - testRun', () => {
               projectName: 'SampleSample',
               planId: 4,
               token: 'token',
+              logging: true,
               uploadAttachments: true,
               attachmentsType: ['screenshot', 'trace', 'video'],
               publishTestResultsMode: 'testRun',
@@ -812,6 +819,7 @@ test.describe('Publish results - testRun', () => {
               projectName: 'SampleSample',
               planId: 4,
               token: 'token',
+              logging: true,
               uploadAttachments: true,
               attachmentsType: [/.*/],
               publishTestResultsMode: 'testRun',
@@ -921,6 +929,7 @@ test.describe('Publish results - testRun', () => {
               projectName: 'SampleSample',
               planId: 4,
               token: 'token',
+              logging: true,
               publishTestResultsMode: 'testRun',
               uploadAttachments: true,
               attachmentsType: ['screenshot'],
@@ -1136,6 +1145,7 @@ test.describe('Publish results - testRun', () => {
               projectName: 'SampleSample',
               planId: 4,
               token: 'token',
+              logging: true,
               uploadAttachments: true,
               publishTestResultsMode: 'testRun',
             }]
@@ -1254,6 +1264,7 @@ test.describe('Publish results - testRun', () => {
               projectName: 'SampleSample',
               planId: 4,
               token: 'token',
+              logging: true,
               uploadAttachments: true,
               publishTestResultsMode: 'testRun',
             }]
