@@ -359,7 +359,7 @@ class AzureDevOpsReporter implements Reporter {
         this._logger?.error('Failed to create test run. Check your orgUrl. Reporting is disabled.');
       } else {
         this._logger?.error('Failed to create test run. Reporting is disabled.');
-        this._logger?.error(error.message);
+        this._logger?.error(error.stack);
       }
       this._setIsDisable(true);
     }
@@ -391,6 +391,7 @@ class AzureDevOpsReporter implements Reporter {
       }
     } catch (error: any) {
       this._logger?.error(`Failed to publish test result. \n ${error.message}`);
+      this._logger?.error(error.stack);
     }
   }
 
@@ -619,7 +620,7 @@ class AzureDevOpsReporter implements Reporter {
         else throw new Error('Failed to create test run');
       }
     } catch (error: any) {
-      this._logger?.error(error.message);
+      this._logger?.error(error.stack);
       this._setIsDisable(true);
     }
   }
@@ -636,7 +637,7 @@ class AzureDevOpsReporter implements Reporter {
       if (project) return project;
       else throw new Error(`Project ${projectName} does not exist. Reporting is disabled.`);
     } catch (error: any) {
-      this._logger?.error(error.message);
+      this._logger?.error(error.stack);
       this._setIsDisable(true);
     }
   }
@@ -798,7 +799,7 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
     } catch (error: any) {
-      this._logger?.error(error.message);
+      this._logger?.error(error.stack);
     }
     return result;
   }
@@ -889,7 +890,7 @@ class AzureDevOpsReporter implements Reporter {
       }
       return points;
     } catch (error: any) {
-      this._logger?.error(error.message);
+      this._logger?.error(error.stack);
       return [];
     }
   };
@@ -967,7 +968,7 @@ class AzureDevOpsReporter implements Reporter {
           attachmentsResult.push(response.url);
         }
       } catch (error: any) {
-        this._logger?.error(error.message);
+        this._logger?.error(error.stack);
       }
     }
     this._logger?.info(chalk.gray('Uploaded attachments'));
@@ -1011,7 +1012,7 @@ class AzureDevOpsReporter implements Reporter {
         }
         this._logger?.info(chalk.gray('Uploaded logs attachments'));
       } catch (error: any) {
-        this._logger?.error(error.message);
+        this._logger?.error(error.stack);
       }
     }
     return attachmentsResult;
@@ -1140,7 +1141,7 @@ class AzureDevOpsReporter implements Reporter {
       return testCaseResult;
     } catch (error: any) {
       this._removePublished(testCase.testAlias);
-      this._logger?.error(error.message);
+      this._logger?.error(error.stack);
     }
   }
 
@@ -1277,7 +1278,7 @@ class AzureDevOpsReporter implements Reporter {
 
       this._resolvePublishResults();
     } catch (error: any) {
-      this._logger?.error(error.message);
+      this._logger?.error(error.stack);
       this._rejectPublishResults(error);
     }
   }
