@@ -1,3 +1,17 @@
+# [1.13.0-beta.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.2...v1.13.0-beta.3) (2025-02-10)
+
+
+### Bug Fixes
+
+* log error.stack instead error.message ([1390105](https://github.com/alexneo2003/playwright-azure-reporter/commit/1390105dc116f0805fc8497776a5b50363c61875))
+
+
+### Features
+
+* reduce logs for testRun mode ([cd7868e](https://github.com/alexneo2003/playwright-azure-reporter/commit/cd7868e5809e1946b64b6410373aa5f04a3cde16))
+
+
+
 # [1.13.0-beta.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.1...v1.13.0-beta.2) (2025-01-31)
 
 
