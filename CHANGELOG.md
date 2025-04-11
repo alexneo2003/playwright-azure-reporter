@@ -1,3 +1,12 @@
+## [1.13.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0...v1.13.1) (2025-04-11)
+
+
+### Bug Fixes
+
+* fix publish workflow ([5c17ec0](https://github.com/alexneo2003/playwright-azure-reporter/commit/5c17ec0698165f81aa03d7ab26e1122519b9c90f))
+
+
+
 # [1.13.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.3...v1.13.0) (2025-04-11)
 
 
