@@ -1,3 +1,51 @@
+# [1.13.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.3...v1.13.0) (2025-04-11)
+
+
+
+# [1.13.0-beta.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.2...v1.13.0-beta.3) (2025-02-10)
+
+
+### Bug Fixes
+
+* log error.stack instead error.message ([1390105](https://github.com/alexneo2003/playwright-azure-reporter/commit/1390105dc116f0805fc8497776a5b50363c61875))
+
+
+### Features
+
+* reduce logs for testRun mode ([cd7868e](https://github.com/alexneo2003/playwright-azure-reporter/commit/cd7868e5809e1946b64b6410373aa5f04a3cde16))
+
+
+
+# [1.13.0-beta.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.1...v1.13.0-beta.2) (2025-01-31)
+
+
+### Bug Fixes
+
+* root suite test points awaiting ([c466fed](https://github.com/alexneo2003/playwright-azure-reporter/commit/c466fedc01e64d47a7dadadabd847eb1c58be4a5))
+
+
+
+# [1.13.0-beta.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.0-beta.0...v1.13.0-beta.1) (2025-01-17)
+
+
+### Bug Fixes
+
+* fixed continuationToken null ([c2cdd7f](https://github.com/alexneo2003/playwright-azure-reporter/commit/c2cdd7faf4809fc8e536d306688601196eaa8201))
+* fixed duclicate logs attachments ([f9d4e83](https://github.com/alexneo2003/playwright-azure-reporter/commit/f9d4e83e9ce745ddd3f4507646b5e1b76b54fcd4))
+* fixed upload logs function ([1b7e4b3](https://github.com/alexneo2003/playwright-azure-reporter/commit/1b7e4b3d5c20325e0c9bf9d6e001333799325244))
+
+
+
+# [1.13.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.12.0...v1.13.0-beta.0) (2024-12-18)
+
+
+### Features
+
+* rootSuiteId config added ([7ff9dd3](https://github.com/alexneo2003/playwright-azure-reporter/commit/7ff9dd3130f86013d7d36cf85bbb5f3f6f71e1e5))
+* uploadLogs config option ([e76ce76](https://github.com/alexneo2003/playwright-azure-reporter/commit/e76ce76b263dd1fe52a5311804f090e13964d953))
+
+
+
 # [1.12.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.11.0...v1.12.0) (2024-09-26)
 
 

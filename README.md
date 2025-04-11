@@ -106,8 +106,8 @@ Configure Playwright Azure Reporter with `playwright-azure-reporter` package.
 `playwright.config.ts`
 
 ```typescript
-import { PlaywrightTestConfig } from '@playwright/test';
-import { AzureReporterOptions } from '@alex_neo/playwright-azure-reporter/dist/playwright-azure-reporter';
+import type { PlaywrightTestConfig } from '@playwright/test';
+import type { AzureReporterOptions } from '@alex_neo/playwright-azure-reporter/dist/playwright-azure-reporter';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -136,7 +136,7 @@ const config: PlaywrightTestConfig = {
         publishTestResultsMode: 'testRun',
         uploadAttachments: true,
         attachmentsType: ['screenshot', 'video', 'trace'],
-        testCaseIdMatcher: /@\[(\d+)\]/,
+        testCaseIdMatcher: /@\[(\d+)\]/, // please use this pattern to extract test case id from test name, be careful with the pattern!!!
         testRunConfig: {
           owner: {
             displayName: 'Alex Neo',
@@ -165,21 +165,22 @@ export default config;
 
 Reporter options (\* - required):
 
-- \*`token` - Azure DevOps token, you can find more information [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
-- \*`orgUrl` - Full url for your organization space. Example: `https://dev.azure.com/your-organization-name`
+- \*`token` [string] - Azure DevOps token, you can find more information [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
+- \*`orgUrl` [string] - Full url for your organization space. Example: `https://dev.azure.com/your-organization-name`
 
   > **Note:** some API's (e.g. ProfileApi) can't be hit at the org level, and has to be hit at the deployment level, so url should be structured like https://vssps.dev.azure.com/{yourorgname}
 
-- \*`projectName` - Name of your project (also can be got from run URL). Example: `https://dev.azure.com/alex-neo/SampleProject/` - **SampleProject**
-- \*`planId` - Id of test plan. You can find it in test plan URL. Example: `https://dev.azure.com/alex-neo/SampleProject/_testPlans/execute?planId=4&suiteId=6` - **planId=4**
-- `environment` - Any string that will be used as environment name. Will be used as prefix for all test runs. Default: `undefined`. Example: `QA`
-- `logging` [true/false] - Enabled debug logging from reporter or not. Default: `false`.
-- `uploadAttachments` [true/false] - Uploading attachments (screenshot/video) after test ended. Default: `false`.
-- `attachmentsType` - List of attachments types or a RegEx to match the name of the attachment that will be uploaded. Default: `['screenshot']`
-- `isDisabled` [true/false] - Disable reporter. Default: `false`.
-- `testRunTitle` - Title of test run using to create new test run. Default: `Playwright Test Run`.
+- \*`projectName` [string] - Name of your project (also can be got from run URL). Example: `https://dev.azure.com/alex-neo/SampleProject/` - **SampleProject**
+- \*`planId` [number] - Id of test plan. You can find it in test plan URL. Example: `https://dev.azure.com/alex-neo/SampleProject/_testPlans/execute?planId=4&suiteId=6` - **planId=4**
+- `environment` [any] - Any string that will be used as environment name. Will be used as prefix for all test runs. Default: `undefined`. Example: `QA`
+- `logging` [boolean] - Enabled debug logging from reporter or not. Default: `false`.
+- `uploadAttachments` [boolean] - Uploading attachments (screenshot/video) after test ended. Default: `false`.
+- `attachmentsType` [(string|RegExp)[]] - List of attachments types or a RegEx to match the name of the attachment that will be uploaded. Default: `['screenshot']`
+- `uploadLogs` [boolean] - Uploading logs that were created during test execution like stdout/stderr. Doesn't depend on `uploadAttachments` option. Default: `false`.
+- `isDisabled` [boolean] - Disable reporter. Default: `false`.
+- `testRunTitle` [string] - Title of test run using to create new test run. Default: `Playwright Test Run`.
 - `testRunConfig` - Extra data to pass when Test Run creating. Read [doc](https://learn.microsoft.com/en-us/rest/api/azure/devops/test/runs/create?view=azure-devops-rest-7.1&tabs=HTTP#request-body) from more information. Default: `empty`.
-- `testPointMapper` - A callback to map the test runs to test configurations, e.g. by browser
+- `testPointMapper` [function] - A callback to map the test runs to test configurations, e.g. by browser
 
 ```
   import { TestCase } from '@playwright/test/reporter'
@@ -203,7 +204,7 @@ Reporter options (\* - required):
   - `testResult` - Published results of tests, at the end of each test, parallel to test run..
   - `testRun` - Published test results to test run, at the end of test run.
     > **Note:** If you use `testRun` mode and using same test cases in different tests (yes i know it sounds funny), it will be overwritten with last test result.
-- `isExistingTestRun` [true/false] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion. Default: `false`.
+- `isExistingTestRun` [boolean] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion. Default: `false`.
   > **Note:** If you use `isExistingTestRun` mode, `testRunId` should be specified.
 - `testRunId` [number] - Id of test run. Used only for `existingTestRun` publishing mode. Also can be set by `AZURE_PW_TEST_RUN_ID` environment variable. Default: `undefined`.
 
@@ -273,6 +274,27 @@ Reporter options (\* - required):
     - `testCaseIdZone: 'annotation'`
     - `testCaseIdMatcher: /(TestCase)/`
     - Extracted tags: `['12345']`]
+
+- `rootSuiteId` [number] - The ID of the root test suite under which the test results will be published. This can be useful when you have some test suites for different test packages, like `smoke`, `integration`, `e2e`, etc., with the same test cases. In this case, you can specify the root suite ID to publish test results under the root suite. Also can be defined by the `AZURE_PW_ROOT_SUITE_ID` environment variable. Default: `undefined`.
+
+  > **Note:** If you set root suite ID from reporter options and from environment variable - reporter options will be used
+
+  > **Example:**
+  > Let's say you have the following test suites/cases structure
+  >
+  > ```
+  > Automation Tests
+  >   - Smoke Tests (suiteId: 5)
+  >     - Test 1 (caseId: 1)
+  >     - Test 2 (caseId: 2)
+  >   - Integration Tests (suiteId: 6)
+  >     - Test 1 (caseId: 1)
+  >     - Test 2 (caseId: 2)
+  >     - Test 3 (caseId: 3)
+  >     - Test 4 (caseId: 4)
+  > ```
+  >
+  > And when you run tests with the `Smoke Tests` project without specifying the `rootSuiteId`, the test results will be published under the root suite `Automation Tests` for test cases in the `Smoke Tests` suite and `Integration Tests` suite. It will look like you have redundant results inside the test run for the same test cases in different suites. To avoid this, you can specify the `rootSuiteId: 5` to publish test results only under the `Smoke Tests` suite.
 
 ## Usefulness
 
