@@ -21,8 +21,8 @@ class Logger {
   }
 
   // eslint-disable-next-line no-unused-vars
-  private logMessage(level: string, message: string, colorFunc: (msg: string) => string) {
-    if (!this.isDisabled()) {
+  private logMessage(level: string, message: string, colorFunc: (msg: string) => string, force = false) {
+    if (!this.isDisabled() || force) {
       if (typeof message === 'object') {
         message = JSON.stringify(message, null, 2);
       }
@@ -37,9 +37,15 @@ class Logger {
           debug.disable();
         }
       } else {
+        if (force) {
+          debug.enable(this.namespace);
+        }
         const log = debug(this.rootNamespace).extend(level);
         log.log = console.log.bind(console);
         log(colorFunc(message));
+        if (!enabled) {
+          debug.disable();
+        }
       }
 
       if (this.isLogging && !this.isDisabled()) {
@@ -48,8 +54,8 @@ class Logger {
     }
   }
 
-  log(message: string) {
-    this.logMessage('log', message, chalk.white);
+  info(message: string, force = false) {
+    this.logMessage('log', message, chalk.white, force);
   }
 
   warn(message: string) {

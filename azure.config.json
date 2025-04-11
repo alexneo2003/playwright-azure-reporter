@@ -1,6 +1,0 @@
-{
-  "token": "token",
-  "orgUrl": "https://dev.azure.com/your-organization-name",
-  "projectName": "SampleProject",
-  "testPlanId": 44
-}

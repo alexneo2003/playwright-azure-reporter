@@ -317,7 +317,9 @@ test.describe('Reporter constructor', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
-    expect(result.output).toContain('azure:pw:error Project SampleSample does not exist. Reporting is disabled.');
+    expect(result.output).toContain(
+      'azure:pw:error Error: Project SampleSample does not exist. Reporting is disabled.'
+    );
     expect(result.output).not.toContain('azure:pw:log Using run');
     expect(result.output).not.toContain('azure:pw:log Start publishing:');
     expect(result.exitCode).toBe(1);

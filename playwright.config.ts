@@ -1,9 +1,11 @@
-import { PlaywrightTestConfig } from '@playwright/test';
+import type { PlaywrightTestConfig } from '@playwright/test';
 import { TestCase } from '@playwright/test/reporter';
 import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
+import dotenv from 'dotenv';
 
-import azureConfig from './azure.config.json';
-import { AzureReporterOptions } from './dist/playwright-azure-reporter';
+import type { AzureReporterOptions } from './dist/playwright-azure-reporter';
+
+dotenv.config();
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -23,10 +25,10 @@ const config: PlaywrightTestConfig = {
     [
       './src/playwright-azure-reporter.ts',
       {
-        orgUrl: azureConfig.orgUrl,
-        token: azureConfig.token,
-        planId: azureConfig.testPlanId,
-        projectName: azureConfig.projectName,
+        orgUrl: process.env.AZURE_PW_ORGURL,
+        token: process.env.AZURE_PW_TOKEN,
+        planId: process.env.AZURE_PW_PLANID ? parseInt(process.env.AZURE_PW_PLANID) : 1,
+        projectName: process.env.AZURE_PW_PROJECTNAME,
         environment: 'AQA',
         testRunTitle: 'Playwright Test Run',
         uploadAttachments: true,
