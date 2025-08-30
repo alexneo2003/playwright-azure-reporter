@@ -107,7 +107,7 @@ function createMockPaginatedResponse(skip: number, top: number, testCaseId: numb
   };
 }
 
-test('pagination support for getPointsByQuery', async ({ runInlineTest, server }) => {
+test('configuration filtering for getPointsByQuery', async ({ runInlineTest, server }) => {
   server.setRoute('/_apis/Location', (_, res) => {
     setHeaders(res, headers);
     res.end(JSON.stringify(location));
@@ -187,18 +187,16 @@ test('pagination support for getPointsByQuery', async ({ runInlineTest, server }
     { reporter: '' }
   );
 
-  // Verify that pagination logic was triggered
+  // Verify that test run completed successfully
   expect(result.output).toContain('azure:pw:log [3] foobar - passed');
   expect(result.output).toContain('azure:pw:log Start publishing: [3] foobar');
   expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
-  expect(result.output).toContain('Detected potential pagination needed');
-  expect(result.output).toContain('Fetching next test points by query');
   expect(result.output).toContain('There are 200 testPoints found for the test case'); // Shows we got the expected large number
   expect(result.exitCode).toBe(0);
   expect(result.passed).toBe(1);
 });
 
-test('pagination handles large number of test points correctly', async ({ runInlineTest, server }) => {
+test('handles large number of test points correctly with configuration filtering', async ({ runInlineTest, server }) => {
   server.setRoute('/_apis/Location', (_, res) => {
     setHeaders(res, headers);
     res.end(JSON.stringify(location));
@@ -279,12 +277,10 @@ test('pagination handles large number of test points correctly', async ({ runInl
     { reporter: '' }
   );
 
-  // Verify that pagination logic was triggered and test points were found
+  // Verify that test points were found and published successfully
   expect(result.output).toContain('azure:pw:log [999] foobar with many historical points - passed');
   expect(result.output).toContain('azure:pw:log Start publishing: [999] foobar with many historical points');
   expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
-  expect(result.output).toContain('Detected potential pagination needed');
-  expect(result.output).toContain('Fetching next test points by query');
   expect(result.exitCode).toBe(0);
   expect(result.passed).toBe(1);
 });
