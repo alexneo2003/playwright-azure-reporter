@@ -172,6 +172,7 @@ class AzureDevOpsReporter implements Reporter {
   private _resolveTestPointsByRootSuite: (value: boolean) => void = () => {};
   private _rejectTestPointsByRootSuite: (reason: any) => void = () => {};
   private _uploadLogs = false;
+  private _configurationNames: string[] = [];
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -320,9 +321,42 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  private async _fetchConfigurationNames(): Promise<void> {
+    if (!this._testRunConfig?.configurationIds || this._testRunConfig.configurationIds.length === 0) {
+      return;
+    }
+
+    try {
+      const testPlanApi = await this._connection.getTestPlanApi();
+      const configurationNames: string[] = [];
+
+      for (const configId of this._testRunConfig.configurationIds) {
+        try {
+          const configuration = await testPlanApi.getTestConfigurationById(this._projectName, configId);
+          if (configuration?.name) {
+            configurationNames.push(configuration.name);
+            this._logger?.debug(`Fetched configuration: ${configuration.name} (ID: ${configId})`);
+          }
+        } catch (error: any) {
+          this._logger?.warn(`Failed to fetch configuration with ID ${configId}: ${error.message}`);
+        }
+      }
+
+      this._configurationNames = configurationNames;
+      if (configurationNames.length > 0) {
+        this._logger?.info(`Loaded ${configurationNames.length} configuration(s): ${configurationNames.join(', ')}`);
+      }
+    } catch (error: any) {
+      this._logger?.error(`Failed to fetch configuration names: ${error.message}`);
+    }
+  }
+
   async onBegin(): Promise<void> {
     if (this._isDisabled) return;
     try {
+      // Fetch configuration names early if configuration IDs are provided
+      await this._fetchConfigurationNames();
+
       if (this._isExistingTestRun) {
         this._resolveRunId(this._testRunId!);
         this._logger?.info(`Using existing run ${this._testRunId} to publish test results`);
@@ -774,28 +808,30 @@ class AzureDevOpsReporter implements Reporter {
     try {
       const testcaseIds = testsResults.map((t) => t.testCase.testCaseIds.map((id) => parseInt(id, 10))).flat();
       
-      // First, try the original approach for backward compatibility
-      const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: { testcaseIds: testcaseIds },
+      // Build points filter with configuration names if available
+      const pointsFilter: TestInterfaces.PointsFilter = { 
+        testcaseIds: testcaseIds 
       };
+      
+      // Add configuration names filter if available
+      if (this._configurationNames.length > 0) {
+        pointsFilter.configurationNames = this._configurationNames;
+        this._logger?.info(`Filtering test points by configurations: ${this._configurationNames.join(', ')}`);
+      }
+      
+      const pointsQuery: TestInterfaces.TestPointsQuery = {
+        pointsFilter: pointsFilter,
+      };
+      
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
         pointsQuery,
         this._projectName
       );
       
-      let allTestPoints: TestInterfaces.TestPoint[] = pointsQueryResult?.points || [];
-      
-      // If we got a partial result (exactly the page size), try pagination to get more
-      if (allTestPoints.length > 0 && allTestPoints.length % 200 === 0) {
-        this._logger?.info(chalk.gray('Detected potential pagination needed, fetching remaining test points.'));
-        const additionalPoints = await this._recursivelyGetPointsByQuery(this._projectName, { testcaseIds: testcaseIds }, allTestPoints.length);
-        allTestPoints = allTestPoints.concat(additionalPoints);
-      }
-      
-      if (allTestPoints && allTestPoints.length > 0) {
+      if (pointsQueryResult.points) {
         for (const testsResult of testsResults) {
-          const currentTestPoints = this._filterTestTestPoints(allTestPoints, testsResult);
+          const currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);
 
           if (currentTestPoints && currentTestPoints.length > 0) {
             const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
@@ -900,38 +936,6 @@ class AzureDevOpsReporter implements Reporter {
         const nextPoints = await this._recursivelyGetPointsList(project, planId, suiteId, pointsList?.continuationToken);
         points = points.concat(nextPoints);
       }
-      return points;
-    } catch (error: any) {
-      this._logger?.error(error.stack);
-      return [];
-    }
-  };
-
-  // prettier-ignore
-  private _recursivelyGetPointsByQuery = async (project: string, pointsFilter: TestInterfaces.PointsFilter, skip = 0, pageSize = 200): Promise<TestInterfaces.TestPoint[]> => {
-    this._logger?.info(chalk.gray(`${skip > 0 ? 'Fetching next' : 'Fetching'} test points by query (skip: ${skip}).`));
-    try {
-      if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      
-      const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: pointsFilter,
-      };
-      
-      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
-        pointsQuery,
-        project,
-        skip,
-        pageSize
-      );
-      
-      let points: TestInterfaces.TestPoint[] = pointsQueryResult?.points || [];
-      
-      // If we got a full page, there might be more results
-      if (points.length === pageSize) {
-        const nextPoints = await this._recursivelyGetPointsByQuery(project, pointsFilter, skip + pageSize, pageSize);
-        points = points.concat(nextPoints);
-      }
-      
       return points;
     } catch (error: any) {
       this._logger?.error(error.stack);
