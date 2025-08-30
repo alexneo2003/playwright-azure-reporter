@@ -774,14 +774,24 @@ class AzureDevOpsReporter implements Reporter {
     try {
       const testcaseIds = testsResults.map((t) => t.testCase.testCaseIds.map((id) => parseInt(id, 10))).flat();
       
-      // Build the points filter with configuration names if available to reduce response size
-      const pointsFilter: TestInterfaces.PointsFilter = { testcaseIds: testcaseIds };
-      if (this._testRunConfig && this._testRunConfig.configurationIds?.length) {
-        // Get configuration names for filtering (this will reduce the number of test points returned)
-        pointsFilter.configurationNames = await this._getConfigurationNames(this._testRunConfig.configurationIds);
+      // First, try the original approach for backward compatibility
+      const pointsQuery: TestInterfaces.TestPointsQuery = {
+        pointsFilter: { testcaseIds: testcaseIds },
+      };
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
+        pointsQuery,
+        this._projectName
+      );
+      
+      let allTestPoints: TestInterfaces.TestPoint[] = pointsQueryResult?.points || [];
+      
+      // If we got a partial result (exactly the page size), try pagination to get more
+      if (allTestPoints.length > 0 && allTestPoints.length % 200 === 0) {
+        this._logger?.info(chalk.gray('Detected potential pagination needed, fetching remaining test points.'));
+        const additionalPoints = await this._recursivelyGetPointsByQuery(this._projectName, { testcaseIds: testcaseIds }, allTestPoints.length);
+        allTestPoints = allTestPoints.concat(additionalPoints);
       }
-
-      const allTestPoints = await this._recursivelyGetPointsByQuery(this._projectName, pointsFilter);
       
       if (allTestPoints && allTestPoints.length > 0) {
         for (const testsResult of testsResults) {
@@ -928,20 +938,6 @@ class AzureDevOpsReporter implements Reporter {
       return [];
     }
   };
-
-  private async _getConfigurationNames(configurationIds: number[]): Promise<string[]> {
-    try {
-      if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      
-      // For now, we'll return empty array as getting configuration names requires additional API calls
-      // This is an optimization that can be added later if needed
-      // The main fix is the pagination support in _recursivelyGetPointsByQuery
-      return [];
-    } catch (error: any) {
-      this._logger?.error(`Failed to get configuration names: ${error.message}`);
-      return [];
-    }
-  }
 
   private async _retrieveTestPoints() {
     if (this._rootSuiteId) {
