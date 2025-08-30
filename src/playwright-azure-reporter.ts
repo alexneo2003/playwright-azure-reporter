@@ -773,17 +773,19 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       const testcaseIds = testsResults.map((t) => t.testCase.testCaseIds.map((id) => parseInt(id, 10))).flat();
-      const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: { testcaseIds: testcaseIds },
-      };
-      if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
-        pointsQuery,
-        this._projectName
-      );
-      if (pointsQueryResult.points) {
+      
+      // Build the points filter with configuration names if available to reduce response size
+      const pointsFilter: TestInterfaces.PointsFilter = { testcaseIds: testcaseIds };
+      if (this._testRunConfig && this._testRunConfig.configurationIds?.length) {
+        // Get configuration names for filtering (this will reduce the number of test points returned)
+        pointsFilter.configurationNames = await this._getConfigurationNames(this._testRunConfig.configurationIds);
+      }
+
+      const allTestPoints = await this._recursivelyGetPointsByQuery(this._projectName, pointsFilter);
+      
+      if (allTestPoints && allTestPoints.length > 0) {
         for (const testsResult of testsResults) {
-          const currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);
+          const currentTestPoints = this._filterTestTestPoints(allTestPoints, testsResult);
 
           if (currentTestPoints && currentTestPoints.length > 0) {
             const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
@@ -894,6 +896,52 @@ class AzureDevOpsReporter implements Reporter {
       return [];
     }
   };
+
+  // prettier-ignore
+  private _recursivelyGetPointsByQuery = async (project: string, pointsFilter: TestInterfaces.PointsFilter, skip = 0, pageSize = 200): Promise<TestInterfaces.TestPoint[]> => {
+    this._logger?.info(chalk.gray(`${skip > 0 ? 'Fetching next' : 'Fetching'} test points by query (skip: ${skip}).`));
+    try {
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      
+      const pointsQuery: TestInterfaces.TestPointsQuery = {
+        pointsFilter: pointsFilter,
+      };
+      
+      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
+        pointsQuery,
+        project,
+        skip,
+        pageSize
+      );
+      
+      let points: TestInterfaces.TestPoint[] = pointsQueryResult?.points || [];
+      
+      // If we got a full page, there might be more results
+      if (points.length === pageSize) {
+        const nextPoints = await this._recursivelyGetPointsByQuery(project, pointsFilter, skip + pageSize, pageSize);
+        points = points.concat(nextPoints);
+      }
+      
+      return points;
+    } catch (error: any) {
+      this._logger?.error(error.stack);
+      return [];
+    }
+  };
+
+  private async _getConfigurationNames(configurationIds: number[]): Promise<string[]> {
+    try {
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      
+      // For now, we'll return empty array as getting configuration names requires additional API calls
+      // This is an optimization that can be added later if needed
+      // The main fix is the pagination support in _recursivelyGetPointsByQuery
+      return [];
+    } catch (error: any) {
+      this._logger?.error(`Failed to get configuration names: ${error.message}`);
+      return [];
+    }
+  }
 
   private async _retrieveTestPoints() {
     if (this._rootSuiteId) {
