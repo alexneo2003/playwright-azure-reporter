@@ -46,17 +46,17 @@ const TEST_RUN_RESULTS_3_VALID_RESPONSE_PATH = path.join(
 
 // Mock response for pagination test - simulates first page of results
 function createMockPaginatedResponse(skip: number, top: number, testCaseId: number, forceFullPage = false) {
-  const points = [];
+  const points: any[] = [];
   // Simulate having 500 test points total, return based on skip/top
   const totalPoints = 500;
   const startId = skip + 1;
   let endId = Math.min(skip + top, totalPoints);
-  
+
   // For the first call (skip=0), always return exactly 200 to trigger pagination
   if (skip === 0 && forceFullPage) {
     endId = 200;
   }
-  
+
   for (let i = startId; i <= endId; i++) {
     points.push({
       id: i,
@@ -102,8 +102,8 @@ function createMockPaginatedResponse(skip: number, top: number, testCaseId: numb
   return {
     points: points,
     pointsFilter: {
-      testcaseIds: [testCaseId]
-    }
+      testcaseIds: [testCaseId],
+    },
   };
 }
 
@@ -141,11 +141,11 @@ test('configuration filtering for getPointsByQuery', async ({ runInlineTest, ser
   // This route will be called and should return exactly 200 items to trigger pagination logic
   server.setRoute('/SampleSample/_apis/test/Points', async (req, res) => {
     setHeaders(res, headers);
-    
+
     // Get request body to find testCaseId
     const body = await getRequestBody(req);
     const testCaseId = body.pointsFilter?.testcaseIds?.[0] || 3;
-    
+
     // Return exactly 200 test points to trigger pagination detection
     const response = createMockPaginatedResponse(0, 200, testCaseId, true);
     res.end(JSON.stringify(response));
@@ -196,7 +196,10 @@ test('configuration filtering for getPointsByQuery', async ({ runInlineTest, ser
   expect(result.passed).toBe(1);
 });
 
-test('handles large number of test points correctly with configuration filtering', async ({ runInlineTest, server }) => {
+test('handles large number of test points correctly with configuration filtering', async ({
+  runInlineTest,
+  server,
+}) => {
   server.setRoute('/_apis/Location', (_, res) => {
     setHeaders(res, headers);
     res.end(JSON.stringify(location));
@@ -230,11 +233,11 @@ test('handles large number of test points correctly with configuration filtering
   // Simulate the scenario where the desired test point comes after many pages of results
   server.setRoute('/SampleSample/_apis/test/Points', async (req, res) => {
     setHeaders(res, headers);
-    
+
     // Get request body to find testCaseId
     const body = await getRequestBody(req);
     const testCaseId = body.pointsFilter?.testcaseIds?.[0] || 999;
-    
+
     // Return exactly 200 points to trigger pagination, but all with the correct test case ID
     // This simulates a scenario where pagination is needed but the results are found
     const response = createMockPaginatedResponse(0, 200, testCaseId, true);

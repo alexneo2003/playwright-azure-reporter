@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-
 export function setHeaders(response, headers) {
   const head = {};
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
