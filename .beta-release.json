@@ -1,0 +1,15 @@
+{
+  "betaRelease": {
+    "enabled": true,
+    "branches": ["main"],
+    "versionStrategy": "patch",
+    "publishTag": "beta",
+    "createGitHubRelease": true,
+    "prBetaRelease": {
+      "enabled": true,
+      "versionStrategy": "patch",
+      "publishTag": "pr-beta",
+      "createGitHubRelease": false
+    }
+  }
+}
