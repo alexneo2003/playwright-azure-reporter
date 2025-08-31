@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-control-regex */
 import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
@@ -30,7 +28,7 @@ enum EAzureTestStatuses {
   timedOut = 'Timeout',
   interrupted = 'Aborted',
 }
-
+// eslint-disable-next-line
 const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 
 type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
@@ -87,7 +85,7 @@ interface ValueEntity {
   url: string;
   lastUpdatedBy: LastUpdatedBy;
 }
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+
 interface Project {}
 interface TestRun {
   id: string;
@@ -597,7 +595,10 @@ class AzureDevOpsReporter implements Reporter {
     } else {
       if (test.annotations) {
         test.annotations.forEach((annotation) => {
-          const matches = this._extractMatchesFromObject(annotation);
+          const matches = this._extractMatchesFromObject({
+            type: annotation.type,
+            description: annotation.description || '',
+          });
           this._logger?.debug(`[_getCaseIds] Matches found in annotation: ${matches}`);
           matches.forEach((id) => {
             const ids = id.split(',').map((id) => id.trim());
@@ -807,28 +808,28 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       const testcaseIds = testsResults.map((t) => t.testCase.testCaseIds.map((id) => parseInt(id, 10))).flat();
-      
+
       // Build points filter with configuration names if available
-      const pointsFilter: TestInterfaces.PointsFilter = { 
-        testcaseIds: testcaseIds 
+      const pointsFilter: TestInterfaces.PointsFilter = {
+        testcaseIds: testcaseIds,
       };
-      
+
       // Add configuration names filter if available
       if (this._configurationNames.length > 0) {
         pointsFilter.configurationNames = this._configurationNames;
         this._logger?.info(`Filtering test points by configurations: ${this._configurationNames.join(', ')}`);
       }
-      
+
       const pointsQuery: TestInterfaces.TestPointsQuery = {
         pointsFilter: pointsFilter,
       };
-      
+
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
         pointsQuery,
         this._projectName
       );
-      
+
       if (pointsQueryResult.points) {
         for (const testsResult of testsResults) {
           const currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);

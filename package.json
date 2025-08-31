@@ -5,10 +5,10 @@
   "main": "./dist/playwright-azure-reporter.js",
   "types": "./dist/playwright-azure-reporter.d.js",
   "scripts": {
-    "test": "npx playwright test",
-    "test:reporter": "npx playwright test -c tests/reporter/playwright.config.ts",
-    "lint": "tsc --noEmit --skipLibCheck --pretty && eslint --ext .ts .",
-    "lint:fix": "eslint src/** tests/** --ext .ts --fix",
+    "test": "yarn playwright test",
+    "test:reporter": "yarn playwright test -c tests/reporter/playwright.config.ts",
+    "lint": "tsc --noEmit --skipLibCheck --pretty && eslint . --quiet",
+    "lint:fix": "eslint . --fix --quiet",
     "format": "prettier --write src/**/*.ts tests/**/*.ts",
     "build": "yarn run clean && yarn run dev",
     "clean": "rm -rf dist || true",
@@ -16,8 +16,7 @@
     "dev": "yarn run lint && tsc",
     "dev:watch": "nodemon",
     "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md",
-    "release": "conventional-github-releaser -p angular",
-    "prepare": "husky install"
+    "release": "conventional-github-releaser -p angular"
   },
   "nodemonConfig": {
     "watch": [
@@ -52,7 +51,7 @@
   },
   "license": "ISC",
   "dependencies": {
-    "azure-devops-node-api": "^14.0.2",
+    "azure-devops-node-api": "^15.1.1",
     "azure-pipelines-task-lib": "^4.15.0",
     "chalk": "4.1.2",
     "debug": "^4.3.4",
@@ -60,24 +59,24 @@
     "mime": "^3.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.44.1",
+    "@playwright/test": "^1.55.0",
     "@types/debug": "^4.1.7",
     "@types/mime": "^3.0.1",
-    "@types/node": "^20.11.25",
-    "@typescript-eslint/eslint-plugin": "^5.57.1",
-    "@typescript-eslint/eslint-plugin-tslint": "^5.57.1",
-    "@typescript-eslint/parser": "^5.57.1",
-    "eslint": "^8.37.0",
+    "@types/node": "^20.16.5",
+    "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "@typescript-eslint/eslint-plugin-tslint": "^7.0.2",
+    "@typescript-eslint/parser": "^8.41.0",
+    "eslint": "^9.34.0",
     "eslint-config-standard": "^17.0.0",
     "eslint-plugin-import": "^2.27.5",
-    "eslint-plugin-jsdoc": "^40.1.1",
-    "eslint-plugin-n": "^15.7.0",
+    "eslint-plugin-jsdoc": "^54.1.1",
+    "eslint-plugin-n": "^17.21.3",
     "eslint-plugin-prefer-arrow": "^1.2.3",
-    "eslint-plugin-promise": "^6.1.1",
-    "eslint-plugin-simple-import-sort": "^10.0.0",
-    "husky": "^8.0.3",
-    "prettier": "^2.8.7",
+    "eslint-plugin-promise": "^7.2.1",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "husky": "^9.1.7",
+    "prettier": "^3.6.2",
     "socksv5": "^0.0.6",
-    "typescript": "^5.0.3"
+    "typescript": "^5.9.2"
   }
 }
