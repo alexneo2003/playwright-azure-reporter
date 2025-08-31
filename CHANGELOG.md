@@ -1,6 +1,33 @@
 ## 1.13.1 (2025-08-31)
 
 
+### Bug Fixes
+
+* add missing conventional-changelog dependencies for beta release ([caa4a7b](https://github.com/alexneo2003/playwright-azure-reporter/commit/caa4a7bce86f31684bef69c8610f7b52ab8a272f))
+
+
+
+## 1.13.1 (2025-08-31)
+
+
+### Bug Fixes
+
+* add missing conventional-changelog dependencies for beta release ([caa4a7b](https://github.com/alexneo2003/playwright-azure-reporter/commit/caa4a7bce86f31684bef69c8610f7b52ab8a272f))
+
+
+
+## 1.13.1 (2025-08-31)
+
+
+### Bug Fixes
+
+* add missing conventional-changelog dependencies for beta release ([caa4a7b](https://github.com/alexneo2003/playwright-azure-reporter/commit/caa4a7bce86f31684bef69c8610f7b52ab8a272f))
+
+
+
+## 1.13.1 (2025-08-31)
+
+
 
 ## 1.13.1 (2025-08-31)
 
