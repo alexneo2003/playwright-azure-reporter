@@ -1,0 +1,9 @@
+{
+  "betaRelease": {
+    "enabled": true,
+    "branches": ["main"],
+    "versionStrategy": "patch",
+    "publishTag": "beta",
+    "createGitHubRelease": true
+  }
+}
