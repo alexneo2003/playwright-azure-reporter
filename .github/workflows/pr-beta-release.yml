@@ -1,0 +1,309 @@
+name: PR Beta Release
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  check-conditions:
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check.outputs.should-release }}
+      pr-number: ${{ steps.check.outputs.pr-number }}
+      pr-head-ref: ${{ steps.check.outputs.pr-head-ref }}
+      pr-head-sha: ${{ steps.check.outputs.pr-head-sha }}
+    steps:
+      - name: Check comment and PR conditions
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if comment contains beta release trigger
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          if [[ "$COMMENT_BODY" =~ /beta-release|/release-beta ]]; then
+            echo "Beta release comment detected"
+            
+            # Get PR details
+            PR_NUMBER="${{ github.event.issue.number }}"
+            PR_DATA=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER)
+            PR_STATE=$(echo "$PR_DATA" | jq -r .state)
+            PR_HEAD_REF=$(echo "$PR_DATA" | jq -r .head.ref)
+            PR_HEAD_SHA=$(echo "$PR_DATA" | jq -r .head.sha)
+            
+            if [[ "$PR_STATE" == "open" ]]; then
+              echo "should-release=true" >> $GITHUB_OUTPUT
+              echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
+              echo "pr-head-ref=$PR_HEAD_REF" >> $GITHUB_OUTPUT
+              echo "pr-head-sha=$PR_HEAD_SHA" >> $GITHUB_OUTPUT
+              echo "PR #$PR_NUMBER is open and ready for beta release"
+            else
+              echo "should-release=false" >> $GITHUB_OUTPUT
+              echo "PR #$PR_NUMBER is not open"
+            fi
+          else
+            echo "should-release=false" >> $GITHUB_OUTPUT
+            echo "Comment does not contain beta release trigger"
+          fi
+
+  pr-beta-release:
+    needs: check-conditions
+    if: needs.check-conditions.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Checkout PR source branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-conditions.outputs.pr-head-sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load beta release configuration
+        id: config
+        run: |
+          if [ -f ".beta-release.json" ]; then
+            echo "Configuration file found"
+            ENABLED=$(jq -r '.betaRelease.enabled // true' .beta-release.json)
+            PR_BETA_ENABLED=$(jq -r '.betaRelease.prBetaRelease.enabled // false' .beta-release.json)
+            VERSION_STRATEGY=$(jq -r '.betaRelease.prBetaRelease.versionStrategy // "patch"' .beta-release.json)
+            PUBLISH_TAG=$(jq -r '.betaRelease.prBetaRelease.publishTag // "pr-beta"' .beta-release.json)
+            CREATE_GITHUB_RELEASE=$(jq -r '.betaRelease.prBetaRelease.createGitHubRelease // false' .beta-release.json)
+            
+            echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
+            echo "pr-beta-enabled=$PR_BETA_ENABLED" >> $GITHUB_OUTPUT
+            echo "version-strategy=$VERSION_STRATEGY" >> $GITHUB_OUTPUT
+            echo "publish-tag=$PUBLISH_TAG" >> $GITHUB_OUTPUT
+            echo "create-github-release=$CREATE_GITHUB_RELEASE" >> $GITHUB_OUTPUT
+            
+            echo "Beta release enabled: $ENABLED"
+            echo "PR Beta release enabled: $PR_BETA_ENABLED"
+          else
+            echo "No configuration file found, using defaults"
+            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "pr-beta-enabled=false" >> $GITHUB_OUTPUT
+            echo "version-strategy=patch" >> $GITHUB_OUTPUT
+            echo "publish-tag=pr-beta" >> $GITHUB_OUTPUT
+            echo "create-github-release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if PR beta release should proceed
+        if: steps.config.outputs.enabled != 'true' || steps.config.outputs.pr-beta-enabled != 'true'
+        run: |
+          echo "PR beta release is disabled"
+          echo "General beta enabled: ${{ steps.config.outputs.enabled }}"
+          echo "PR beta enabled: ${{ steps.config.outputs.pr-beta-enabled }}"
+          
+          # Comment on PR about disabled feature
+          gh pr comment ${{ needs.check-conditions.outputs.pr-number }} --body "❌ **PR Beta Release Disabled**
+
+          PR beta releases are currently disabled in the configuration. To enable:
+
+          1. Update \`.beta-release.json\`:
+          \`\`\`json
+          {
+            \"betaRelease\": {
+              \"enabled\": true,
+              \"prBetaRelease\": {
+                \"enabled\": true
+              }
+            }
+          }
+          \`\`\`
+
+          2. Commit and push the configuration change
+          3. Comment \`/beta-release\` again to trigger the release"
+          
+          exit 1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '>=18'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@alex_neo'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: yarn --ignore-engines
+
+      - name: Build project
+        run: yarn build
+
+      - name: Generate PR beta version
+        id: version
+        run: |
+          # Get current version from source branch
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          
+          VERSION_STRATEGY="${{ steps.config.outputs.version-strategy }}"
+          PR_NUMBER="${{ needs.check-conditions.outputs.pr-number }}"
+          PR_HEAD_REF="${{ needs.check-conditions.outputs.pr-head-ref }}"
+          
+          echo "Version strategy: $VERSION_STRATEGY"
+          echo "PR number: $PR_NUMBER"
+          echo "PR branch: $PR_HEAD_REF"
+          
+          # Remove any existing prerelease suffixes and create PR-specific beta
+          BASE_VERSION=$(echo "$CURRENT_VERSION" | sed 's/-.*$//')
+          
+          # Increment version based on strategy
+          IFS='.' read -ra VERSION_PARTS <<< "$BASE_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+          
+          case $VERSION_STRATEGY in
+            "major")
+              NEW_MAJOR=$((MAJOR + 1))
+              NEW_BASE_VERSION="$NEW_MAJOR.0.0"
+              ;;
+            "minor")
+              NEW_MINOR=$((MINOR + 1))
+              NEW_BASE_VERSION="$MAJOR.$NEW_MINOR.0"
+              ;;
+            *)
+              NEW_PATCH=$((PATCH + 1))
+              NEW_BASE_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+              ;;
+          esac
+          
+          # Create PR-specific beta version with branch name and commit sha
+          SAFE_BRANCH_NAME=$(echo "$PR_HEAD_REF" | sed 's/[^a-zA-Z0-9.-]/-/g' | sed 's/--*/-/g')
+          SHORT_SHA=$(echo "${{ needs.check-conditions.outputs.pr-head-sha }}" | cut -c1-7)
+          NEW_VERSION="$NEW_BASE_VERSION-pr$PR_NUMBER.$SAFE_BRANCH_NAME.$SHORT_SHA"
+          
+          echo "New version: $NEW_VERSION"
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "base-version=$NEW_BASE_VERSION" >> $GITHUB_OUTPUT
+          
+          # Update package.json version
+          npm version "$NEW_VERSION" --no-git-tag-version
+
+      - name: Build for publishing
+        run: yarn build
+
+      - name: Publish to npm
+        run: yarn publish --access public --tag ${{ steps.config.outputs.publish-tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.config.outputs.create-github-release == 'true'
+        run: |
+          gh release create "v${{ steps.version.outputs.new-version }}" \
+            --title "PR Beta Release v${{ steps.version.outputs.new-version }}" \
+            --notes "🧪 **PR Beta Release v${{ steps.version.outputs.new-version }}**
+
+          This is a beta release for testing changes in PR #${{ needs.check-conditions.outputs.pr-number }}.
+
+          **Source Branch:** \`${{ needs.check-conditions.outputs.pr-head-ref }}\`
+          **Base Version:** \`${{ steps.version.outputs.base-version }}\`
+
+          **Installation:**
+          \`\`\`bash
+          npm install @alex_neo/playwright-azure-reporter@${{ steps.config.outputs.publish-tag }}
+          \`\`\`
+
+          **Specific Version:**
+          \`\`\`bash
+          npm install @alex_neo/playwright-azure-reporter@${{ steps.version.outputs.new-version }}
+          \`\`\`
+
+          **⚠️ Warning:** This is a beta release for testing purposes only. Do not use in production." \
+            --prerelease
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on PR with release info
+        run: |
+          gh pr comment ${{ needs.check-conditions.outputs.pr-number }} --body "🎉 **Beta Release Published!**
+
+          **Version:** \`v${{ steps.version.outputs.new-version }}\`
+          **npm Tag:** \`${{ steps.config.outputs.publish-tag }}\`
+
+          ## 📦 Installation
+
+          **Install latest from this PR:**
+          \`\`\`bash
+          npm install @alex_neo/playwright-azure-reporter@${{ steps.config.outputs.publish-tag }}
+          \`\`\`
+
+          **Install specific version:**
+          \`\`\`bash
+          npm install @alex_neo/playwright-azure-reporter@${{ steps.version.outputs.new-version }}
+          \`\`\`
+
+          ## 🧪 Testing
+
+          This beta release contains the changes from this PR and can be used to test the functionality before merging.
+
+          **Branch:** \`${{ needs.check-conditions.outputs.pr-head-ref }}\`
+          **Commit:** \`${{ needs.check-conditions.outputs.pr-head-sha }}\`
+
+          ---
+          *To trigger another beta release after pushing new changes, comment \`/beta-release\` again.*"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-opened-info:
+    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'synchronize')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check if PR beta release is available
+        id: check-config
+        run: |
+          if [ -f ".beta-release.json" ]; then
+            ENABLED=$(jq -r '.betaRelease.enabled // true' .beta-release.json)
+            PR_BETA_ENABLED=$(jq -r '.betaRelease.prBetaRelease.enabled // false' .beta-release.json)
+            echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
+            echo "pr-beta-enabled=$PR_BETA_ENABLED" >> $GITHUB_OUTPUT
+          else
+            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "pr-beta-enabled=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR about beta release availability
+        if: steps.check-config.outputs.enabled == 'true' && steps.check-config.outputs.pr-beta-enabled == 'true' && github.event.action == 'opened'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "🚀 **Beta Release Available**
+
+          This repository supports beta releases for pull requests! You can create a beta version to test your changes before merging.
+
+          ## 📦 How to Create a Beta Release
+
+          Comment \`/beta-release\` on this PR to trigger an automatic beta release that includes all changes from this branch.
+
+          The beta release will:
+          - 📦 Publish to npm with a unique version based on your branch
+          - 🏷️ Use the \`pr-beta\` tag for easy installation
+          - 💬 Post installation instructions back to this PR
+
+          ## 🧪 Testing Your Changes
+
+          Once published, you and others can install and test your changes with:
+          \`\`\`bash
+          npm install @alex_neo/playwright-azure-reporter@pr-beta
+          \`\`\`
+
+          ---
+          *This message appears because PR beta releases are enabled in the repository configuration.*"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
