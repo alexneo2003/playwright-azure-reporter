@@ -3,28 +3,155 @@ name: Publish
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version_strategy:
+        description: 'Version increment strategy (patch, minor, major)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load release configuration
+        id: config
+        run: |
+          if [ -f ".beta-release.json" ]; then
+            echo "Configuration file found"
+            # Use stable release configuration if available, otherwise use defaults
+            ENABLED=$(jq -r '.stableRelease.enabled // true' .beta-release.json)
+            VERSION_STRATEGY=$(jq -r '.stableRelease.versionStrategy // "patch"' .beta-release.json)
+            PUBLISH_TAG=$(jq -r '.stableRelease.publishTag // "latest"' .beta-release.json)
+            CREATE_GITHUB_RELEASE=$(jq -r '.stableRelease.createGitHubRelease // true' .beta-release.json)
+            
+            echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
+            echo "version-strategy=$VERSION_STRATEGY" >> $GITHUB_OUTPUT
+            echo "publish-tag=$PUBLISH_TAG" >> $GITHUB_OUTPUT
+            echo "create-github-release=$CREATE_GITHUB_RELEASE" >> $GITHUB_OUTPUT
+            
+            echo "Stable release enabled: $ENABLED"
+            echo "Version strategy: $VERSION_STRATEGY"
+            echo "Publish tag: $PUBLISH_TAG"
+          else
+            echo "No configuration file found, using defaults"
+            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "version-strategy=patch" >> $GITHUB_OUTPUT
+            echo "publish-tag=latest" >> $GITHUB_OUTPUT
+            echo "create-github-release=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '>=18'
           registry-url: 'https://registry.npmjs.org'
-          # Defaults to the user or organization that owns the workflow file
           scope: '@alex_neo'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Install dependencies
         run: yarn --ignore-engines
-      - name: Build
+
+      - name: Build project
         run: yarn build
-      - name: Publish
-        run: yarn publish --access public
+
+      - name: Generate release version
+        id: version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          
+          VERSION_STRATEGY="${{ github.event.inputs.version_strategy || steps.config.outputs.version-strategy }}"
+          echo "Version strategy: $VERSION_STRATEGY"
+          
+          # Parse version and increment based on strategy
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]%%-*}  # Remove any pre-release suffix
+          
+          case $VERSION_STRATEGY in
+            "major")
+              NEW_MAJOR=$((MAJOR + 1))
+              NEW_VERSION="$NEW_MAJOR.0.0"
+              ;;
+            "minor")
+              NEW_MINOR=$((MINOR + 1))
+              NEW_VERSION="$MAJOR.$NEW_MINOR.0"
+              ;;
+            *)
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+              ;;
+          esac
+          
+          echo "New version: $NEW_VERSION"
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          # Update package.json version
+          npm version "$NEW_VERSION" --no-git-tag-version
+
+      - name: Update changelog
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          # Generate changelog for the new release version
+          npx conventional-changelog -p angular -i CHANGELOG.md -s
+
+      - name: Commit version changes
+        if: github.event_name == 'workflow_dispatch' && steps.version.outputs.new-version
+        run: |
+          git add package.json CHANGELOG.md
+          git commit -m "chore: release v${{ steps.version.outputs.new-version }}"
+          git tag "v${{ steps.version.outputs.new-version }}"
+
+      - name: Push changes
+        if: github.event_name == 'workflow_dispatch' && steps.version.outputs.new-version
+        run: |
+          git push origin main
+          git push origin "v${{ steps.version.outputs.new-version }}"
+
+      - name: Build for publishing
+        run: yarn build
+
+      - name: Publish to npm
+        run: yarn publish --access public --tag ${{ steps.config.outputs.publish-tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.config.outputs.create-github-release == 'true' && (github.event_name == 'release' || steps.version.outputs.new-version)
+        run: |
+          RELEASE_VERSION="${{ steps.version.outputs.new-version || github.event.release.tag_name }}"
+          gh release create "$RELEASE_VERSION" \
+            --title "Release $RELEASE_VERSION" \
+            --notes "🎉 **Release $RELEASE_VERSION**
+
+          This is a stable release.
+
+          **Installation:**
+          \`\`\`bash
+          npm install @alex_neo/playwright-azure-reporter@${{ steps.config.outputs.publish-tag }}
+          \`\`\`" \
+            --latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
