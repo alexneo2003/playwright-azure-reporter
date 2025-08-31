@@ -4,6 +4,12 @@
     "branches": ["main"],
     "versionStrategy": "patch",
     "publishTag": "beta",
-    "createGitHubRelease": true
+    "createGitHubRelease": true,
+    "prBetaRelease": {
+      "enabled": true,
+      "versionStrategy": "patch",
+      "publishTag": "pr-beta",
+      "createGitHubRelease": false
+    }
   }
 }
