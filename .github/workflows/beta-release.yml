@@ -1,10 +1,6 @@
 name: Beta Release
 
 on:
-  push:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
     inputs:
       branch:
@@ -13,38 +9,33 @@ on:
         default: 'main'
 
 jobs:
-  check-pr-merge:
+  test:
     runs-on: ubuntu-latest
-    outputs:
-      is-pr-merge: ${{ steps.check.outputs.is-pr-merge }}
-      pr-number: ${{ steps.check.outputs.pr-number }}
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      
-      - name: Check if this is a PR merge
-        id: check
-        run: |
-          # Get the commit message of the current commit
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          echo "Commit message: $COMMIT_MSG"
-          
-          # Check if it's a merge commit from a PR
-          if [[ "$COMMIT_MSG" =~ ^Merge\ pull\ request\ #([0-9]+) ]]; then
-            echo "is-pr-merge=true" >> $GITHUB_OUTPUT
-            PR_NUMBER=$(echo "$COMMIT_MSG" | sed -n 's/^Merge pull request #\([0-9]*\).*/\1/p')
-            echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
-            echo "This is a PR merge commit (PR #$PR_NUMBER)"
-          else
-            echo "is-pr-merge=false" >> $GITHUB_OUTPUT
-            echo "This is not a PR merge commit"
-          fi
+          ref: ${{ github.event.inputs.branch || 'main' }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '>=18'
+
+      - name: Install dependencies
+        run: yarn --ignore-engines
+
+      - name: Build project
+        run: yarn build
+
+      - name: Run tests
+        run: yarn test:reporter
 
   beta-release:
-    needs: check-pr-merge
-    if: needs.check-pr-merge.outputs.is-pr-merge == 'true' || github.event_name == 'workflow_dispatch'
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -63,48 +54,24 @@ jobs:
           if [ -f ".beta-release.json" ]; then
             echo "Configuration file found"
             ENABLED=$(jq -r '.betaRelease.enabled // true' .beta-release.json)
-            BRANCHES=$(jq -r '.betaRelease.branches // ["main"] | join(",")' .beta-release.json)
             VERSION_STRATEGY=$(jq -r '.betaRelease.versionStrategy // "patch"' .beta-release.json)
             PUBLISH_TAG=$(jq -r '.betaRelease.publishTag // "beta"' .beta-release.json)
             CREATE_GITHUB_RELEASE=$(jq -r '.betaRelease.createGitHubRelease // true' .beta-release.json)
             
             echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
-            echo "branches=$BRANCHES" >> $GITHUB_OUTPUT
             echo "version-strategy=$VERSION_STRATEGY" >> $GITHUB_OUTPUT
             echo "publish-tag=$PUBLISH_TAG" >> $GITHUB_OUTPUT
             echo "create-github-release=$CREATE_GITHUB_RELEASE" >> $GITHUB_OUTPUT
             
             echo "Beta release enabled: $ENABLED"
-            echo "Configured branches: $BRANCHES"
-            echo "Current branch: ${{ github.ref_name }}"
-            
-            # Check if current branch is in the allowed branches
-            IFS=',' read -ra BRANCH_ARRAY <<< "$BRANCHES"
-            BRANCH_ALLOWED=false
-            for branch in "${BRANCH_ARRAY[@]}"; do
-              if [[ "${{ github.ref_name }}" == "$branch" ]]; then
-                BRANCH_ALLOWED=true
-                break
-              fi
-            done
-            echo "branch-allowed=$BRANCH_ALLOWED" >> $GITHUB_OUTPUT
+            echo "Version strategy: $VERSION_STRATEGY"
           else
             echo "No configuration file found, using defaults"
             echo "enabled=true" >> $GITHUB_OUTPUT
-            echo "branches=main" >> $GITHUB_OUTPUT
             echo "version-strategy=patch" >> $GITHUB_OUTPUT
             echo "publish-tag=beta" >> $GITHUB_OUTPUT
             echo "create-github-release=true" >> $GITHUB_OUTPUT
-            echo "branch-allowed=true" >> $GITHUB_OUTPUT
           fi
-
-      - name: Check if beta release should proceed
-        if: steps.config.outputs.enabled != 'true' || steps.config.outputs.branch-allowed != 'true'
-        run: |
-          echo "Beta release is disabled or branch not allowed for beta releases"
-          echo "Enabled: ${{ steps.config.outputs.enabled }}"
-          echo "Branch allowed: ${{ steps.config.outputs.branch-allowed }}"
-          exit 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -126,7 +93,6 @@ jobs:
 
       - name: Generate beta version
         id: version
-        if: steps.config.outputs.enabled == 'true' && steps.config.outputs.branch-allowed == 'true'
         run: |
           # Get current version
           CURRENT_VERSION=$(node -p "require('./package.json').version")
@@ -172,42 +138,37 @@ jobs:
           npm version "$NEW_VERSION" --no-git-tag-version
 
       - name: Update changelog
-        if: steps.config.outputs.enabled == 'true' && steps.config.outputs.branch-allowed == 'true'
         run: |
           # Generate changelog for the new beta version
           npx conventional-changelog -p angular -i CHANGELOG.md -s --first-release
 
       - name: Commit version changes
-        if: steps.config.outputs.enabled == 'true' && steps.config.outputs.branch-allowed == 'true'
         run: |
           git add package.json CHANGELOG.md
           git commit -m "chore: release v${{ steps.version.outputs.new-version }}"
           git tag "v${{ steps.version.outputs.new-version }}"
 
       - name: Push changes
-        if: steps.config.outputs.enabled == 'true' && steps.config.outputs.branch-allowed == 'true'
         run: |
           git push origin ${{ github.event.inputs.branch || 'main' }}
           git push origin "v${{ steps.version.outputs.new-version }}"
 
       - name: Build for publishing
-        if: steps.config.outputs.enabled == 'true' && steps.config.outputs.branch-allowed == 'true'
         run: yarn build
 
       - name: Publish to npm
-        if: steps.config.outputs.enabled == 'true' && steps.config.outputs.branch-allowed == 'true'
         run: yarn publish --access public --tag ${{ steps.config.outputs.publish-tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
-        if: steps.config.outputs.enabled == 'true' && steps.config.outputs.branch-allowed == 'true' && steps.config.outputs.create-github-release == 'true'
+        if: steps.config.outputs.create-github-release == 'true'
         run: |
           gh release create "v${{ steps.version.outputs.new-version }}" \
             --title "Release v${{ steps.version.outputs.new-version }}" \
             --notes "🎉 **Beta Release v${{ steps.version.outputs.new-version }}**
 
-          This is an automated beta release triggered by merging PR #${{ needs.check-pr-merge.outputs.pr-number || 'manual' }}.
+          This is a manual beta release.
 
           **Installation:**
           \`\`\`bash
