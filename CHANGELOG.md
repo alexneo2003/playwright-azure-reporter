@@ -1,3 +1,35 @@
+## [1.13.2-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.1...v1.13.2-beta.0) (2025-08-31)
+
+
+### Bug Fixes
+
+* add missing conventional-changelog dependencies for beta release ([caa4a7b](https://github.com/alexneo2003/playwright-azure-reporter/commit/caa4a7bce86f31684bef69c8610f7b52ab8a272f))
+
+
+### Features
+
+* add automatic beta releases for PR merges ([39191e8](https://github.com/alexneo2003/playwright-azure-reporter/commit/39191e8ac0ea20e1f133e2c173146993b93e4dd2))
+* add PR beta release functionality with manual confirmation ([4c61d21](https://github.com/alexneo2003/playwright-azure-reporter/commit/4c61d21db88a4954cce5131fd0349818925435df))
+* add repository owner permission check for PR beta releases ([1242bb3](https://github.com/alexneo2003/playwright-azure-reporter/commit/1242bb322783f40e80f89bd75f58c1ede2ee6def))
+
+
+
+## [1.13.2-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.1...v1.13.2-beta.0) (2025-08-31)
+
+
+### Bug Fixes
+
+* add missing conventional-changelog dependencies for beta release ([caa4a7b](https://github.com/alexneo2003/playwright-azure-reporter/commit/caa4a7bce86f31684bef69c8610f7b52ab8a272f))
+
+
+### Features
+
+* add automatic beta releases for PR merges ([39191e8](https://github.com/alexneo2003/playwright-azure-reporter/commit/39191e8ac0ea20e1f133e2c173146993b93e4dd2))
+* add PR beta release functionality with manual confirmation ([4c61d21](https://github.com/alexneo2003/playwright-azure-reporter/commit/4c61d21db88a4954cce5131fd0349818925435df))
+* add repository owner permission check for PR beta releases ([1242bb3](https://github.com/alexneo2003/playwright-azure-reporter/commit/1242bb322783f40e80f89bd75f58c1ede2ee6def))
+
+
+
 ## [1.13.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.1...v1.13.2) (2025-08-31)
 
 
