@@ -25,23 +25,59 @@ jobs:
           COMMENT_BODY="${{ github.event.comment.body }}"
           if [[ "$COMMENT_BODY" =~ /beta-release|/release-beta ]]; then
             echo "Beta release comment detected"
-            
-            # Get PR details
-            PR_NUMBER="${{ github.event.issue.number }}"
-            PR_DATA=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER)
-            PR_STATE=$(echo "$PR_DATA" | jq -r .state)
-            PR_HEAD_REF=$(echo "$PR_DATA" | jq -r .head.ref)
-            PR_HEAD_SHA=$(echo "$PR_DATA" | jq -r .head.sha)
-            
-            if [[ "$PR_STATE" == "open" ]]; then
-              echo "should-release=true" >> $GITHUB_OUTPUT
-              echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
-              echo "pr-head-ref=$PR_HEAD_REF" >> $GITHUB_OUTPUT
-              echo "pr-head-sha=$PR_HEAD_SHA" >> $GITHUB_OUTPUT
-              echo "PR #$PR_NUMBER is open and ready for beta release"
+
+            # Check if the commenter is the repository owner or has write access
+            COMMENT_USER="${{ github.event.comment.user.login }}"
+            REPO_OWNER="${{ github.repository_owner }}"
+
+            echo "Comment user: $COMMENT_USER"
+            echo "Repository owner: $REPO_OWNER"
+
+            # Check if user is the repository owner
+            if [[ "$COMMENT_USER" == "$REPO_OWNER" ]]; then
+              echo "User is repository owner - access granted"
+              HAS_PERMISSION=true
+            else
+              # Check if user has write permissions to the repository
+              PERMISSION_RESPONSE=$(gh api repos/${{ github.repository }}/collaborators/$COMMENT_USER/permission || echo '{"permission":"none"}')
+              USER_PERMISSION=$(echo "$PERMISSION_RESPONSE" | jq -r .permission)
+              echo "User permission level: $USER_PERMISSION"
+
+              if [[ "$USER_PERMISSION" == "admin" || "$USER_PERMISSION" == "write" ]]; then
+                echo "User has write/admin permissions - access granted"
+                HAS_PERMISSION=true
+              else
+                echo "User does not have sufficient permissions - access denied"
+                HAS_PERMISSION=false
+              fi
+            fi
+
+            if [[ "$HAS_PERMISSION" == "true" ]]; then
+              # Get PR details
+              PR_NUMBER="${{ github.event.issue.number }}"
+              PR_DATA=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER)
+              PR_STATE=$(echo "$PR_DATA" | jq -r .state)
+              PR_HEAD_REF=$(echo "$PR_DATA" | jq -r .head.ref)
+              PR_HEAD_SHA=$(echo "$PR_DATA" | jq -r .head.sha)
+
+              if [[ "$PR_STATE" == "open" ]]; then
+                echo "should-release=true" >> $GITHUB_OUTPUT
+                echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
+                echo "pr-head-ref=$PR_HEAD_REF" >> $GITHUB_OUTPUT
+                echo "pr-head-sha=$PR_HEAD_SHA" >> $GITHUB_OUTPUT
+                echo "PR #$PR_NUMBER is open and ready for beta release"
+              else
+                echo "should-release=false" >> $GITHUB_OUTPUT
+                echo "PR #$PR_NUMBER is not open"
+              fi
             else
               echo "should-release=false" >> $GITHUB_OUTPUT
-              echo "PR #$PR_NUMBER is not open"
+              echo "User $COMMENT_USER does not have permission to trigger beta releases"
+
+              # Comment on PR about insufficient permissions
+              gh pr comment ${{ github.event.issue.number }} --body "❌ **Permission Denied**
+
+              @$COMMENT_USER, you don't have sufficient permissions to trigger beta releases. Only the repository owner or users with write access can trigger beta releases by commenting \`/beta-release\`."
             fi
           else
             echo "should-release=false" >> $GITHUB_OUTPUT
@@ -74,13 +110,13 @@ jobs:
             VERSION_STRATEGY=$(jq -r '.betaRelease.prBetaRelease.versionStrategy // "patch"' .beta-release.json)
             PUBLISH_TAG=$(jq -r '.betaRelease.prBetaRelease.publishTag // "pr-beta"' .beta-release.json)
             CREATE_GITHUB_RELEASE=$(jq -r '.betaRelease.prBetaRelease.createGitHubRelease // false' .beta-release.json)
-            
+
             echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
             echo "pr-beta-enabled=$PR_BETA_ENABLED" >> $GITHUB_OUTPUT
             echo "version-strategy=$VERSION_STRATEGY" >> $GITHUB_OUTPUT
             echo "publish-tag=$PUBLISH_TAG" >> $GITHUB_OUTPUT
             echo "create-github-release=$CREATE_GITHUB_RELEASE" >> $GITHUB_OUTPUT
-            
+
             echo "Beta release enabled: $ENABLED"
             echo "PR Beta release enabled: $PR_BETA_ENABLED"
           else
@@ -98,7 +134,7 @@ jobs:
           echo "PR beta release is disabled"
           echo "General beta enabled: ${{ steps.config.outputs.enabled }}"
           echo "PR beta enabled: ${{ steps.config.outputs.pr-beta-enabled }}"
-          
+
           # Comment on PR about disabled feature
           gh pr comment ${{ needs.check-conditions.outputs.pr-number }} --body "❌ **PR Beta Release Disabled**
 
@@ -118,7 +154,7 @@ jobs:
 
           2. Commit and push the configuration change
           3. Comment \`/beta-release\` again to trigger the release"
-          
+
           exit 1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -147,24 +183,24 @@ jobs:
           # Get current version from source branch
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           echo "Current version: $CURRENT_VERSION"
-          
+
           VERSION_STRATEGY="${{ steps.config.outputs.version-strategy }}"
           PR_NUMBER="${{ needs.check-conditions.outputs.pr-number }}"
           PR_HEAD_REF="${{ needs.check-conditions.outputs.pr-head-ref }}"
-          
+
           echo "Version strategy: $VERSION_STRATEGY"
           echo "PR number: $PR_NUMBER"
           echo "PR branch: $PR_HEAD_REF"
-          
+
           # Remove any existing prerelease suffixes and create PR-specific beta
           BASE_VERSION=$(echo "$CURRENT_VERSION" | sed 's/-.*$//')
-          
+
           # Increment version based on strategy
           IFS='.' read -ra VERSION_PARTS <<< "$BASE_VERSION"
           MAJOR=${VERSION_PARTS[0]}
           MINOR=${VERSION_PARTS[1]}
           PATCH=${VERSION_PARTS[2]}
-          
+
           case $VERSION_STRATEGY in
             "major")
               NEW_MAJOR=$((MAJOR + 1))
@@ -179,16 +215,16 @@ jobs:
               NEW_BASE_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
               ;;
           esac
-          
+
           # Create PR-specific beta version with branch name and commit sha
           SAFE_BRANCH_NAME=$(echo "$PR_HEAD_REF" | sed 's/[^a-zA-Z0-9.-]/-/g' | sed 's/--*/-/g')
           SHORT_SHA=$(echo "${{ needs.check-conditions.outputs.pr-head-sha }}" | cut -c1-7)
           NEW_VERSION="$NEW_BASE_VERSION-pr$PR_NUMBER.$SAFE_BRANCH_NAME.$SHORT_SHA"
-          
+
           echo "New version: $NEW_VERSION"
           echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "base-version=$NEW_BASE_VERSION" >> $GITHUB_OUTPUT
-          
+
           # Update package.json version
           npm version "$NEW_VERSION" --no-git-tag-version
 
