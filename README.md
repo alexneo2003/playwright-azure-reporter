@@ -327,3 +327,62 @@ Reporter options (\* - required):
       CI: 'true'
       AZUREPWDEBUG: '1'
   ```
+
+## Beta Releases
+
+This project supports automatic beta releases when pull requests are merged into configured branches. Beta releases allow you to test new features and bug fixes before they are included in stable releases.
+
+### How Beta Releases Work
+
+- **Automatic Triggering**: Beta releases are automatically triggered when pull requests are merged into the main branch (or other configured branches)
+- **Version Strategy**: Beta versions follow semantic versioning with a `-beta.X` suffix (e.g., `1.13.2-beta.0`)
+- **Installation**: Install beta releases using the beta tag: `npm install @alex_neo/playwright-azure-reporter@beta`
+
+### Configuration
+
+You can customize beta release behavior by creating a `.beta-release.json` file in your project root:
+
+```json
+{
+  "betaRelease": {
+    "enabled": true,
+    "branches": ["main", "develop"],
+    "versionStrategy": "patch",
+    "publishTag": "beta",
+    "createGitHubRelease": true
+  }
+}
+```
+
+**Configuration Options:**
+
+- `enabled` (boolean): Enable or disable automatic beta releases. Default: `true`
+- `branches` (string[]): List of branches that trigger beta releases when PRs are merged. Default: `["main"]`
+- `versionStrategy` (string): Version increment strategy - `"patch"`, `"minor"`, or `"major"`. Default: `"patch"`
+- `publishTag` (string): npm dist-tag for publishing beta releases. Default: `"beta"`
+- `createGitHubRelease` (boolean): Whether to create GitHub releases for beta versions. Default: `true`
+
+### Installing Beta Releases
+
+To install the latest beta release:
+
+```bash
+npm install @alex_neo/playwright-azure-reporter@beta
+```
+
+To install a specific beta version:
+
+```bash
+npm install @alex_neo/playwright-azure-reporter@1.13.2-beta.0
+```
+
+### Manual Beta Release
+
+You can also trigger beta releases manually using the GitHub Actions workflow:
+
+1. Go to the Actions tab in the repository
+2. Select "Beta Release" workflow
+3. Click "Run workflow"
+4. Optionally specify a different branch
+
+**Note:** Beta releases are for testing purposes and may contain experimental features. For production use, always use the latest stable release.
