@@ -1,6 +1,3 @@
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-undef */
-
 /**
  * Copyright (c) Microsoft Corporation.
  *
@@ -30,7 +27,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import type { CommonFixtures, CommonWorkerFixtures, TestChildProcess } from '../config/commonFixtures';
+import type { CommonFixtures, CommonWorkerFixtures } from '../config/commonFixtures';
 import { commonFixtures } from '../config/commonFixtures';
 import { ServerFixtures, serverFixtures, ServerWorkerOptions } from '../config/serverFixtures';
 
@@ -59,11 +56,6 @@ export type RunResult = {
   results: any[];
 };
 
-type TSCResult = {
-  output: string;
-  exitCode: number;
-};
-
 export type Files = { [key: string]: string | Buffer };
 type Params = { [key: string]: string | number | boolean | string[] };
 
@@ -87,6 +79,7 @@ export async function writeFiles(testInfo: TestInfo, files: Files, initial: bool
   await Promise.all(
     Object.keys(files).map(async (name) => {
       const fullName = path.join(baseDir, name);
+      if (files[name] === undefined) return;
       await fs.promises.mkdir(path.dirname(fullName), { recursive: true });
       await fs.promises.writeFile(fullName, files[name]);
     })
@@ -117,7 +110,7 @@ async function runPlaywrightTest(
   if (options.additionalArgs) args.push(...options.additionalArgs);
 
   const cwd = options.cwd ? path.resolve(baseDir, options.cwd) : baseDir;
-  // eslint-disable-next-line prefer-const
+
   let { exitCode, output } = await runPlaywrightCommand(
     childProcess,
     cwd,
@@ -256,24 +249,8 @@ export const test = base
     },
   });
 
-const TSCONFIG = {
-  compilerOptions: {
-    target: 'ESNext',
-    moduleResolution: 'node',
-    module: 'commonjs',
-    strict: true,
-    esModuleInterop: true,
-    allowSyntheticDefaultImports: true,
-    rootDir: '.',
-    lib: ['esnext', 'dom', 'DOM.Iterable'],
-    noEmit: true,
-  },
-  exclude: ['node_modules'],
-};
-
 export { expect };
 
-// eslint-disable-next-line no-control-regex
 const asciiRegex = new RegExp(
   '[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))',
   'g'

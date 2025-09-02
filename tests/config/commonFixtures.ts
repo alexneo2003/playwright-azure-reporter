@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-undef */
 /**
  * Copyright (c) Microsoft Corporation.
  *
@@ -97,6 +95,7 @@ export class TestChildProcess {
       if (process.platform === 'win32')
         execSync(`taskkill /pid ${this.process.pid} /T /F /FI "MEMUSAGE gt 0"`, { stdio: 'ignore' });
       else process.kill(-this.process.pid, signal);
+      // eslint-disable-next-line
     } catch (e) {
       // the process might have already stopped
     }

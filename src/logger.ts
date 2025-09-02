@@ -20,7 +20,7 @@ class Logger {
     return process.env.AZURE_PW_DISABLED === 'true';
   }
 
-  // eslint-disable-next-line no-unused-vars
+   
   private logMessage(level: string, message: string, colorFunc: (msg: string) => string, force = false) {
     if (!this.isDisabled() || force) {
       if (typeof message === 'object') {

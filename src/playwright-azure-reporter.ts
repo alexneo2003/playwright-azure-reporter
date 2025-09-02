@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-control-regex */
 import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
@@ -30,7 +28,7 @@ enum EAzureTestStatuses {
   timedOut = 'Timeout',
   interrupted = 'Aborted',
 }
-
+// eslint-disable-next-line
 const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 
 type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
@@ -87,7 +85,7 @@ interface ValueEntity {
   url: string;
   lastUpdatedBy: LastUpdatedBy;
 }
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+
 interface Project {}
 interface TestRun {
   id: string;
@@ -172,6 +170,7 @@ class AzureDevOpsReporter implements Reporter {
   private _resolveTestPointsByRootSuite: (value: boolean) => void = () => {};
   private _rejectTestPointsByRootSuite: (reason: any) => void = () => {};
   private _uploadLogs = false;
+  private _configurationNames: string[] = [];
 
   public constructor(options: AzureReporterOptions) {
     this._runIdPromise = new Promise<number | void>((resolve, reject) => {
@@ -320,9 +319,42 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  private async _fetchConfigurationNames(): Promise<void> {
+    if (!this._testRunConfig?.configurationIds || this._testRunConfig.configurationIds.length === 0) {
+      return;
+    }
+
+    try {
+      const testPlanApi = await this._connection.getTestPlanApi();
+      const configurationNames: string[] = [];
+
+      for (const configId of this._testRunConfig.configurationIds) {
+        try {
+          const configuration = await testPlanApi.getTestConfigurationById(this._projectName, configId);
+          if (configuration?.name) {
+            configurationNames.push(configuration.name);
+            this._logger?.debug(`Fetched configuration: ${configuration.name} (ID: ${configId})`);
+          }
+        } catch (error: any) {
+          this._logger?.warn(`Failed to fetch configuration with ID ${configId}: ${error.message}`);
+        }
+      }
+
+      this._configurationNames = configurationNames;
+      if (configurationNames.length > 0) {
+        this._logger?.info(`Loaded ${configurationNames.length} configuration(s): ${configurationNames.join(', ')}`);
+      }
+    } catch (error: any) {
+      this._logger?.error(`Failed to fetch configuration names: ${error.message}`);
+    }
+  }
+
   async onBegin(): Promise<void> {
     if (this._isDisabled) return;
     try {
+      // Fetch configuration names early if configuration IDs are provided
+      await this._fetchConfigurationNames();
+
       if (this._isExistingTestRun) {
         this._resolveRunId(this._testRunId!);
         this._logger?.info(`Using existing run ${this._testRunId} to publish test results`);
@@ -563,7 +595,10 @@ class AzureDevOpsReporter implements Reporter {
     } else {
       if (test.annotations) {
         test.annotations.forEach((annotation) => {
-          const matches = this._extractMatchesFromObject(annotation);
+          const matches = this._extractMatchesFromObject({
+            type: annotation.type,
+            description: annotation.description || '',
+          });
           this._logger?.debug(`[_getCaseIds] Matches found in annotation: ${matches}`);
           matches.forEach((id) => {
             const ids = id.split(',').map((id) => id.trim());
@@ -773,14 +808,28 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       const testcaseIds = testsResults.map((t) => t.testCase.testCaseIds.map((id) => parseInt(id, 10))).flat();
-      const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: { testcaseIds: testcaseIds },
+
+      // Build points filter with configuration names if available
+      const pointsFilter: TestInterfaces.PointsFilter = {
+        testcaseIds: testcaseIds,
       };
+
+      // Add configuration names filter if available
+      if (this._configurationNames.length > 0) {
+        pointsFilter.configurationNames = this._configurationNames;
+        this._logger?.info(`Filtering test points by configurations: ${this._configurationNames.join(', ')}`);
+      }
+
+      const pointsQuery: TestInterfaces.TestPointsQuery = {
+        pointsFilter: pointsFilter,
+      };
+
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
         pointsQuery,
         this._projectName
       );
+
       if (pointsQueryResult.points) {
         for (const testsResult of testsResults) {
           const currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);

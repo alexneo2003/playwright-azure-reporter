@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 /**
  * Copyright 2017 Google Inc. All rights reserved.
  * Modifications copyright (c) Microsoft Corporation.
@@ -69,7 +68,7 @@ export class TestServer {
     if (sslOptions) this._server = https.createServer(sslOptions, this._onRequest.bind(this));
     else this._server = http.createServer(this._onRequest.bind(this));
     this._server.on('connection', (socket) => this._onSocket(socket));
-    this._server.on('upgrade', async (request, socket, head) => {
+    this._server.on('upgrade', async (request, socket) => {
       const pathname = url.parse(request.url!).path;
       if (pathname === '/ws-401') {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized body');
@@ -184,7 +183,7 @@ export class TestServer {
       else throw error;
     });
     (request as any).postBody = new Promise((resolve) => {
-      const chunks: Buffer[] = [];
+      const chunks: Uint8Array[] = [];
       request.on('data', (chunk) => {
         chunks.push(chunk);
       });
