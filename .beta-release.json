@@ -11,5 +11,11 @@
       "publishTag": "pr-beta",
       "createGitHubRelease": false
     }
+  },
+  "stableRelease": {
+    "enabled": true,
+    "versionStrategy": "patch",
+    "publishTag": "latest",
+    "createGitHubRelease": true
   }
 }
