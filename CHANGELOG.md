@@ -1,3 +1,21 @@
+## [1.13.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.1...v1.13.3) (2025-09-02)
+
+
+### Bug Fixes
+
+* add missing conventional-changelog and conventional-github-releaser dependencies ([93bfa1c](https://github.com/alexneo2003/playwright-azure-reporter/commit/93bfa1c45eaff6205b5bf0333cca246976159028))
+
+
+
+## [1.13.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.1...v1.13.3) (2025-09-02)
+
+
+### Bug Fixes
+
+* add missing conventional-changelog and conventional-github-releaser dependencies ([93bfa1c](https://github.com/alexneo2003/playwright-azure-reporter/commit/93bfa1c45eaff6205b5bf0333cca246976159028))
+
+
+
 ## [1.13.2-beta.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.0...v1.13.2-beta.1) (2025-08-31)
 
 
