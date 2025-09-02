@@ -104,16 +104,16 @@ jobs:
           # Get current version
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           echo "Current version: $CURRENT_VERSION"
-          
+
           VERSION_STRATEGY="${{ github.event.inputs.version_strategy || steps.config.outputs.version-strategy }}"
           echo "Version strategy: $VERSION_STRATEGY"
-          
+
           # Parse version and increment based on strategy
           IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
           MAJOR=${VERSION_PARTS[0]}
           MINOR=${VERSION_PARTS[1]}
           PATCH=${VERSION_PARTS[2]%%-*}  # Remove any pre-release suffix
-          
+
           case $VERSION_STRATEGY in
             "major")
               NEW_MAJOR=$((MAJOR + 1))
@@ -128,10 +128,10 @@ jobs:
               NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
               ;;
           esac
-          
+
           echo "New version: $NEW_VERSION"
           echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          
+
           # Update package.json version
           npm version "$NEW_VERSION" --no-git-tag-version
 
@@ -166,7 +166,7 @@ jobs:
         if: steps.config.outputs.create-github-release == 'true' && steps.version.outputs.new-version
         run: |
           RELEASE_VERSION="${{ steps.version.outputs.new-version }}"
-          
+
           # Extract changelog content for the current version
           CHANGELOG_CONTENT=""
           if [ -f "CHANGELOG.md" ]; then
@@ -178,24 +178,24 @@ jobs:
               CHANGELOG_CONTENT=$(awk '/^## \[/ {if(first++) exit} first {print}' CHANGELOG.md | tail -n +2 || echo "")
             fi
           fi
-          
+
           # Create release description
           RELEASE_NOTES="🎉 **Release $RELEASE_VERSION**
 
-This is a stable release.
+            This is a stable release.
 
-**Installation:**
-\`\`\`bash
-npm install @alex_neo/playwright-azure-reporter@${{ steps.config.outputs.publish-tag }}
-\`\`\`"
+            **Installation:**
+            \`\`\`bash
+            npm install @alex_neo/playwright-azure-reporter@${{ steps.config.outputs.publish-tag }}
+            \`\`\`"
 
           # Add changelog content if available
           if [ ! -z "$CHANGELOG_CONTENT" ]; then
             RELEASE_NOTES="$RELEASE_NOTES
 
-## Changes
+            ## Changes
 
-$CHANGELOG_CONTENT"
+            $CHANGELOG_CONTENT"
           fi
 
           gh release create "v$RELEASE_VERSION" \

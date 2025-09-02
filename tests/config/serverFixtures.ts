@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 /**
  * Copyright 2017 Google Inc. All rights reserved.
  * Modifications copyright (c) Microsoft Corporation.
@@ -18,20 +17,17 @@
 
 import { Fixtures } from '@playwright/test';
 import path from 'path';
-import socks from 'socksv5';
 
-import { TestServer } from './TestServer';
+import { TestServer } from './testserver';
 
 export type ServerWorkerOptions = {
   loopback?: string;
-  __servers: ServerFixtures & { socksServer: socks.SocksServer };
+  __servers: ServerFixtures;
 };
 
 export type ServerFixtures = {
   server: TestServer;
   httpsServer: TestServer;
-  socksPort: number;
-  asset: (p: string) => string;
 };
 
 export const serverFixtures: Fixtures<ServerFixtures, ServerWorkerOptions> = {
@@ -49,37 +45,12 @@ export const serverFixtures: Fixtures<ServerFixtures, ServerWorkerOptions> = {
       const httpsServer = await TestServer.createHTTPS(assetsPath, httpsPort, loopback);
       httpsServer.enableHTTPCache(cachedPath);
 
-      const socksServer = socks.createServer((info, accept, deny) => {
-        const socket = accept(true);
-        if (socket) {
-          // Catch and ignore ECONNRESET errors.
-          socket.on('error', () => {});
-          const body = '<html><title>Served by the SOCKS proxy</title></html>';
-          socket.end(
-            [
-              'HTTP/1.1 200 OK',
-              'Connection: close',
-              'Content-Type: text/html',
-              'Content-Length: ' + Buffer.byteLength(body),
-              '',
-              body,
-            ].join('\r\n')
-          );
-        }
-      });
-      const socksPort = port + 2;
-      socksServer.listen(socksPort, 'localhost');
-      socksServer.useAuth(socks.auth.None());
-
       await run({
-        asset: (p: string) => path.join(__dirname, '..', 'assets', ...p.split('/')),
         server,
         httpsServer,
-        socksPort,
-        socksServer,
       });
 
-      await Promise.all([server.stop(), httpsServer.stop(), socksServer.close()]);
+      await Promise.all([server.stop(), httpsServer.stop()]);
     },
     { scope: 'worker' },
   ],
@@ -92,13 +63,5 @@ export const serverFixtures: Fixtures<ServerFixtures, ServerWorkerOptions> = {
   httpsServer: async ({ __servers }, run) => {
     __servers.httpsServer.reset();
     await run(__servers.httpsServer);
-  },
-
-  socksPort: async ({ __servers }, run) => {
-    await run(__servers.socksPort);
-  },
-
-  asset: async ({ __servers }, run) => {
-    await run(__servers.asset);
   },
 };
