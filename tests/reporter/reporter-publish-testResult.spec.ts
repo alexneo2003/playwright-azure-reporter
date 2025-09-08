@@ -406,6 +406,11 @@ test.describe('Publish results - testResult', () => {
       server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
     });
 
+    server.setRoute('/_apis/testplan', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, path.join(__dirname, 'assets', 'azure-reporter', 'azureTestPlanOptionsResponse.json'));
+    });
+
     server.setRoute('/_apis/projects/SampleSample', (req, res) => {
       setHeaders(res, headers);
       server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
@@ -430,6 +435,19 @@ test.describe('Publish results - testResult', () => {
       setHeaders(res, headers);
       server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
     });
+
+    const testConfigs = [
+      { id: 1, name: 'Windows 10' },
+      { id: 2, name: 'Chrome' },
+      { id: 3, name: 'Firefox' },
+    ];
+    for (const { id, name } of testConfigs) {
+      // Mock configuration API responses with names
+      server.setRoute(`/SampleSample/_apis/testplan/Configurations/${id}`, (req, res) => {
+        setHeaders(res, headers);
+        res.end(JSON.stringify({ id, name }));
+      });
+    }
 
     const result = await runInlineTest(
       {
@@ -457,7 +475,10 @@ test.describe('Publish results - testResult', () => {
         });
       `,
       },
-      { reporter: '' }
+      { reporter: '' },
+      {
+        AZUREPWDEBUG: '1',
+      }
     );
     expect(result.output).not.toContain('Failed request: (401)');
     expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);

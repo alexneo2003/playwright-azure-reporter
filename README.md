@@ -215,14 +215,11 @@ Reporter options (\* - required):
 - `testCaseIdMatcher` [string|RegExp|string[]|RegExp[]] - A string or a regular expression to match the name of the test case to extract the test case id. Default: `/\[([\d,\s]+)\]/`
 
   #### Example Test Titles
-
   - Test title: `Test case @tag1=123`
-
     - `testCaseIdMatcher: /@tag1=(\d+)/`
     - Extracted tags: `['123']`
 
   - Test title: `Test case @TestCase=123 [@TestCase=456]`
-
     - `testCaseIdMatcher: /@TestCase=(\d+)/`
     - Extracted tags: `['123', '456']`
 
@@ -259,18 +256,18 @@ Reporter options (\* - required):
   **Pay attention that if you use `testCaseIdZone: 'annotation'` and `testCaseIdMatcher` is not defined, the reporter will not extract test case IDs from the test annotations. You should define `testCaseIdMatcher` to extract test case IDs from the test annotations. Matcher should match the annotation type not the annotation description!**
 
   #### Example Usage
-
   - Test title: `Test case [12345]`
-
     - `testCaseIdZone: 'title'`
     - Extracted tags: `['12345']`
 
   - Test annotations:
+
     ```typescript
     test('Test case', { annotations: [{ type: 'TestCase', description: '12345' }] }, () => {
       expect(true).toBe(true);
     });
     ```
+
     - `testCaseIdZone: 'annotation'`
     - `testCaseIdMatcher: /(TestCase)/`
     - Extracted tags: `['12345']`]
@@ -295,6 +292,36 @@ Reporter options (\* - required):
   > ```
   >
   > And when you run tests with the `Smoke Tests` project without specifying the `rootSuiteId`, the test results will be published under the root suite `Automation Tests` for test cases in the `Smoke Tests` suite and `Integration Tests` suite. It will look like you have redundant results inside the test run for the same test cases in different suites. To avoid this, you can specify the `rootSuiteId: 5` to publish test results only under the `Smoke Tests` suite.
+
+- `testCaseSummary` [object] - Configuration for generating a summary report of test cases that don't match the test plan. Default: `undefined`.
+  - `enabled` [boolean] - Enable test case summary generation. Default: `false`.
+  - `outputPath` [string] - File path where the summary report will be written. If not specified, no file will be created. Default: `undefined`.
+  - `consoleOutput` [boolean] - Whether to output the summary to console. Default: `true`.
+  - `publishToRun` [boolean] - When `true`, the generated summary (Markdown) is uploaded as an attachment to the Azure DevOps test run (if a run ID exists). Default: `false`. Works together with `outputPath` (file still written if specified) and `consoleOutput` (console printing still occurs unless you explicitly set `consoleOutput: false`).
+
+  **Example:**
+
+  ```typescript
+  testCaseSummary: {
+    enabled: true,
+    outputPath: './test-case-summary.md',
+  consoleOutput: true,
+  publishToRun: true
+  }
+  ```
+
+  When enabled, the reporter will track test cases that have test case IDs but no matching test points in the Azure DevOps test plan. This helps identify:
+  - Test cases that don't exist in the specified test plan
+  - Test cases that are not assigned to the correct configurations
+  - Test cases that are not included in the test plan suite structure
+
+  The summary includes recommendations for resolving issues, including specific configuration IDs and names when available.
+
+  **Behavior matrix:**
+  - Only `consoleOutput: true`: Printed to console only
+  - `outputPath` + `consoleOutput: true`: Printed and written to file
+  - `publishToRun: true` + (optional `outputPath`): Uploaded as run attachment; also printed and/or written depending on the other flags
+  - Set any channel off explicitly by setting its flag to `false` (e.g. `consoleOutput: false` to suppress console)
 
 ## Usefulness
 
