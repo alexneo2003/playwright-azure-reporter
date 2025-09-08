@@ -305,8 +305,8 @@ Reporter options (\* - required):
   testCaseSummary: {
     enabled: true,
     outputPath: './test-case-summary.md',
-  consoleOutput: true,
-  publishToRun: true
+    consoleOutput: true,
+    publishToRun: true
   }
   ```
 
