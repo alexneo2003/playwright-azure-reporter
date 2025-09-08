@@ -1,6 +1,6 @@
 module.exports = function (PORT) {
   return {
-    count: 221,
+    count: 232,
     value: [
       {
         id: 'fb13a388-40dd-4a04-b530-013a739c72ef',
@@ -13,6 +13,11 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: '6b10046c-829d-44d2-8a1d-02f88f4ff032',
+        name: 'TokenIssue',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: '01e4817c-857e-485c-9401-0334a33200da',
         name: 'dedup',
         locationUrl: `http://localhost:${PORT}`,
@@ -20,6 +25,11 @@ module.exports = function (PORT) {
       {
         id: '79134c72-4a58-4b42-976c-04e7115f32bf',
         name: 'core',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '95935461-9e54-44bd-b9fb-04f4dd05d640',
+        name: 'TokenAdministration',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -43,6 +53,11 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: 'ad112863-ba10-4c1e-9e3c-0b6a7cb33fa1',
+        name: 'AdvancedSecurity',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: 'b903d8ce-3624-4fa5-b37e-0b6b6bb2938b',
         name: 'compliance',
         locationUrl: `http://localhost:${PORT}`,
@@ -60,11 +75,6 @@ module.exports = function (PORT) {
       {
         id: 'e02c4297-9916-457f-a15a-0f835551dc3f',
         name: 'Powerbi',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '2746504a-2b0a-4285-9a3f-0fb07dc792b5',
-        name: 'GitHubUnifiedAuth',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -138,8 +148,18 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: 'd65b01c1-a9d1-40dc-b28a-1b04d47629bb',
+        name: 'OrganizationTokenOidc',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: 'e54d3adc-d485-4536-b63d-1bd2bfc179bf',
         name: 'AnyProtocolPackagingInternal',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '30e0d534-6208-49de-af19-1c0a09a10076',
+        name: 'GitHubCopilotLicensing',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -148,13 +168,13 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '7670aa71-46bd-4133-bd39-213ff359d30e',
-        name: 'pipelineartifactstelemetry',
+        id: '1c8271d7-2729-4778-a2d1-1ed21e9743aa',
+        name: 'SecretsValidation',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: 'f266fc6d-d989-4f60-9dc3-216bc4693435',
-        name: 'AzureProjectProvider',
+        id: '7670aa71-46bd-4133-bd39-213ff359d30e',
+        name: 'pipelineartifactstelemetry',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -193,11 +213,6 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: 'b84566c2-3032-47a2-93d7-321c2b651f43',
-        name: 'AzurePipelineProvider',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
         id: '2e504d18-2c0c-46f8-af8f-322d2af0068a',
         name: 'SBOM',
         locationUrl: `http://localhost:${PORT}`,
@@ -233,8 +248,8 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '94fb38e7-2621-4a59-848c-3ed9d734c9c5',
-        name: 'TemplateService',
+        id: 'c5a2d98b-985c-432e-825e-3c6971edae87',
+        name: 'TokenAuth',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -248,8 +263,8 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: 'bbd6d210-2c29-4eab-b68c-41aab94a4ebb',
-        name: 'Arm',
+        id: '032e6845-d1ee-4197-a1b7-42d1822bca46',
+        name: 'Alerts',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -278,6 +293,16 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: 'f101720c-9790-45a6-9fb3-494a09fddeeb',
+        name: 'Management',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: 'b5da59b3-d611-433b-a121-4cdc4fda898a',
+        name: 'TokenOidc',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: 'bcaa3234-d3c0-45d6-9f51-4e0f13d17999',
         name: 'acs',
         locationUrl: `http://localhost:${PORT}`,
@@ -298,11 +323,6 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '05f7475c-87fc-48ee-9b53-54145b9b37ea',
-        name: 'Policy',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
         id: '5d6898bb-45ec-463f-95f9-54d49c71752e',
         name: 'build',
         locationUrl: `http://localhost:${PORT}`,
@@ -313,13 +333,18 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: '0f2ca920-f269-4545-b1f4-5b4173aa784e',
+        name: 'Alert',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: 'b40c1171-807a-493a-8f3f-5c26d5e2f5aa',
         name: 'Provenance',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
         id: '0d55247a-1c47-4462-9b1f-5e2125590ee6',
-        name: 'Organization',
+        name: 'Account',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -358,8 +383,23 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: 'bf8d748a-ccc1-447f-8561-64ac0a2288b5',
+        name: 'conda',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: '309db705-4ce4-49e7-a110-67e4a823766a',
         name: 'CsmTfs',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '590fc723-9928-4797-af1d-6840d1208ad9',
+        name: 'update_jobs',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: 'f123cfe0-0df0-4891-bfc3-68a247d68f5f',
+        name: 'AzureFrontDoor',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -370,11 +410,6 @@ module.exports = function (PORT) {
       {
         id: 'a0848fa1-3593-4aec-949c-694c73f4c4ce',
         name: 'DelegatedAuth',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '6af29620-e45d-4f90-81da-6ace01a403bc',
-        name: 'Policy',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -443,6 +478,11 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: '5ff95ba9-5d38-4d5d-89a8-7cebe9e93997',
+        name: 'LeakedSecrets',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: '2b66037e-8671-4829-bac9-7d5efc583bc3',
         name: 'ivy',
         locationUrl: `http://localhost:${PORT}`,
@@ -468,11 +508,6 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '24c29667-caee-4446-a49b-852ac88b69e8',
-        name: 'AccountAdminTracing',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
         id: '85738938-9fae-4eb4-b4f0-871502e6b549',
         name: 'GitHubConnector',
         locationUrl: `http://localhost:${PORT}`,
@@ -480,11 +515,6 @@ module.exports = function (PORT) {
       {
         id: '79bea8f8-c898-4965-8c51-8bbc3966faa8',
         name: 'Collection',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '762f0d3a-1bc2-4505-855e-8c3bd4ae9be2',
-        name: 'GitHubContinuousDelivery',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -500,11 +530,6 @@ module.exports = function (PORT) {
       {
         id: '81aec033-eae2-42b8-82f6-90b93a662ef5',
         name: 'NameResolution',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: 'da5dcbff-78f7-4ff5-af29-91bfebb829e5',
-        name: 'ContinuousDelivery',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -540,6 +565,11 @@ module.exports = function (PORT) {
       {
         id: '79fda011-e37f-4281-ba52-967e06c78301',
         name: 'anonymousimportregion',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: 'bf5ba852-2326-4f8a-80ee-968f445d2284',
+        name: 'Ssc',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -580,6 +610,11 @@ module.exports = function (PORT) {
       {
         id: '5294ef93-12a1-4d13-8671-9d9d014072c8',
         name: 'blob',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '9b7a51ba-248f-4d0f-8673-9dbd90c7062c',
+        name: 'Reporting',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -628,8 +663,8 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: 'bd1b0625-6af6-4250-949a-a996dbc2b271',
-        name: 'AzureTfs',
+        id: '085912cc-a0db-4c69-b306-a9ec63eddbb2',
+        name: 'rpm',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -708,8 +743,18 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: '280ea21d-f474-4d7c-aa14-bfb94fbdbb35',
+        name: 'ManagementInternal',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: 'cdeb6c7d-6b25-4d6f-b664-c2e3ede202e8',
         name: 'FeedToken',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '71f96160-8701-4914-aed9-c44b89f20ccd',
+        name: 'cargo',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -755,6 +800,11 @@ module.exports = function (PORT) {
       {
         id: 'c2aa639c-3ccc-4740-b3b6-ce2a1e1d984e',
         name: 'Test',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: 'a5458490-3b15-4e37-8854-cef1da36f0c4',
+        name: 'advSec',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -818,13 +868,13 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '4446dab7-3dc7-4e14-9b22-e2704ed503a0',
-        name: 'PipelineProvisioningService',
+        id: '7136235f-d277-4c27-9194-e3ada05fea2c',
+        name: 'ComponentGovernance',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '7136235f-d277-4c27-9194-e3ada05fea2c',
-        name: 'ComponentGovernance',
+        id: '10e22a82-4bbc-41f2-a814-e471337d2e03',
+        name: 'Dependabot',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -865,6 +915,11 @@ module.exports = function (PORT) {
       {
         id: '0ad75e84-88ae-4325-84b5-ebb30910283c',
         name: 'Token',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '01c5c153-8bc0-4f07-912a-ec4dc386076d',
+        name: 'tokenoauth2',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -915,11 +970,6 @@ module.exports = function (PORT) {
       {
         id: '1814ab31-2f4f-4a9f-8761-f4d77dc5a5d7',
         name: 'serviceendpoint',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '34de91cb-429f-4e8d-8be7-f8431edba7f3',
-        name: 'RepositoryAnalysis',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
@@ -988,7 +1038,22 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '00000030-0000-8888-8000-000000000000',
+        id: '00000071-0000-8888-8000-000000000000',
+        name: 'Location Service',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '0000003c-0000-8888-8000-000000000000',
+        name: 'Location Service',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '00000054-0000-8888-8000-000000000000',
+        name: 'Location Service',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '00000049-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
@@ -998,12 +1063,22 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: '00025394-6065-48ca-87d9-7f5672854ef7',
+        name: 'Location Service',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: '00000019-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '00000054-0000-8888-8000-000000000000',
+        id: '00000030-0000-8888-8000-000000000000',
+        name: 'Location Service',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
+        id: '00000036-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
@@ -1043,32 +1118,22 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '00025394-6065-48ca-87d9-7f5672854ef7',
+        id: '00000059-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '0000003c-0000-8888-8000-000000000000',
+        id: '00000052-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
-        id: '0000003b-0000-8888-8000-000000000000',
-        name: 'Location Service',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '00000036-0000-8888-8000-000000000000',
+        id: '00000072-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
       {
         id: '00000057-0000-8888-8000-000000000000',
-        name: 'Location Service',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '00000059-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
@@ -1079,16 +1144,6 @@ module.exports = function (PORT) {
       },
       {
         id: '00000044-0000-8888-8000-000000000000',
-        name: 'Location Service',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '00000013-0000-8888-8000-000000000000',
-        name: 'Location Service',
-        locationUrl: `http://localhost:${PORT}`,
-      },
-      {
-        id: '00000049-0000-8888-8000-000000000000',
         name: 'Location Service',
         locationUrl: `http://localhost:${PORT}`,
       },
