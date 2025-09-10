@@ -328,7 +328,7 @@ Reporter options (\* - required):
   ```markdown
   # Test Case Summary
 
-  ⚠️  Found 1 test(s) with test case IDs that don't match the test plan:
+  ⚠️ Found 1 test(s) with test case IDs that don't match the test plan:
 
   ## Tests with No Matching Test Points (1)
 
