@@ -323,6 +323,45 @@ Reporter options (\* - required):
   - `publishToRun: true` + (optional `outputPath`): Uploaded as run attachment; also printed and/or written depending on the other flags
   - Set any channel off explicitly by setting its flag to `false` (e.g. `consoleOutput: false` to suppress console)
 
+  **Example summary (actual generated format):**
+
+  ```markdown
+  # Test Case Summary
+
+  ⚠️  Found 1 test(s) with test case IDs that don't match the test plan:
+
+  ## Tests with No Matching Test Points (1)
+
+  These tests have valid test case IDs but no matching test points in the test plan:
+
+  - **[777] Test with file output**
+    - File: /path/to/project/test-results/.../a.spec.js:3
+    - Test Case IDs: [777]
+
+  ## Recommendations
+
+  - Verify test case IDs exist in Azure DevOps test plan 4
+  - Check that test cases are assigned to configurations: [10, 20] (Firefox on Ubuntu, Safari on macOS)
+  - Ensure test cases are included in the test plan suite structure
+  - Add missing test cases to the test plan or assign them to the correct configurations
+  ```
+
+  When `outputPath` is set you'll see a log line:
+
+  ```text
+  Test case summary written to: ./test-case-summary.md
+  ```
+
+  And if `publishToRun: true` a Markdown attachment with the same content is uploaded to the run.
+
+  When all tests with IDs are matched you'll instead see:
+
+  ```text
+  Test case summary: All tests with test case IDs found matching test points in the test plan.
+  ```
+
+  > Note: Key summary lines are force-logged so they appear even when general reporter logging is disabled; this ensures visibility in CI logs.
+
 ## Usefulness
 
 - **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution.
