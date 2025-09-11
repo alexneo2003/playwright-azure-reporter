@@ -10,6 +10,9 @@
 **Since version 1.9.0 reporter allows you to use test tags as Playwright it implemented in version [1.42.0](https://playwright.dev/docs/test-annotations#tag-tests)**
 **You can define test cases ids in new format, but you still can use old format with test case id in test name**
 
+**Since version 1.11.0 reporter supports different authentication types via the `authType` option**
+**You can now specify `authType: 'pat'` for Personal Access Token (default) or `authType: 'accessToken'` for OAuth Access Token authentication. Existing configurations continue to work without changes.**
+
 **Example:**
 
 ```typescript
@@ -128,6 +131,7 @@ const config: PlaywrightTestConfig = {
       {
         orgUrl: 'https://dev.azure.com/your-organization-name',
         token: process.env.AZURE_TOKEN,
+        authType: 'pat', // 'pat' or 'accessToken'
         planId: 44,
         projectName: 'SampleSample',
         environment: 'AQA',
@@ -161,11 +165,72 @@ const config: PlaywrightTestConfig = {
 export default config;
 ```
 
+## Authentication
+
+The reporter supports two authentication methods to connect to Azure DevOps:
+
+### Personal Access Token (PAT) - Default
+
+```typescript
+{
+  token: 'your-personal-access-token',
+  authType: 'pat' // Optional, this is the default
+}
+```
+
+### Access Token
+
+```typescript
+{
+  token: 'your-access-token',
+  authType: 'accessToken'
+}
+```
+
+**When to use each:**
+
+- **PAT**: Use when you have a Personal Access Token generated from Azure DevOps. Suitable for most individual use cases.
+- **Access Token**: Use when you have an OAuth access token. Suitable for applications using Azure DevOps OAuth flows or CI/CD environments with token-based authentication.
+
+For more detailed examples, see [Authentication Examples](tests/examples/authType-examples.md).
+
+### Required Token Scopes
+
+Regardless of the authentication type you choose, your token must have the following Azure DevOps scopes:
+
+**Required Scopes:**
+
+- **Test Management (Read & Write)** - Required for:
+  - Creating and updating test runs
+  - Publishing test results
+  - Querying test points and configurations
+  - Uploading test attachments
+- **Project and Team (Read)** - Required for:
+  - Accessing project information
+  - Validating project existence
+
+**Minimal Scope Configuration:**
+When creating a Personal Access Token in Azure DevOps, ensure you select at least:
+
+- `Test Management: Read & write`
+- `Project and Team: Read`
+
+**Full Access (Alternative):**
+If you prefer, you can use a token with `Full access` scope, which includes all required permissions.
+
+> **Note:** The reporter will fail with authentication errors if the token doesn't have sufficient permissions to perform test management operations.
+
 ## Configuration
 
 Reporter options (\* - required):
 
 - \*`token` [string] - Azure DevOps token, you can find more information [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
+- `authType` [string] - Specifies the authentication type to use with Azure DevOps. Available options:
+  - `'pat'` - Personal Access Token (default)
+  - `'accessToken'` - Access Token from Azure DevOps API
+
+  Default: `'pat'`. For backward compatibility, existing configurations without `authType` will continue to work unchanged. See [Authentication Examples](tests/examples/authType-examples.md) for detailed usage.
+
 - \*`orgUrl` [string] - Full url for your organization space. Example: `https://dev.azure.com/your-organization-name`
 
   > **Note:** some API's (e.g. ProfileApi) can't be hit at the org level, and has to be hit at the deployment level, so url should be structured like https://vssps.dev.azure.com/{yourorgname}
@@ -215,14 +280,11 @@ Reporter options (\* - required):
 - `testCaseIdMatcher` [string|RegExp|string[]|RegExp[]] - A string or a regular expression to match the name of the test case to extract the test case id. Default: `/\[([\d,\s]+)\]/`
 
   #### Example Test Titles
-
   - Test title: `Test case @tag1=123`
-
     - `testCaseIdMatcher: /@tag1=(\d+)/`
     - Extracted tags: `['123']`
 
   - Test title: `Test case @TestCase=123 [@TestCase=456]`
-
     - `testCaseIdMatcher: /@TestCase=(\d+)/`
     - Extracted tags: `['123', '456']`
 
@@ -259,9 +321,7 @@ Reporter options (\* - required):
   **Pay attention that if you use `testCaseIdZone: 'annotation'` and `testCaseIdMatcher` is not defined, the reporter will not extract test case IDs from the test annotations. You should define `testCaseIdMatcher` to extract test case IDs from the test annotations. Matcher should match the annotation type not the annotation description!**
 
   #### Example Usage
-
   - Test title: `Test case [12345]`
-
     - `testCaseIdZone: 'title'`
     - Extracted tags: `['12345']`
 
@@ -271,6 +331,7 @@ Reporter options (\* - required):
       expect(true).toBe(true);
     });
     ```
+
     - `testCaseIdZone: 'annotation'`
     - `testCaseIdMatcher: /(TestCase)/`
     - Extracted tags: `['12345']`]

@@ -2,7 +2,7 @@ import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
-import { IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
+import { IRequestHandler, IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
 import VSSInterfaces from 'azure-devops-node-api/interfaces/common/VSSInterfaces';
 import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces';
 import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces';
@@ -44,6 +44,7 @@ interface ITestCaseExtended extends TestCase {
 
 export interface AzureReporterOptions {
   token: string;
+  authType?: 'pat' | 'accessToken' | undefined;
   planId: number;
   orgUrl: string;
   projectName: string;
@@ -133,6 +134,7 @@ class AzureDevOpsReporter implements Reporter {
   private _testsAliasToBePublished: string[] = [];
   private _testResultsToBePublished: TTestResultsToBePublished[] = [];
   private _connection!: WebApi;
+  private _requestHandler: IRequestHandler | undefined = undefined;
   private _orgUrl!: string;
   private _projectName!: string;
   private _environment?: string;
@@ -144,6 +146,7 @@ class AzureDevOpsReporter implements Reporter {
   private _uploadAttachments = false;
   private _attachmentsType: RegExp[] = [];
   private _token: string = '';
+  private _authType: string = 'pat';
   private _runIdPromise: Promise<number | void>;
   private _resolveRunId: (value: number) => void = () => {};
   private _rejectRunId: (reason: any) => void = () => {};
@@ -287,16 +290,17 @@ class AzureDevOpsReporter implements Reporter {
     this._projectName = options.projectName;
     this._planId = options.planId;
     this._token = options.token;
+    this._authType = options.authType || 'pat';
     this._environment = options?.environment || undefined;
     this._testRunTitle =
       `${this._environment ? `[${this._environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
       `${this._environment ? `[${this._environment}]:` : ''}Test plan ${this._planId}`;
     this._uploadAttachments = options?.uploadAttachments || false;
-    this._connection = new azdev.WebApi(
-      this._orgUrl,
-      azdev.getPersonalAccessTokenHandler(this._token),
-      this._azureClientOptions
-    );
+    this._requestHandler =
+      this._authType === 'pat'
+        ? azdev.getPersonalAccessTokenHandler(this._token)
+        : azdev.getHandlerFromToken(this._token);
+    this._connection = new azdev.WebApi(this._orgUrl, this._requestHandler, this._azureClientOptions);
     this._testRunConfig = options?.testRunConfig || undefined;
     this._publishTestResultsMode = options?.publishTestResultsMode || 'testResult';
     if (options.testPointMapper) {
