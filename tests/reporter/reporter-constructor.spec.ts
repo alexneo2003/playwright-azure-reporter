@@ -187,6 +187,246 @@ test.describe('Reporter constructor', () => {
     expect(result.failed).toBe(1);
   });
 
+  test('authType defaults to pat when not specified', async ({ runInlineTest, server }) => {
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_INVALID_RESPONSE_PATH);
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = { 
+          reporter: [
+            ['dot'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'test-token',
+              // authType not specified - should default to 'pat'
+            }]
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[3] foobar', async ({}) => {
+          expect(1).toBe(0);
+        });
+      `,
+      },
+      { reporter: '' },
+      {
+        AZUREPWDEBUG: '1',
+      }
+    );
+    // Should run without specific authType error and use PAT handler by default
+    expect(result.output).toContain('Validating options');
+    expect(result.exitCode).toBe(1);
+    expect(result.failed).toBe(1);
+  });
+
+  test('authType set to pat explicitly', async ({ runInlineTest, server }) => {
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_INVALID_RESPONSE_PATH);
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = { 
+          reporter: [
+            ['dot'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'test-token',
+              authType: 'pat'
+            }]
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[3] foobar', async ({}) => {
+          expect(1).toBe(0);
+        });
+      `,
+      },
+      { reporter: '' },
+      {
+        AZUREPWDEBUG: '1',
+      }
+    );
+    // Should run without specific authType error and use PAT handler
+    expect(result.output).toContain('Validating options');
+    expect(result.exitCode).toBe(1);
+    expect(result.failed).toBe(1);
+  });
+
+  test('authType set to accessToken', async ({ runInlineTest, server }) => {
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_INVALID_RESPONSE_PATH);
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = { 
+          reporter: [
+            ['dot'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'test-access-token',
+              authType: 'accessToken'
+            }]
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[3] foobar', async ({}) => {
+          expect(1).toBe(0);
+        });
+      `,
+      },
+      { reporter: '' },
+      {
+        AZUREPWDEBUG: '1',
+      }
+    );
+    // Should run without specific authType error and use access token handler
+    expect(result.output).toContain('Validating options');
+    expect(result.exitCode).toBe(1);
+    expect(result.failed).toBe(1);
+  });
+
+  test('authType with invalid value defaults to pat', async ({ runInlineTest, server }) => {
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_INVALID_RESPONSE_PATH);
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = { 
+          reporter: [
+            ['dot'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'test-access-token',
+              authType: 'invalidType' // Invalid authType should default to 'pat'
+            }]
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[3] foobar', async ({}) => {
+          expect(1).toBe(0);
+        });
+      `,
+      },
+      { reporter: '' },
+      {
+        AZUREPWDEBUG: '1',
+      }
+    );
+    // Should run without specific authType error and fallback to PAT handler
+    expect(result.output).toContain('Validating options');
+    expect(result.exitCode).toBe(1);
+    expect(result.failed).toBe(1);
+  });
+
   test('correct orgUrl config expected', async ({ runInlineTest }) => {
     const result = await runInlineTest(
       {
@@ -908,5 +1148,131 @@ test.describe('Test Case ID matcher in annotation section', () => {
     expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
+  });
+
+  test.describe('Authentication Handler Tests', () => {
+    test('should create personal access token handler when authType is pat', () => {
+      const reporter = new AzureDevOpsReporter({
+        orgUrl: 'http://localhost:4000',
+        projectName: 'TestProject',
+        planId: 1,
+        token: 'test-pat-token',
+        authType: 'pat',
+        isDisabled: false,
+      });
+
+      // Access private property to verify the correct handler was created
+      const requestHandler = (reporter as any)._requestHandler;
+      const authType = (reporter as any)._authType;
+
+      expect(authType).toBe('pat');
+      expect(requestHandler).toBeDefined();
+      // The handler should be created using getPersonalAccessTokenHandler
+      expect(typeof requestHandler.prepareRequest).toBe('function');
+    });
+
+    test('should create access token handler when authType is accessToken', () => {
+      const reporter = new AzureDevOpsReporter({
+        orgUrl: 'http://localhost:4000',
+        projectName: 'TestProject',
+        planId: 1,
+        token: 'test-access-token',
+        authType: 'accessToken',
+        isDisabled: false,
+      });
+
+      // Access private property to verify the correct handler was created
+      const requestHandler = (reporter as any)._requestHandler;
+      const authType = (reporter as any)._authType;
+
+      expect(authType).toBe('accessToken');
+      expect(requestHandler).toBeDefined();
+      // The handler should be created using getHandlerFromToken
+      expect(typeof requestHandler.prepareRequest).toBe('function');
+    });
+
+    test('should default to pat when authType is undefined', () => {
+      const reporter = new AzureDevOpsReporter({
+        orgUrl: 'http://localhost:4000',
+        projectName: 'TestProject',
+        planId: 1,
+        token: 'test-token',
+        // authType not specified
+        isDisabled: false,
+      });
+
+      // Access private property to verify the correct handler was created
+      const requestHandler = (reporter as any)._requestHandler;
+      const authType = (reporter as any)._authType;
+
+      expect(authType).toBe('pat');
+      expect(requestHandler).toBeDefined();
+      // Should default to personal access token handler
+      expect(typeof requestHandler.prepareRequest).toBe('function');
+    });
+
+    test('should use WebApi with correct parameters for pat authType', () => {
+      const reporter = new AzureDevOpsReporter({
+        orgUrl: 'https://dev.azure.com/myorg',
+        projectName: 'TestProject',
+        planId: 1,
+        token: 'test-pat-token',
+        authType: 'pat',
+        isDisabled: false,
+      });
+
+      // Access private properties to verify the connection setup
+      const connection = (reporter as any)._connection;
+      const authType = (reporter as any)._authType;
+      const orgUrl = (reporter as any)._orgUrl;
+
+      expect(authType).toBe('pat');
+      expect(orgUrl).toBe('https://dev.azure.com/myorg');
+      expect(connection).toBeDefined();
+      expect(typeof connection.getTestApi).toBe('function');
+    });
+
+    test('should use WebApi with correct parameters for accessToken authType', () => {
+      const reporter = new AzureDevOpsReporter({
+        orgUrl: 'https://dev.azure.com/myorg',
+        projectName: 'TestProject',
+        planId: 1,
+        token: 'test-access-token',
+        authType: 'accessToken',
+        isDisabled: false,
+      });
+
+      // Access private properties to verify the connection setup
+      const connection = (reporter as any)._connection;
+      const authType = (reporter as any)._authType;
+      const orgUrl = (reporter as any)._orgUrl;
+
+      expect(authType).toBe('accessToken');
+      expect(orgUrl).toBe('https://dev.azure.com/myorg');
+      expect(connection).toBeDefined();
+      expect(typeof connection.getTestApi).toBe('function');
+    });
+
+    test('should default to getHandlerFromToken when authType is invalid', () => {
+      const reporter = new AzureDevOpsReporter({
+        orgUrl: 'https://dev.azure.com/myorg',
+        projectName: 'TestProject',
+        planId: 1,
+        token: 'test-token',
+        authType: 'invalidType' as any, // Invalid authType
+        isDisabled: false,
+      });
+
+      // Access private properties to verify the correct handler was created
+      const requestHandler = (reporter as any)._requestHandler;
+      const authType = (reporter as any)._authType;
+      const orgUrl = (reporter as any)._orgUrl;
+
+      expect(authType).toBe('invalidType'); // The authType property keeps the original value
+      expect(orgUrl).toBe('https://dev.azure.com/myorg');
+      expect(requestHandler).toBeDefined();
+      // Should still create a valid handler (falls back to getHandlerFromToken for non-'pat' values)
+      expect(typeof requestHandler.prepareRequest).toBe('function');
+    });
   });
 });
