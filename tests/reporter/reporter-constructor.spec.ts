@@ -1151,7 +1151,7 @@ test.describe('Test Case ID matcher in annotation section', () => {
   });
 
   test.describe('Authentication Handler Tests', () => {
-    test('should create personal access token handler when authType is pat', () => {
+    test('should use pat authType when specified', () => {
       const reporter = new AzureDevOpsReporter({
         orgUrl: 'http://localhost:4000',
         projectName: 'TestProject',
@@ -1161,17 +1161,11 @@ test.describe('Test Case ID matcher in annotation section', () => {
         isDisabled: false,
       });
 
-      // Access private property to verify the correct handler was created
-      const requestHandler = (reporter as any)._requestHandler;
       const authType = (reporter as any)._authType;
-
       expect(authType).toBe('pat');
-      expect(requestHandler).toBeDefined();
-      // The handler should be created using getPersonalAccessTokenHandler
-      expect(typeof requestHandler.prepareRequest).toBe('function');
     });
 
-    test('should create access token handler when authType is accessToken', () => {
+    test('should use accessToken authType when specified', () => {
       const reporter = new AzureDevOpsReporter({
         orgUrl: 'http://localhost:4000',
         projectName: 'TestProject',
@@ -1181,14 +1175,8 @@ test.describe('Test Case ID matcher in annotation section', () => {
         isDisabled: false,
       });
 
-      // Access private property to verify the correct handler was created
-      const requestHandler = (reporter as any)._requestHandler;
       const authType = (reporter as any)._authType;
-
       expect(authType).toBe('accessToken');
-      expect(requestHandler).toBeDefined();
-      // The handler should be created using getHandlerFromToken
-      expect(typeof requestHandler.prepareRequest).toBe('function');
     });
 
     test('should default to pat when authType is undefined', () => {
@@ -1201,78 +1189,58 @@ test.describe('Test Case ID matcher in annotation section', () => {
         isDisabled: false,
       });
 
-      // Access private property to verify the correct handler was created
-      const requestHandler = (reporter as any)._requestHandler;
       const authType = (reporter as any)._authType;
-
       expect(authType).toBe('pat');
-      expect(requestHandler).toBeDefined();
-      // Should default to personal access token handler
-      expect(typeof requestHandler.prepareRequest).toBe('function');
     });
 
-    test('should use WebApi with correct parameters for pat authType', () => {
+    test('should require applicationIdURI when authType is managedIdentity', async ({ runInlineTest }) => {
+      const result = await runInlineTest(
+        {
+          'playwright.config.ts': `
+        module.exports = { 
+          reporter: [
+            ['dot'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:4000',
+              projectName: 'TestProject',
+              planId: 1,
+              authType: 'managedIdentity'
+              // applicationIdURI not provided
+            }]
+          ]
+        };
+      `,
+          'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[3] foobar', async ({}) => {
+          expect(1).toBe(0);
+        });
+      `,
+        },
+        { reporter: '' }
+      );
+      expect(result.output).toContain(
+        "'applicationIdURI' is required when authType is 'managedIdentity'. Reporting is disabled."
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.failed).toBe(1);
+    });
+
+    test('should store applicationIdURI when authType is managedIdentity', () => {
       const reporter = new AzureDevOpsReporter({
-        orgUrl: 'https://dev.azure.com/myorg',
+        orgUrl: 'http://localhost:4000',
         projectName: 'TestProject',
         planId: 1,
-        token: 'test-pat-token',
-        authType: 'pat',
+        authType: 'managedIdentity',
+        applicationIdURI: '499b84ac-1321-427f-aa17-267ca6975798/.default',
         isDisabled: false,
       });
 
-      // Access private properties to verify the connection setup
-      const connection = (reporter as any)._connection;
       const authType = (reporter as any)._authType;
-      const orgUrl = (reporter as any)._orgUrl;
+      const applicationIdURI = (reporter as any)._applicationIdURI;
 
-      expect(authType).toBe('pat');
-      expect(orgUrl).toBe('https://dev.azure.com/myorg');
-      expect(connection).toBeDefined();
-      expect(typeof connection.getTestApi).toBe('function');
-    });
-
-    test('should use WebApi with correct parameters for accessToken authType', () => {
-      const reporter = new AzureDevOpsReporter({
-        orgUrl: 'https://dev.azure.com/myorg',
-        projectName: 'TestProject',
-        planId: 1,
-        token: 'test-access-token',
-        authType: 'accessToken',
-        isDisabled: false,
-      });
-
-      // Access private properties to verify the connection setup
-      const connection = (reporter as any)._connection;
-      const authType = (reporter as any)._authType;
-      const orgUrl = (reporter as any)._orgUrl;
-
-      expect(authType).toBe('accessToken');
-      expect(orgUrl).toBe('https://dev.azure.com/myorg');
-      expect(connection).toBeDefined();
-      expect(typeof connection.getTestApi).toBe('function');
-    });
-
-    test('should default to getHandlerFromToken when authType is invalid', () => {
-      const reporter = new AzureDevOpsReporter({
-        orgUrl: 'https://dev.azure.com/myorg',
-        projectName: 'TestProject',
-        planId: 1,
-        token: 'test-token',
-        authType: 'invalidType' as any, // Invalid authType
-        isDisabled: false,
-      });
-
-      // Access private properties to verify the correct handler was created
-      const requestHandler = (reporter as any)._requestHandler;
-      const authType = (reporter as any)._authType;
-      const orgUrl = (reporter as any)._orgUrl;
-
-      expect(authType).toBe('invalidType'); // The authType property keeps the original value
-      expect(orgUrl).toBe('https://dev.azure.com/myorg');
-      expect(requestHandler).toBeDefined();
-      // Should still create a valid handler (falls back to getHandlerFromToken for non-'pat' values)
-      expect(typeof requestHandler.prepareRequest).toBe('function');
+      expect(authType).toBe('managedIdentity');
+      expect(applicationIdURI).toBe('499b84ac-1321-427f-aa17-267ca6975798/.default');
     });
   });
 });

@@ -4,7 +4,7 @@ import * as azdev from 'azure-devops-node-api';
 import AzureDevOpsReporter from '../../src/playwright-azure-reporter';
 
 test.describe('Authentication Handler Creation', () => {
-  test('should call getPersonalAccessTokenHandler for pat authType', () => {
+  test('should call getPersonalAccessTokenHandler for pat authType', async () => {
     // Store original function
     const originalGetPersonalAccessTokenHandler = azdev.getPersonalAccessTokenHandler;
     let handlerCreated = false;
@@ -17,7 +17,7 @@ test.describe('Authentication Handler Creation', () => {
     };
 
     try {
-      new AzureDevOpsReporter({
+      const reporter = new AzureDevOpsReporter({
         orgUrl: 'http://localhost:4000',
         projectName: 'TestProject',
         planId: 1,
@@ -26,6 +26,8 @@ test.describe('Authentication Handler Creation', () => {
         isDisabled: false,
       });
 
+      // Call the async authentication method directly
+      await (reporter as any)._getAuthenticationHandler();
       expect(handlerCreated).toBe(true);
     } finally {
       // Restore original function
@@ -33,7 +35,7 @@ test.describe('Authentication Handler Creation', () => {
     }
   });
 
-  test('should call getHandlerFromToken for accessToken authType', () => {
+  test('should call getHandlerFromToken for accessToken authType', async () => {
     // Store original function
     const originalGetHandlerFromToken = azdev.getHandlerFromToken;
     let handlerCreated = false;
@@ -46,7 +48,7 @@ test.describe('Authentication Handler Creation', () => {
     };
 
     try {
-      new AzureDevOpsReporter({
+      const reporter = new AzureDevOpsReporter({
         orgUrl: 'http://localhost:4000',
         projectName: 'TestProject',
         planId: 1,
@@ -55,6 +57,8 @@ test.describe('Authentication Handler Creation', () => {
         isDisabled: false,
       });
 
+      // Call the async authentication method directly
+      await (reporter as any)._getAuthenticationHandler();
       expect(handlerCreated).toBe(true);
     } finally {
       // Restore original function
@@ -62,7 +66,7 @@ test.describe('Authentication Handler Creation', () => {
     }
   });
 
-  test('should call getPersonalAccessTokenHandler by default', () => {
+  test('should call getPersonalAccessTokenHandler by default', async () => {
     // Store original function
     const originalGetPersonalAccessTokenHandler = azdev.getPersonalAccessTokenHandler;
     let handlerCreated = false;
@@ -75,7 +79,7 @@ test.describe('Authentication Handler Creation', () => {
     };
 
     try {
-      new AzureDevOpsReporter({
+      const reporter = new AzureDevOpsReporter({
         orgUrl: 'http://localhost:4000',
         projectName: 'TestProject',
         planId: 1,
@@ -84,6 +88,8 @@ test.describe('Authentication Handler Creation', () => {
         isDisabled: false,
       });
 
+      // Call the async authentication method directly
+      await (reporter as any)._getAuthenticationHandler();
       expect(handlerCreated).toBe(true);
     } finally {
       // Restore original function

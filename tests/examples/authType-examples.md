@@ -4,10 +4,11 @@ This document provides examples of how to use the new `authType` configuration o
 
 ## Overview
 
-The reporter now supports two authentication types:
+The reporter now supports three authentication types:
 
 - `pat` (Personal Access Token) - Default
 - `accessToken` (Access Token from Azure DevOps API)
+- `managedIdentity` (Azure Managed Identity)
 
 ## Examples
 
@@ -71,6 +72,26 @@ export default {
 };
 ```
 
+### Using Azure Managed Identity
+
+```typescript
+// playwright.config.ts
+export default {
+  reporter: [
+    [
+      '@alexneo2003/playwright-azure-reporter',
+      {
+        orgUrl: 'https://dev.azure.com/your-org',
+        projectName: 'your-project',
+        planId: 123,
+        authType: 'managedIdentity',
+        applicationIdURI: '499b84ac-1321-427f-aa17-267ca6975798/.default',
+      },
+    ],
+  ],
+};
+```
+
 ## When to Use Each Type
 
 ### Personal Access Token (`pat`)
@@ -84,6 +105,19 @@ export default {
 - Use when you have an OAuth access token
 - Suitable for applications using Azure DevOps OAuth flows
 - Useful in CI/CD environments with token-based authentication
+
+### Azure Managed Identity (`managedIdentity`)
+
+- Use when running in Azure environments with managed identity configured
+- Automatically handles authentication using Azure DefaultAzureCredential
+- Supports multiple authentication methods:
+  - Azure CLI (`az login`) - for local development
+  - Managed Identity - for Azure-hosted environments
+  - Environment variables
+  - Azure PowerShell
+  - Visual Studio/VS Code authentication
+- No need to manage secrets or tokens
+- Perfect for Azure DevOps pipelines running on Azure-hosted agents
 
 ## Notes
 
