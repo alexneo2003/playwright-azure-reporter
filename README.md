@@ -131,7 +131,7 @@ const config: PlaywrightTestConfig = {
       {
         orgUrl: 'https://dev.azure.com/your-organization-name',
         token: process.env.AZURE_TOKEN,
-        authType: 'pat', // 'pat' or 'accessToken'
+        authType: 'pat', // 'pat', 'accessToken', or 'managedIdentity'
         planId: 44,
         projectName: 'SampleSample',
         environment: 'AQA',
@@ -167,7 +167,7 @@ export default config;
 
 ## Authentication
 
-The reporter supports two authentication methods to connect to Azure DevOps:
+The reporter supports three authentication methods to connect to Azure DevOps:
 
 ### Personal Access Token (PAT) - Default
 
@@ -187,10 +187,21 @@ The reporter supports two authentication methods to connect to Azure DevOps:
 }
 ```
 
+### Azure Managed Identity
+
+```typescript
+{
+  token: 'not-used', // Token field is required but ignored for managedIdentity
+  authType: 'managedIdentity',
+  applicationIdURI: '499b84ac-1321-427f-aa17-267ca6975798/.default'
+}
+```
+
 **When to use each:**
 
 - **PAT**: Use when you have a Personal Access Token generated from Azure DevOps. Suitable for most individual use cases.
 - **Access Token**: Use when you have an OAuth access token. Suitable for applications using Azure DevOps OAuth flows or CI/CD environments with token-based authentication.
+- **Managed Identity**: Use when running in Azure environments with managed identity configured. Automatically handles authentication using Azure DefaultAzureCredential, supporting multiple auth methods like Azure CLI (`az login`), managed identity, environment variables, etc.
 
 For more detailed examples, see [Authentication Examples](tests/examples/authType-examples.md).
 
@@ -224,12 +235,15 @@ If you prefer, you can use a token with `Full access` scope, which includes all 
 
 Reporter options (\* - required):
 
-- \*`token` [string] - Azure DevOps token, you can find more information [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
+- `token` [string] - Azure DevOps token, you can find more information [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows). Required for `'pat'` and `'accessToken'` authTypes, not needed for `'managedIdentity'`.
 - `authType` [string] - Specifies the authentication type to use with Azure DevOps. Available options:
   - `'pat'` - Personal Access Token (default)
   - `'accessToken'` - Access Token from Azure DevOps API
+  - `'managedIdentity'` - Azure Managed Identity authentication
 
   Default: `'pat'`. For backward compatibility, existing configurations without `authType` will continue to work unchanged. See [Authentication Examples](tests/examples/authType-examples.md) for detailed usage.
+
+- `applicationIdURI` [string] - Required when `authType` is `'managedIdentity'`. Specifies the application ID URI for Azure DevOps. Typically `'499b84ac-1321-427f-aa17-267ca6975798/.default'`.
 
 - \*`orgUrl` [string] - Full url for your organization space. Example: `https://dev.azure.com/your-organization-name`
 
@@ -326,6 +340,7 @@ Reporter options (\* - required):
     - Extracted tags: `['12345']`
 
   - Test annotations:
+
     ```typescript
     test('Test case', { annotations: [{ type: 'TestCase', description: '12345' }] }, () => {
       expect(true).toBe(true);
