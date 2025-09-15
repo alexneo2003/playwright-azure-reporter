@@ -1,3 +1,69 @@
+# [1.14.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.3...v1.14.0) (2025-09-15)
+
+
+### Features
+
+* **auth:** add support for Personal Access Token and Access Token authentication types ([957a7e7](https://github.com/alexneo2003/playwright-azure-reporter/commit/957a7e76cfb964e942ee8ef528202d2f523ed03d)), closes [#117](https://github.com/alexneo2003/playwright-azure-reporter/issues/117)
+* **auth:** implement comprehensive authentication system with smart token refresh ([8af749e](https://github.com/alexneo2003/playwright-azure-reporter/commit/8af749e3554fe955f0adce516dc582a87c4f6ee3)), closes [#117](https://github.com/alexneo2003/playwright-azure-reporter/issues/117)
+
+
+### BREAKING CHANGES
+
+* **auth:** None - existing configurations continue to work unchanged
+
+Features:
+- New `authType` option in AzureReporterOptions interface
+- Support for both azdev.getPersonalAccessTokenHandler and azdev.getHandlerFromToken
+- Backward compatibility with existing PAT-based configurations
+- Graceful handling of invalid authType values
+
+Tests:
+- 4 integration tests for authType configuration scenarios
+- 3 unit tests with Azure DevOps API method mocking
+- 5 authentication handler creation tests
+- Complete coverage of default behavior and edge cases
+
+Documentation:
+- Updated README.md with authentication section and token scope requirements
+- Created comprehensive authType-examples.md with usage examples
+- Added configuration guidance for both PAT and OAuth scenarios
+- Included troubleshooting section for common authentication issues
+
+
+
+# [1.14.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.3...v1.14.0) (2025-09-15)
+
+
+### Features
+
+* **auth:** add support for Personal Access Token and Access Token authentication types ([957a7e7](https://github.com/alexneo2003/playwright-azure-reporter/commit/957a7e76cfb964e942ee8ef528202d2f523ed03d)), closes [#117](https://github.com/alexneo2003/playwright-azure-reporter/issues/117)
+* **auth:** implement comprehensive authentication system with smart token refresh ([8af749e](https://github.com/alexneo2003/playwright-azure-reporter/commit/8af749e3554fe955f0adce516dc582a87c4f6ee3)), closes [#117](https://github.com/alexneo2003/playwright-azure-reporter/issues/117)
+
+
+### BREAKING CHANGES
+
+* **auth:** None - existing configurations continue to work unchanged
+
+Features:
+- New `authType` option in AzureReporterOptions interface
+- Support for both azdev.getPersonalAccessTokenHandler and azdev.getHandlerFromToken
+- Backward compatibility with existing PAT-based configurations
+- Graceful handling of invalid authType values
+
+Tests:
+- 4 integration tests for authType configuration scenarios
+- 3 unit tests with Azure DevOps API method mocking
+- 5 authentication handler creation tests
+- Complete coverage of default behavior and edge cases
+
+Documentation:
+- Updated README.md with authentication section and token scope requirements
+- Created comprehensive authType-examples.md with usage examples
+- Added configuration guidance for both PAT and OAuth scenarios
+- Included troubleshooting section for common authentication issues
+
+
+
 ## [1.13.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.1...v1.13.3) (2025-09-02)
 
 
