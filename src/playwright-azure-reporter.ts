@@ -1,8 +1,9 @@
+import { DefaultAzureCredential } from '@azure/identity';
 import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
-import { IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
+import { IRequestHandler, IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
 import VSSInterfaces from 'azure-devops-node-api/interfaces/common/VSSInterfaces';
 import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces';
 import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces';
@@ -43,7 +44,9 @@ interface ITestCaseExtended extends TestCase {
 }
 
 export interface AzureReporterOptions {
-  token: string;
+  token?: string;
+  authType?: 'pat' | 'accessToken' | 'managedIdentity' | undefined;
+  applicationIdURI?: string | undefined;
   planId: number;
   orgUrl: string;
   projectName: string;
@@ -133,6 +136,7 @@ class AzureDevOpsReporter implements Reporter {
   private _testsAliasToBePublished: string[] = [];
   private _testResultsToBePublished: TTestResultsToBePublished[] = [];
   private _connection!: WebApi;
+  private _requestHandler: IRequestHandler | undefined = undefined;
   private _orgUrl!: string;
   private _projectName!: string;
   private _environment?: string;
@@ -143,7 +147,11 @@ class AzureDevOpsReporter implements Reporter {
   private _testRunTitle = '';
   private _uploadAttachments = false;
   private _attachmentsType: RegExp[] = [];
-  private _token: string = '';
+  private _token?: string;
+  private _authType: string = 'pat';
+  private _applicationIdURI?: string;
+  private _credential?: DefaultAzureCredential;
+  private _tokenExpiresOn?: Date;
   private _runIdPromise: Promise<number | void>;
   private _resolveRunId: (value: number) => void = () => {};
   private _rejectRunId: (reason: any) => void = () => {};
@@ -252,8 +260,13 @@ class AzureDevOpsReporter implements Reporter {
       this._setIsDisable(true);
       return;
     }
-    if (!options?.token) {
+    if (!options?.token && options?.authType !== 'managedIdentity') {
       this._logger?.warn("'token' is not set. Reporting is disabled.");
+      this._setIsDisable(true);
+      return;
+    }
+    if (options?.authType === 'managedIdentity' && !options?.applicationIdURI) {
+      this._logger?.warn("'applicationIdURI' is required when authType is 'managedIdentity'. Reporting is disabled.");
       this._setIsDisable(true);
       return;
     }
@@ -287,16 +300,14 @@ class AzureDevOpsReporter implements Reporter {
     this._projectName = options.projectName;
     this._planId = options.planId;
     this._token = options.token;
+    this._authType = options.authType || 'pat';
+    this._applicationIdURI = options.applicationIdURI;
     this._environment = options?.environment || undefined;
     this._testRunTitle =
       `${this._environment ? `[${this._environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
       `${this._environment ? `[${this._environment}]:` : ''}Test plan ${this._planId}`;
     this._uploadAttachments = options?.uploadAttachments || false;
-    this._connection = new azdev.WebApi(
-      this._orgUrl,
-      azdev.getPersonalAccessTokenHandler(this._token),
-      this._azureClientOptions
-    );
+    // Authentication handler and connection will be initialized in onBegin() for managedIdentity support
     this._testRunConfig = options?.testRunConfig || undefined;
     this._publishTestResultsMode = options?.publishTestResultsMode || 'testResult';
     if (options.testPointMapper) {
@@ -316,6 +327,76 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.warn(
         'This means you need to define your own testCaseIdMatcher, specifically for the "annotation" area'
       );
+    }
+  }
+
+  private async _getAuthenticationHandler(): Promise<IRequestHandler> {
+    if (this._authType === 'managedIdentity') {
+      try {
+        this._logger?.debug('Using Azure Managed Identity authentication');
+        this._credential = new DefaultAzureCredential();
+        const tokenResponse = await this._credential.getToken(this._applicationIdURI!);
+        this._token = tokenResponse.token;
+        this._tokenExpiresOn = tokenResponse.expiresOnTimestamp
+          ? new Date(tokenResponse.expiresOnTimestamp)
+          : undefined;
+        this._logger?.debug('Successfully obtained token from Azure Managed Identity');
+        if (this._tokenExpiresOn) {
+          this._logger?.debug(`Token expires on: ${this._tokenExpiresOn.toISOString()}`);
+        }
+        return azdev.getHandlerFromToken(tokenResponse.token);
+      } catch (error: any) {
+        this._logger?.error(`Failed to get token from Azure Managed Identity: ${error.message}`);
+        throw error;
+      }
+    } else if (this._authType === 'pat') {
+      if (!this._token) {
+        throw new Error('Token is required for PAT authentication');
+      }
+      return azdev.getPersonalAccessTokenHandler(this._token);
+    } else {
+      if (!this._token) {
+        throw new Error('Token is required for access token authentication');
+      }
+      return azdev.getHandlerFromToken(this._token);
+    }
+  }
+
+  private async _refreshTokenIfNeeded(): Promise<void> {
+    if (this._authType === 'managedIdentity' && this._credential) {
+      try {
+        // Check if we need to refresh the token
+        // Refresh if we don't have an expiration time or if the token expires within the next 5 minutes
+        const now = new Date();
+        const refreshThreshold = 5 * 60 * 1000; // 5 minutes in milliseconds
+        const shouldRefresh =
+          !this._tokenExpiresOn || this._tokenExpiresOn.getTime() - now.getTime() <= refreshThreshold;
+
+        if (!shouldRefresh) {
+          this._logger?.debug(`Token is still valid until ${this._tokenExpiresOn?.toISOString()}, skipping refresh`);
+          return;
+        }
+
+        this._logger?.debug('Token is expiring soon, refreshing...');
+        const tokenResponse = await this._credential.getToken(this._applicationIdURI!);
+
+        if (tokenResponse.token !== this._token) {
+          this._token = tokenResponse.token;
+          this._tokenExpiresOn = tokenResponse.expiresOnTimestamp
+            ? new Date(tokenResponse.expiresOnTimestamp)
+            : undefined;
+          this._requestHandler = azdev.getHandlerFromToken(this._token);
+          this._connection = new azdev.WebApi(this._orgUrl, this._requestHandler, this._azureClientOptions);
+          this._logger?.debug('Token refreshed successfully');
+          if (this._tokenExpiresOn) {
+            this._logger?.debug(`New token expires on: ${this._tokenExpiresOn.toISOString()}`);
+          }
+        } else {
+          this._logger?.debug('Token unchanged after refresh request');
+        }
+      } catch (error: any) {
+        this._logger?.warn(`Failed to refresh token: ${error.message}`);
+      }
     }
   }
 
@@ -352,6 +433,12 @@ class AzureDevOpsReporter implements Reporter {
   async onBegin(): Promise<void> {
     if (this._isDisabled) return;
     try {
+      // Initialize authentication handler and connection
+      if (!this._requestHandler) {
+        this._requestHandler = await this._getAuthenticationHandler();
+        this._connection = new azdev.WebApi(this._orgUrl, this._requestHandler, this._azureClientOptions);
+      }
+
       // Fetch configuration names early if configuration IDs are provided
       await this._fetchConfigurationNames();
 
@@ -401,6 +488,7 @@ class AzureDevOpsReporter implements Reporter {
     if (this._isDisabled) return;
     try {
       if (this._publishTestResultsMode === 'testResult') {
+        await this._refreshTokenIfNeeded();
         const runId = await this._runIdPromise;
         if (!runId) return;
 
