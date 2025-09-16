@@ -132,8 +132,8 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-          # Update package.json version
-          npm version "$NEW_VERSION" --no-git-tag-version
+          # Update package.json version (skip scripts to avoid duplicate changelog generation)
+          npm version "$NEW_VERSION" --no-git-tag-version --ignore-scripts
 
       - name: Update changelog
         if: github.event_name == 'workflow_dispatch'
