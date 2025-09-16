@@ -1,3 +1,24 @@
+# [1.15.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.14.0...v1.15.0) (2025-09-16)
+
+
+### Bug Fixes
+
+* **attachments:** implement retry mechanism for file access during upload ([2bd80e5](https://github.com/alexneo2003/playwright-azure-reporter/commit/2bd80e5d233504f2a643e629692533aaae253a53)), closes [#120](https://github.com/alexneo2003/playwright-azure-reporter/issues/120)
+* **changelog:** prevent duplicate entries in publish workflow ([d35cc9c](https://github.com/alexneo2003/playwright-azure-reporter/commit/d35cc9c4cab6a2dce4d9a0880b24bb74964ab7e8))
+
+
+### Features
+
+* **summary:** add testCaseSummary feature with publishToRun support and configuration name resolution ([37c9e43](https://github.com/alexneo2003/playwright-azure-reporter/commit/37c9e4323353d1ddf1bb12267f95acd0a83838b9))
+* **testCaseSummary:** optimize attachment uploads and replace dynamic imports ([a7e0d81](https://github.com/alexneo2003/playwright-azure-reporter/commit/a7e0d81acbea9eb5ce530d800f75dcd94f9f80ac))
+
+
+### BREAKING CHANGES
+
+* **summary:** none (feature is opt-in via testCaseSummary.enabled)
+
+
+
 # [1.14.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.3...v1.14.0) (2025-09-15)
 
 
