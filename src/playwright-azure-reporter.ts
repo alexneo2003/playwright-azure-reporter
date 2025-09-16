@@ -12,7 +12,7 @@ import * as Test from 'azure-devops-node-api/TestApi';
 import * as TestPlanApi from 'azure-devops-node-api/TestPlanApi';
 import { setVariable } from 'azure-pipelines-task-lib';
 import chalk from 'chalk';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import * as path from 'path';
 import * as restm from 'typed-rest-client/RestClient';
 import { isRegExp } from 'util/types';
@@ -1158,6 +1158,32 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  private async _waitForFileAccess(filePath: string, maxRetries = 5, baseDelay = 100): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (existsSync(filePath)) {
+          // Try to access the file to ensure it's not locked
+          const stats = statSync(filePath);
+          if (stats.size > 0) {
+            this._logger?.debug(`File ${filePath} is accessible after ${attempt} attempt(s)`);
+            return true;
+          }
+        }
+      } catch (error: any) {
+        this._logger?.debug(`Attempt ${attempt}: Cannot access file ${filePath} - ${error.message}`);
+      }
+
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+        this._logger?.debug(`Waiting ${delay}ms before retry ${attempt + 1}/${maxRetries} for file: ${filePath}`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    this._logger?.warn(`File ${filePath} is still not accessible after ${maxRetries} attempts`);
+    return false;
+  }
+
   private async _uploadAttachmentsFunc(
     testResult: TestResult,
     testCaseResultId: number,
@@ -1183,15 +1209,30 @@ class AzureDevOpsReporter implements Reporter {
               fileName: name + '.' + ext,
               stream: attachment.body.toString('base64'),
             };
-          } else if (existsSync(attachment.path!)) {
-            const ext = getExtensionFromFilename(attachment.path!);
-            attachmentRequestModel = {
-              attachmentType: 'GeneralAttachment',
-              fileName: name + '.' + ext,
-              stream: readFileSync(attachment.path!, { encoding: 'base64' }),
-            };
+          } else if (attachment.path) {
+            // Wait for file access with retry mechanism
+            const isFileAccessible = await this._waitForFileAccess(attachment.path);
+            if (isFileAccessible) {
+              const ext = getExtensionFromFilename(attachment.path);
+              try {
+                attachmentRequestModel = {
+                  attachmentType: 'GeneralAttachment',
+                  fileName: name + '.' + ext,
+                  stream: readFileSync(attachment.path, { encoding: 'base64' }),
+                };
+              } catch (readError: any) {
+                this._logger?.warn(
+                  `Failed to read attachment file ${attachment.path}: ${readError.message}, skipping upload`
+                );
+                continue;
+              }
+            } else {
+              this._logger?.warn(`Attachment ${attachment.path} is not accessible after retries, skipping upload`);
+              continue;
+            }
           } else {
-            throw new Error(`Attachment ${attachment.path} does not exist`);
+            this._logger?.warn(`Attachment ${attachment.name} has no body or path, skipping upload`);
+            continue;
           }
           if (!this._testApi) this._testApi = await this._connection.getTestApi();
           const response = await this._testApi.createTestResultAttachment(
@@ -1243,14 +1284,15 @@ class AzureDevOpsReporter implements Reporter {
             if (!response?.id) throw new Error(`Failed to upload log attachment for test: ${test.title}`);
             attachmentsResult.push(response.url);
           } else {
-            throw new Error(`Attachment ${attachment.name} does not have body`);
+            this._logger?.warn(`Attachment ${attachment.name} does not have body content, skipping upload`);
+            continue;
           }
         }
-        this._logger?.info(chalk.gray('Uploaded logs attachments'));
       } catch (error: any) {
         this._logger?.error(error.stack);
       }
     }
+    this._logger?.info(chalk.gray('Uploaded logs attachments'));
     return attachmentsResult;
   }
 
