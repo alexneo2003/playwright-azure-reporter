@@ -31,48 +31,6 @@ Documentation:
 
 
 
-# [1.14.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.3...v1.14.0) (2025-09-15)
-
-
-### Features
-
-* **auth:** add support for Personal Access Token and Access Token authentication types ([957a7e7](https://github.com/alexneo2003/playwright-azure-reporter/commit/957a7e76cfb964e942ee8ef528202d2f523ed03d)), closes [#117](https://github.com/alexneo2003/playwright-azure-reporter/issues/117)
-* **auth:** implement comprehensive authentication system with smart token refresh ([8af749e](https://github.com/alexneo2003/playwright-azure-reporter/commit/8af749e3554fe955f0adce516dc582a87c4f6ee3)), closes [#117](https://github.com/alexneo2003/playwright-azure-reporter/issues/117)
-
-
-### BREAKING CHANGES
-
-* **auth:** None - existing configurations continue to work unchanged
-
-Features:
-- New `authType` option in AzureReporterOptions interface
-- Support for both azdev.getPersonalAccessTokenHandler and azdev.getHandlerFromToken
-- Backward compatibility with existing PAT-based configurations
-- Graceful handling of invalid authType values
-
-Tests:
-- 4 integration tests for authType configuration scenarios
-- 3 unit tests with Azure DevOps API method mocking
-- 5 authentication handler creation tests
-- Complete coverage of default behavior and edge cases
-
-Documentation:
-- Updated README.md with authentication section and token scope requirements
-- Created comprehensive authType-examples.md with usage examples
-- Added configuration guidance for both PAT and OAuth scenarios
-- Included troubleshooting section for common authentication issues
-
-
-
-## [1.13.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.1...v1.13.3) (2025-09-02)
-
-
-### Bug Fixes
-
-* add missing conventional-changelog and conventional-github-releaser dependencies ([93bfa1c](https://github.com/alexneo2003/playwright-azure-reporter/commit/93bfa1c45eaff6205b5bf0333cca246976159028))
-
-
-
 ## [1.13.3](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.1...v1.13.3) (2025-09-02)
 
 
@@ -83,26 +41,6 @@ Documentation:
 
 
 ## [1.13.2-beta.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.0...v1.13.2-beta.1) (2025-08-31)
-
-
-
-## [1.13.2-beta.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.2-beta.0...v1.13.2-beta.1) (2025-08-31)
-
-
-
-## [1.13.2-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.13.1...v1.13.2-beta.0) (2025-08-31)
-
-
-### Bug Fixes
-
-* add missing conventional-changelog dependencies for beta release ([caa4a7b](https://github.com/alexneo2003/playwright-azure-reporter/commit/caa4a7bce86f31684bef69c8610f7b52ab8a272f))
-
-
-### Features
-
-* add automatic beta releases for PR merges ([39191e8](https://github.com/alexneo2003/playwright-azure-reporter/commit/39191e8ac0ea20e1f133e2c173146993b93e4dd2))
-* add PR beta release functionality with manual confirmation ([4c61d21](https://github.com/alexneo2003/playwright-azure-reporter/commit/4c61d21db88a4954cce5131fd0349818925435df))
-* add repository owner permission check for PR beta releases ([1242bb3](https://github.com/alexneo2003/playwright-azure-reporter/commit/1242bb322783f40e80f89bd75f58c1ede2ee6def))
 
 
 
@@ -403,24 +341,6 @@ Documentation:
 
 
 ## [1.4.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.3.1-beta.0...v1.4.1) (2023-01-11)
-
-
-
-## [1.4.1-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.4.0-beta.0...v1.4.1-beta.0) (2022-12-30)
-
-
-### Bug Fixes
-
-* fixing some throwe error ([733e759](https://github.com/alexneo2003/playwright-azure-reporter/commit/733e759f82bf7dc17176af7f3ef04ce43593ceeb))
-
-
-
-# [1.4.0-beta.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.3.1-beta.0...v1.4.0-beta.0) (2022-12-29)
-
-
-### Features
-
-* publishTestResultsMode config to set mode when publish test results ([4e25019](https://github.com/alexneo2003/playwright-azure-reporter/commit/4e2501926beb4680c4ef770273847fae39c57b71))
 
 
 
