@@ -1,0 +1,195 @@
+{
+    "value": [
+        {
+            "id": "e65df662-d8a3-46c7-ae1c-14e2d4df57e1",
+            "area": "testplan",
+            "resourceName": "TestPlanClone",
+            "routeTemplate": "{project}/_apis/{area}/Plans/CloneOperation/{cloneOperationId}",
+            "resourceVersion": 2,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "3b9d1c87-6b1a-4e7d-9e7d-1a8e543112bb",
+            "area": "testplan",
+            "resourceName": "TestCaseExport",
+            "routeTemplate": "{project}/_apis/{area}/TestCases/TestCaseFile",
+            "resourceVersion": 1,
+            "minVersion": "7.1",
+            "maxVersion": "7.2",
+            "releasedVersion": "0.0"
+        },
+        {
+            "id": "2c61fac6-ac4e-45a5-8c38-1c2b8fd8ea6c",
+            "area": "testplan",
+            "resourceName": "Variables",
+            "routeTemplate": "{project}/_apis/{area}/{resource}/{testVariableId}",
+            "resourceVersion": 1,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "529b2b8d-82f4-4893-b1e4-1e74ea534673",
+            "area": "testplan",
+            "resourceName": "TestCaseClone",
+            "routeTemplate": "{project}/_apis/{area}/TestCases/CloneTestCaseOperation/{cloneOperationId}",
+            "resourceVersion": 2,
+            "minVersion": "6.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "d2f1e8a4-3b6e-4f8b-9c8e-2d4f6e4b5a7c",
+            "area": "testplan",
+            "resourceName": "TestSuite",
+            "routeTemplate": "{project}/_apis/{area}/recycleBin/TestPlan/{planId}/{resource}/{suiteId}",
+            "resourceVersion": 1,
+            "minVersion": "7.2",
+            "maxVersion": "7.2",
+            "releasedVersion": "0.0"
+        },
+        {
+            "id": "e2a82336-c2f8-4bf4-a451-3342a4569440",
+            "area": "testplan",
+            "resourceName": "TestPlanWithTestCases",
+            "routeTemplate": "{project}/_apis/{area}/TestPlanWithTestCases",
+            "resourceVersion": 1,
+            "minVersion": "1.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "0.0"
+        },
+        {
+            "id": "0e292477-a0c2-47f3-a9b6-34f153d627f4",
+            "area": "testplan",
+            "resourceName": "Plans",
+            "routeTemplate": "{project}/_apis/{area}/{resource}/{planId}",
+            "resourceVersion": 1,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "1046d5d3-ab61-4ca7-a65a-36118a978256",
+            "area": "testplan",
+            "resourceName": "Suites",
+            "routeTemplate": "{project}/_apis/{area}/Plans/{planId}/{resource}/{suiteId}",
+            "resourceVersion": 1,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "a9bd61ac-45cf-4d13-9441-43dcd01edf8d",
+            "area": "testplan",
+            "resourceName": "SuiteTestCase",
+            "routeTemplate": "{project}/_apis/{area}/Plans/{planId}/Suites/{suiteId}/TestCase/{testCaseId}",
+            "resourceVersion": 3,
+            "minVersion": "5.1",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "8369318e-38fa-4e84-9043-4b2a75d2c256",
+            "area": "testplan",
+            "resourceName": "Configurations",
+            "routeTemplate": "{project}/_apis/{area}/{resource}/{testConfigurationId}",
+            "resourceVersion": 1,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "181d4c97-0e98-4ee2-ad6a-4cada675e555",
+            "area": "testplan",
+            "resourceName": "TestSuiteClone",
+            "routeTemplate": "{project}/_apis/{area}/Suites/CloneOperation/{cloneOperationId}",
+            "resourceVersion": 2,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "1e58fbe6-1761-43ce-97f6-5492ec9d438e",
+            "area": "testplan",
+            "resourceName": "Suites",
+            "routeTemplate": "{project}/_apis/{area}/Plans/{planId}/{resource}/{parentSuiteId}/bulk",
+            "resourceVersion": 1,
+            "minVersion": "6.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "29006fb5-816b-4ff7-a329-599943569229",
+            "area": "testplan",
+            "resourceName": "TestCases",
+            "routeTemplate": "{project}/_apis/{area}/{resource}/{testCaseId}",
+            "resourceVersion": 1,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "f40ae369-855d-4d5e-bee0-5e99c5c42fcb",
+            "area": "testplan",
+            "resourceName": "TestSuite",
+            "routeTemplate": "{project}/_apis/{area}/recycleBin/{resource}/{suiteId}",
+            "resourceVersion": 1,
+            "minVersion": "7.2",
+            "maxVersion": "7.2",
+            "releasedVersion": "0.0"
+        },
+        {
+            "id": "a4080e84-f17b-4fad-84f1-7960b6525bf2",
+            "area": "testplan",
+            "resourceName": "Suites",
+            "routeTemplate": "_apis/{area}/{resource}",
+            "resourceVersion": 3,
+            "minVersion": "1.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "300578da-7b40-4c1e-9542-7aed6029e504",
+            "area": "testplan",
+            "resourceName": "Count",
+            "routeTemplate": "{project}/_apis/{area}/{resource}/{planId}",
+            "resourceVersion": 1,
+            "minVersion": "5.1",
+            "maxVersion": "7.2",
+            "releasedVersion": "0.0"
+        },
+        {
+            "id": "04c64b80-239e-426c-b79d-b1ca8951ce26",
+            "area": "testplan",
+            "resourceName": "TestPlan",
+            "routeTemplate": "{project}/_apis/{area}/recycleBin/{resource}/{planId}",
+            "resourceVersion": 1,
+            "minVersion": "7.2",
+            "maxVersion": "7.2",
+            "releasedVersion": "0.0"
+        },
+        {
+            "id": "52df686e-bae4-4334-b0ee-b6cf4e6f6b73",
+            "area": "testplan",
+            "resourceName": "TestPoint",
+            "routeTemplate": "{project}/_apis/{area}/Plans/{planId}/Suites/{suiteId}/TestPoint/{pointIds}",
+            "resourceVersion": 2,
+            "minVersion": "5.1",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        },
+        {
+            "id": "d6733edf-72f1-4252-925b-c560dfe9b75a",
+            "area": "testplan",
+            "resourceName": "SuiteEntry",
+            "routeTemplate": "{project}/_apis/{area}/{resource}/{suiteId}",
+            "resourceVersion": 1,
+            "minVersion": "5.0",
+            "maxVersion": "7.2",
+            "releasedVersion": "7.1"
+        }
+    ],
+    "count": 19
+}

@@ -372,6 +372,77 @@ Reporter options (\* - required):
   >
   > And when you run tests with the `Smoke Tests` project without specifying the `rootSuiteId`, the test results will be published under the root suite `Automation Tests` for test cases in the `Smoke Tests` suite and `Integration Tests` suite. It will look like you have redundant results inside the test run for the same test cases in different suites. To avoid this, you can specify the `rootSuiteId: 5` to publish test results only under the `Smoke Tests` suite.
 
+- `testCaseSummary` [object] - Configuration for generating a summary report of test cases that don't match the test plan. Default: `undefined`.
+  - `enabled` [boolean] - Enable test case summary generation. Default: `false`.
+  - `outputPath` [string] - File path where the summary report will be written. If not specified, no file will be created. Default: `undefined`.
+  - `consoleOutput` [boolean] - Whether to output the summary to console. Default: `true`.
+  - `publishToRun` [boolean] - When `true`, the generated summary (Markdown) is uploaded as an attachment to the Azure DevOps test run (if a run ID exists). Default: `false`. Works together with `outputPath` (file still written if specified) and `consoleOutput` (console printing still occurs unless you explicitly set `consoleOutput: false`).
+
+  **Example:**
+
+  ```typescript
+  testCaseSummary: {
+    enabled: true,
+    outputPath: './test-case-summary.md',
+    consoleOutput: true,
+    publishToRun: true
+  }
+  ```
+
+  When enabled, the reporter will track test cases that have test case IDs but no matching test points in the Azure DevOps test plan. This helps identify:
+  - Test cases that don't exist in the specified test plan
+  - Test cases that are not assigned to the correct configurations
+  - Test cases that are not included in the test plan suite structure
+
+  The summary includes recommendations for resolving issues, including specific configuration IDs and names when available.
+
+  **Behavior matrix:**
+  - Only `consoleOutput: true`: Printed to console only
+  - `outputPath` + `consoleOutput: true`: Printed and written to file
+  - `publishToRun: true` + (optional `outputPath`): Uploaded as run attachment; also printed and/or written depending on the other flags
+  - Set any channel off explicitly by setting its flag to `false` (e.g. `consoleOutput: false` to suppress console)
+
+  **Example summary (actual generated format):**
+
+  ```markdown
+  # Test Case Summary
+
+  ⚠️ Found 1 test(s) with test case IDs that don't match the test plan:
+
+  ## Tests with No Matching Test Points (1)
+
+  These tests have valid test case IDs but no matching test points in the test plan:
+
+  - **[777] Test with file output**
+    - File: /path/to/project/test-results/.../a.spec.js:3
+    - Test Case IDs: [777]
+
+  ## Recommendations
+
+  - Verify test case IDs exist in Azure DevOps test plan 4
+  - Check that test cases are assigned to configurations: [10, 20] (Firefox on Ubuntu, Safari on macOS)
+  - Ensure test cases are included in the test plan suite structure
+  - Add missing test cases to the test plan or assign them to the correct configurations
+  ```
+
+  When `outputPath` is set you'll see a log line:
+
+  ```text
+  Test case summary written to: ./test-case-summary.md
+  ```
+
+  And if `publishToRun: true` a Markdown attachment with the same content is uploaded to the run.
+
+  When all tests with IDs are matched you'll instead see:
+
+  ```text
+  Test case summary: All tests with test case IDs found matching test points in the test plan.
+  ```
+
+  > Note: Key summary lines are force-logged so they appear even when general reporter logging is disabled; this ensures visibility in CI logs.
+
+  > **Important:** When `publishToRun: true` is enabled, the test case summary file will only be uploaded as an attachment to the Azure DevOps test run if there are unmatched test points (i.e., `this._unmatched.noTestPoints.length > 0`). If all tests with test case IDs match the test plan, no attachment will be uploaded to avoid unnecessary file uploads, though the summary will still be displayed in console and/or written to file if those options are enabled.
+
 ## Usefulness
 
 - **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution.
