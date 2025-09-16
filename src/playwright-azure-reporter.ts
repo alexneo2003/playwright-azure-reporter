@@ -11,7 +11,8 @@ import * as Test from 'azure-devops-node-api/TestApi';
 import * as TestPlanApi from 'azure-devops-node-api/TestPlanApi';
 import { setVariable } from 'azure-pipelines-task-lib';
 import chalk from 'chalk';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import * as path from 'path';
 import * as restm from 'typed-rest-client/RestClient';
 import { isRegExp } from 'util/types';
 
@@ -544,7 +545,12 @@ class AzureDevOpsReporter implements Reporter {
         if (this._testCaseSummaryEnabled) {
           try {
             const summary = await this._outputTestCaseSummary();
-            if (this._testCaseSummaryPublishToRun && typeof summary === 'string' && runId) {
+            if (
+              this._testCaseSummaryPublishToRun &&
+              typeof summary === 'string' &&
+              runId &&
+              this._unmatched.noTestPoints.length > 0
+            ) {
               await this._publishTestCaseSummaryAttachment(runId, summary);
             }
           } catch (summaryError: any) {
@@ -574,7 +580,12 @@ class AzureDevOpsReporter implements Reporter {
       try {
         const runIdVal = await this._runIdPromise;
         const summary = await this._outputTestCaseSummary();
-        if (this._testCaseSummaryPublishToRun && typeof summary === 'string' && runIdVal) {
+        if (
+          this._testCaseSummaryPublishToRun &&
+          typeof summary === 'string' &&
+          runIdVal &&
+          this._unmatched.noTestPoints.length > 0
+        ) {
           await this._publishTestCaseSummaryAttachment(runIdVal, summary);
         }
       } catch (summaryError: any) {
@@ -1514,16 +1525,13 @@ class AzureDevOpsReporter implements Reporter {
     // File output
     if (this._testCaseSummaryOutputPath) {
       try {
-        const fs = await import('fs');
-        const path = await import('path');
-
         // Ensure directory exists
         const dir = path.dirname(this._testCaseSummaryOutputPath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
+        if (!existsSync(dir)) {
+          mkdirSync(dir, { recursive: true });
         }
 
-        fs.writeFileSync(this._testCaseSummaryOutputPath, summary, 'utf8');
+        writeFileSync(this._testCaseSummaryOutputPath, summary, 'utf8');
         this._logger?.info(`Test case summary written to: ${this._testCaseSummaryOutputPath}`);
       } catch (error: any) {
         this._logger?.error(`Failed to write test case summary to file: ${error.message}`);
@@ -1557,7 +1565,6 @@ class AzureDevOpsReporter implements Reporter {
       let fileNameToAttach: string;
       let contentBase64: string;
       if (this._testCaseSummaryOutputPath && existsSync(this._testCaseSummaryOutputPath)) {
-        const path = await import('path');
         fileNameToAttach = path.basename(this._testCaseSummaryOutputPath);
         contentBase64 = readFileSync(this._testCaseSummaryOutputPath, { encoding: 'base64' });
       } else {

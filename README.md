@@ -362,6 +362,8 @@ Reporter options (\* - required):
 
   > Note: Key summary lines are force-logged so they appear even when general reporter logging is disabled; this ensures visibility in CI logs.
 
+  > **Important:** When `publishToRun: true` is enabled, the test case summary file will only be uploaded as an attachment to the Azure DevOps test run if there are unmatched test points (i.e., `this._unmatched.noTestPoints.length > 0`). If all tests with test case IDs match the test plan, no attachment will be uploaded to avoid unnecessary file uploads, though the summary will still be displayed in console and/or written to file if those options are enabled.
+
 ## Usefulness
 
 - **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution.
