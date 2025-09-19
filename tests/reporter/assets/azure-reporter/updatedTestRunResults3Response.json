@@ -1,0 +1,32 @@
+[
+  {
+    "id": 123456,
+    "testCase": {
+      "id": "3"
+    },
+    "testPoint": {
+      "id": "1"
+    },
+    "testPlan": {
+      "id": "4"
+    },
+    "testRun": {
+      "id": "789"
+    },
+    "outcome": "Failed",
+    "state": "Completed",
+    "priority": 0,
+    "url": "http://localhost:3000/SampleSample/_apis/test/Runs/789/Results/123456",
+    "lastUpdatedBy": {
+      "displayName": "Test User",
+      "id": "test-user-id"
+    },
+    "lastUpdatedDate": "2023-01-01T00:00:00Z",
+    "project": {
+      "id": "sample-project-id"
+    },
+    "durationInMs": 5000,
+    "errorMessage": "[3] foobar:\n\nERROR #1:\nexpected 1 to be 0",
+    "stackTrace": "STACK #1:\n\n    at test.spec.js:3:21"
+  }
+]
