@@ -958,6 +958,7 @@ test.describe('Publish results - testRun', () => {
 
     expect(result.output).not.toContain('Failed request: (401)');
     expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
+    expect(result.output).not.toContain('No existing test case results found for test cases');
     expect(result.output).toContain(
       'azure:pw:log Start publishing test results for 125 test(s)\nazure:pw:log Starting to uploading attachments for 5 testpoint(s)\nazure:pw:log Uploading attachments for test: [10] foobar\nazure:pw:log Uploaded attachments'
     );

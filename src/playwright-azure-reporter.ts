@@ -36,7 +36,7 @@ const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
 type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
-type TPublishTestResults = 'testResult' | 'testRun';
+type TPublishTestResults = 'testResult' | 'testRun' | 'testRunADO';
 type TTestCaseIdZone = 'title' | 'annotation';
 
 interface ITestCaseExtended extends TestCase {
@@ -80,7 +80,7 @@ export interface AzureReporterOptions {
 interface TestResultsToTestRun {
   statusCode: number;
   result: Result;
-  headers: Headers;
+  headers?: Headers;
 }
 interface Result {
   count: number;
@@ -101,8 +101,8 @@ interface TestRun {
   id: string;
 }
 interface LastUpdatedBy {
-  displayName?: null;
-  id?: null;
+  displayName?: string | undefined;
+  id?: string | undefined;
 }
 interface Headers {
   'cache-control': string;
@@ -293,6 +293,17 @@ class AzureDevOpsReporter implements Reporter {
       return;
     }
     this._testRunId = options.testRunId || Number(process.env.AZURE_PW_TEST_RUN_ID) || undefined;
+
+    if (options?.publishTestResultsMode === 'testRunADO') {
+      if (!this._testRunId || !options?.isExistingTestRun) {
+        this._logger?.warn(
+          "'testRunADO' mode requires both 'testRunId' and 'isExistingTestRun=true' to be set. Reporting is disabled."
+        );
+        this._setIsDisable(true);
+        return;
+      }
+    }
+
     if (options?.isExistingTestRun && !this._testRunId) {
       this._logger?.warn(
         "'testRunId' or AZURE_PW_TEST_RUN_ID is not set for 'isExistingTestRun'=true mode. Reporting is disabled."
@@ -320,7 +331,7 @@ class AzureDevOpsReporter implements Reporter {
 
     this._orgUrl = options.orgUrl;
     this._projectName = options.projectName;
-    this._planId = options.planId;
+    this._planId = parseInt(options.planId.toString());
     this._token = options.token;
     this._authType = options.authType || 'pat';
     this._applicationIdURI = options.applicationIdURI;
@@ -460,6 +471,7 @@ class AzureDevOpsReporter implements Reporter {
 
   async onBegin(): Promise<void> {
     if (this._isDisabled) return;
+
     try {
       // Initialize authentication handler and connection
       if (!this._requestHandler) {
@@ -603,7 +615,7 @@ class AzureDevOpsReporter implements Reporter {
           } else {
             runId = this._testRunId;
           }
-          this._logger?.debug(`[onEnd] Publishing test results for run ${runId}, "testRun" mode`);
+          this._logger?.debug(`[_performOnEnd] Publishing test results for run ${runId}, "testRun" mode`);
           if (runId) {
             this._resolveRunId(runId);
             this._logger?.info(`Using run ${runId} to publish test results`);
@@ -629,7 +641,7 @@ class AzureDevOpsReporter implements Reporter {
         this._logger?.info(`Test results published for ${tests} test(s), ${points} test point(s)`, shouldForceLogs);
       }
 
-      if (this._isExistingTestRun) {
+      if (this._isExistingTestRun && this._publishTestResultsMode !== 'testRunADO') {
         if (this._testCaseSummaryEnabled) {
           try {
             const summary = await this._outputTestCaseSummary();
@@ -649,14 +661,21 @@ class AzureDevOpsReporter implements Reporter {
       }
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       // In testResult mode runId can be undefined if no results were published; guard before updating
-      if (runId) {
+      if (runId && !this._isExistingTestRun) {
         const runUpdatedResponse = await this._testApi.updateTestRun({ state: 'Completed' }, this._projectName, runId);
         // Force logging only in testRun mode; in testResult mode allow normal logging behavior
         this._logger?.info(`Run ${runId} - ${runUpdatedResponse.state}`, shouldForceLogs);
       } else {
         // Emit only in testRun mode to satisfy expectations; avoid noise in testResult mode with no run
         if (this._publishTestResultsMode === 'testRun') {
-          this._logger?.info(`Run <no-run-id> - Skipped completion (no run created)`, true);
+          this._logger?.info(`Run ${runId} - Skipped completion (no run created)`, true);
+        } else if (this._publishTestResultsMode === 'testRunADO' && runId && this._isExistingTestRun) {
+          const runUpdatedResponse = await this._testApi.updateTestRun(
+            { state: 'Completed' },
+            this._projectName,
+            runId
+          );
+          this._logger?.info(`Run ${runId} - ${runUpdatedResponse.state}`, shouldForceLogs);
         }
       }
     } catch (error: any) {
@@ -737,6 +756,7 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
     }
+
     return matchesResult;
   }
 
@@ -758,6 +778,7 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
     }
+
     return matchesResult;
   }
 
@@ -910,6 +931,42 @@ class AzureDevOpsReporter implements Reporter {
     });
   }
 
+  /**
+   * Filters test points based on existing test case results from a test run.
+   * Used in testRunADO mode to match test points with existing test results.
+   *
+   * @param testCaseResults - Existing test case results from the test run
+   * @param testPoints - Available test points to filter
+   * @param testsResult - Current test result to match against
+   * @returns Filtered test points that match the existing test results
+   */
+  private _filterTestTestPointsByRunResults(
+    testCaseResults: TestInterfaces.TestCaseResult[],
+    testPoints: TestInterfaces.TestPoint[],
+    testsResult: TTestResultsToBePublished
+  ): TestInterfaces.TestPoint[] {
+    const results = testCaseResults?.filter((testCaseResult) => {
+      if (!testCaseResult.testPlan?.id || parseInt(testCaseResult.testPlan?.id, 10) !== this._planId) {
+        return false;
+      } else if (
+        !testCaseResult.testCase?.id ||
+        !testsResult.testCase.testCaseIds.find((testCaseId) => testCaseResult.testCase?.id == testCaseId)
+      ) {
+        return false;
+      } else {
+        return true;
+      }
+    });
+
+    const resultTestPointIds = results.map((r) => {
+      return parseInt(r.testPoint?.id as string, 10);
+    });
+
+    const filteredTestPoints = testPoints?.filter((tp) => resultTestPointIds.includes(tp.id));
+
+    return filteredTestPoints;
+  }
+
   private _convertTestPlanOutcomeToTestOutcome(outcome: TestPlanInterfaces.Outcome): string {
     switch (outcome) {
       case TestPlanInterfaces.Outcome.Passed:
@@ -966,8 +1023,33 @@ class AzureDevOpsReporter implements Reporter {
     });
   }
 
+  /**
+   * Converts a TestCaseResult to a ValueEntity for consistent API response format.
+   * Used when creating mock responses for updateTestResults operations.
+   *
+   * @param testCaseResult - The test case result to convert
+   * @returns ValueEntity representation of the test case result
+   */
+  private _convertTestCaseResultToValueEntity(testCaseResult: TestInterfaces.TestCaseResult): ValueEntity {
+    return {
+      id: testCaseResult.id as number,
+      lastUpdatedBy: {
+        id: testCaseResult.lastUpdatedBy?.id,
+        displayName: testCaseResult.lastUpdatedBy?.displayName,
+      },
+      outcome: testCaseResult.outcome as string,
+      priority: testCaseResult.priority as number,
+      project: testCaseResult.project as object,
+      testRun: {
+        id: testCaseResult.testRun?.id as string,
+      },
+      url: testCaseResult.url as string,
+    };
+  }
+
   private async _getTestPointsOfTestResults(
-    testsResults: TTestResultsToBePublished[]
+    testsResults: TTestResultsToBePublished[],
+    existingTestCaseResults: TestInterfaces.TestCaseResult[]
   ): Promise<Map<TTestResultsToBePublished, TestInterfaces.TestPoint[]>> {
     const result = new Map<TTestResultsToBePublished, TestInterfaces.TestPoint[]>();
 
@@ -1016,10 +1098,18 @@ class AzureDevOpsReporter implements Reporter {
         pointsQuery,
         this._projectName
       );
-
       if (pointsQueryResult.points) {
         for (const testsResult of testsResults) {
-          const currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);
+          let currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);
+
+          // in case of testRunADO
+          if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
+            currentTestPoints = this._filterTestTestPointsByRunResults(
+              existingTestCaseResults,
+              pointsQueryResult.points || [],
+              testsResult
+            );
+          }
 
           if (currentTestPoints && currentTestPoints.length > 0) {
             const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
@@ -1071,6 +1161,7 @@ class AzureDevOpsReporter implements Reporter {
         }
       });
     };
+
     return api;
   };
 
@@ -1127,6 +1218,33 @@ class AzureDevOpsReporter implements Reporter {
       return points;
     } catch (error: any) {
       this._logger?.error(error.stack);
+      return [];
+    }
+  };
+
+  // prettier-ignore
+  private _recursivelyGetTestResults = async (project: string, runId: number, skip: number = 0, top: number = 200): Promise<TestInterfaces.TestCaseResult[]> => {
+    this._logger?.info(chalk.gray(`${skip > 0 ? 'Fetching next' : 'Fetching'} test results from existing test run (skip: ${skip}, top: ${top}).`));
+    try {
+      const testResults = await this._testApi.getTestResults(project, runId, undefined, skip, top);
+      
+      // Handle null response from API
+      if (!testResults || !Array.isArray(testResults)) {
+        this._logger?.debug(`No test results found at skip: ${skip}, top: ${top}`);
+        return [];
+      }
+      
+      let allResults: TestInterfaces.TestCaseResult[] = testResults;
+      
+      // If we got exactly 'top' results, there might be more pages
+      if (testResults.length === top) {
+        const nextResults = await this._recursivelyGetTestResults(project, runId, skip + top, top);
+        allResults = allResults.concat(nextResults);
+      }
+      
+      return allResults;
+    } catch (error: any) {
+      this._logger?.error(`Error fetching test results: ${error.stack}`);
       return [];
     }
   };
@@ -1315,9 +1433,13 @@ class AzureDevOpsReporter implements Reporter {
   private _createTestCaseResult(
     testCase: ITestCaseExtended,
     testResult: TestResult,
-    testPoint: TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint
+    testPoint: TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint,
+    existingTestCaseResult?: TestInterfaces.TestCaseResult
   ): TestInterfaces.TestCaseResult {
+    const baseResult: TestInterfaces.TestCaseResult = existingTestCaseResult ? { ...existingTestCaseResult } : {};
+
     return {
+      ...baseResult,
       testPoint: { id: String(testPoint.id) },
       outcome: this._mapToAzureState(testCase, testResult),
       state: 'Completed',
@@ -1375,7 +1497,7 @@ class AzureDevOpsReporter implements Reporter {
       const runId = await this._runIdPromise;
       this._logger?.info(chalk.gray(`Start publishing: ${test.title}`));
       const toBePublished: TTestResultsToBePublished = { testCase: testCase, testResult };
-      const mappedTestPoints = (await this._getTestPointsOfTestResults([toBePublished])).get(toBePublished);
+      const mappedTestPoints = (await this._getTestPointsOfTestResults([toBePublished], [])).get(toBePublished);
       this._logger?.debug(`[publishCaseResult] Mapped test points: ${JSON.stringify(mappedTestPoints, null, 2)}`);
 
       if (!mappedTestPoints || mappedTestPoints.length == 0) {
@@ -1460,6 +1582,15 @@ class AzureDevOpsReporter implements Reporter {
       await this._testPointsByRootSuitePromise;
     }
 
+    let existingTestCaseResultsForRun: TestInterfaces.TestCaseResult[] | undefined = [];
+    if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
+      existingTestCaseResultsForRun = await this._recursivelyGetTestResults(this._projectName, runId);
+    }
+
+    this._logger?.debug(
+      `[_publishTestRunResults] ExistingTestCaseResultsForRun: ${existingTestCaseResultsForRun.length}`
+    );
+
     try {
       for (const testsPack of testsPacksArray) {
         let testCaseIds: string[] = [];
@@ -1467,18 +1598,57 @@ class AzureDevOpsReporter implements Reporter {
           TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint,
           TTestResultsToBePublished[]
         >();
-        const testsPointsByTestCase = await this._getTestPointsOfTestResults(testsPack);
         const testCaseResults: TestInterfaces.TestCaseResult[] = [];
+
+        const testsPointsByTestCase = await this._getTestPointsOfTestResults(testsPack, existingTestCaseResultsForRun);
 
         for (const [key, value] of testsPointsByTestCase.entries()) {
           const testCase = key.testCase;
           const testResult = key.testResult;
           const testPoints = value;
+          let existingTestCaseResult: TestInterfaces.TestCaseResult | undefined = undefined;
 
           if (testPoints && testPoints.length > 0) {
+            if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
+              const filteredTestCaseResultsForRun = existingTestCaseResultsForRun?.filter((testCaseResult) => {
+                if (!testCaseResult.testPlan?.id || parseInt(testCaseResult.testPlan?.id, 10) !== this._planId) {
+                  return false;
+                } else if (
+                  !testCaseResult.testCase?.id ||
+                  !testCase.testCaseIds.find((testCaseId) => testCaseResult.testCase?.id == testCaseId)
+                ) {
+                  return false;
+                } else if (
+                  !testCaseResult.testPoint?.id ||
+                  !testPoints.find((testPoint) => testCaseResult.testPoint?.id == testPoint.id.toString())
+                ) {
+                  return false;
+                } else {
+                  return true;
+                }
+              });
+
+              if (filteredTestCaseResultsForRun.length === 1) {
+                existingTestCaseResult = filteredTestCaseResultsForRun[0];
+              } else if (filteredTestCaseResultsForRun.length === 0) {
+                this._logger?.warn(
+                  `No existing test case results found for test cases [${testCase.testCaseIds.join(', ')}] in test run ${runId}. ` +
+                    `Verify the test run ID and ensure test cases are associated with test plan ${this._planId}.`
+                );
+              } else {
+                existingTestCaseResult = filteredTestCaseResultsForRun[0];
+                this._logger?.warn(
+                  `Multiple test case results (${filteredTestCaseResultsForRun.length}) found for test cases [${testCase.testCaseIds.join(', ')}] in test run ${runId}. ` +
+                    `Using the first result. Consider reviewing test case associations.`
+                );
+              }
+            }
+
             testCaseIds.push(...testCase.testCaseIds);
             testCaseResults.push(
-              ...testPoints.map((testPoint) => this._createTestCaseResult(testCase, testResult, testPoint))
+              ...testPoints.map((testPoint) =>
+                this._createTestCaseResult(testCase, testResult, testPoint, existingTestCaseResult)
+              )
             );
 
             if (this._uploadAttachments && testResult.attachments.length > 0) {
@@ -1519,9 +1689,34 @@ class AzureDevOpsReporter implements Reporter {
         }
         this._publishedResultsCount.points += testCaseResults.length;
 
-        const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
-          this._testApi
-        ).addTestResultsToTestRun(testCaseResults, this._projectName, runId!)) as unknown as TestResultsToTestRun;
+        let testCaseResult: TestResultsToTestRun;
+        if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
+          const updatedTestCaseResultsForRun = await this._testApi.updateTestResults(
+            testCaseResults,
+            this._projectName,
+            runId!
+          );
+
+          if (!updatedTestCaseResultsForRun) {
+            this._logger?.warn(`Failed to update test results for test cases [${testCaseIds.join(', ')}]`);
+            throw new Error(`Failed to update test results for test cases [${testCaseIds.join(', ')}]`);
+          }
+
+          testCaseResult = {
+            statusCode: 204,
+            headers: undefined,
+            result: {
+              count: updatedTestCaseResultsForRun.length,
+              value: updatedTestCaseResultsForRun.map((t) => this._convertTestCaseResultToValueEntity(t)),
+            },
+          };
+        } else {
+          testCaseResult = (await this._addReportingOverride(this._testApi).addTestResultsToTestRun(
+            testCaseResults,
+            this._projectName,
+            runId!
+          )) as unknown as TestResultsToTestRun;
+        }
 
         if (!testCaseResult.result) {
           this._logger?.warn(`Failed to publish test result for test cases [${testCaseIds.join(', ')}]`);
