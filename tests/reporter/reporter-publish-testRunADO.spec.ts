@@ -37,6 +37,13 @@ const UPDATED_TEST_RUN_RESULTS_3_RESPONSE_PATH = path.join(
   'azure-reporter',
   'updatedTestRunResults3Response.json'
 );
+const COMPLETE_RUN_VALID_RESPONSE_PATH = path.join(
+  __dirname,
+  '.',
+  'assets',
+  'azure-reporter',
+  'completeRunValidResponse.json'
+);
 
 // Mock response for pagination test - simulates large test run with multiple pages
 function createMockPaginatedTestResults(skip: number, top: number, testCaseId: number, totalResults = 500) {
@@ -48,23 +55,23 @@ function createMockPaginatedTestResults(skip: number, top: number, testCaseId: n
   if (skip < totalResults) {
     for (let i = startId; i <= endId; i++) {
       results.push({
-        id: 123000 + i,
+        id: 0 + i,
         testCase: {
           id: testCaseId.toString(),
         },
         testPoint: {
-          id: (1000 + i).toString(),
+          id: (0 + i).toString(),
         },
         testPlan: {
           id: '4',
         },
         testRun: {
-          id: '999',
+          id: '789',
         },
         outcome: 'NotExecuted',
         state: 'InProgress',
         priority: 0,
-        url: `http://localhost:3000/SampleSample/_apis/test/Runs/999/Results/${123000 + i}`,
+        url: `http://localhost:3000/SampleSample/_apis/test/Runs/789/Results/${1 + i}`,
         lastUpdatedBy: {
           displayName: 'Test User',
           id: 'test-user-id',
@@ -209,6 +216,11 @@ test.describe('Publish results - testRunADO', () => {
       }
     });
 
+    server.setRoute('/SampleSample/_apis/test/Runs/789', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
     const result = await runInlineTest(
       {
         'playwright.config.ts': `
@@ -246,6 +258,7 @@ test.describe('Publish results - testRunADO', () => {
     expect(result.output).not.toContain('azure:pw:warn No test points found for test case');
     expect(result.output).toContain('azure:pw:log Start publishing test results for 1 test(s)');
     expect(result.output).toContain('azure:pw:log Test results published for 1 test(s), 1 test point(s)');
+    expect(result.output).toContain('Run 789 - Completed');
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -287,6 +300,11 @@ test.describe('Publish results - testRunADO', () => {
       res.end(JSON.stringify([])); // Empty results array
     });
 
+    server.setRoute('/SampleSample/_apis/test/Runs/789', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
     const result = await runInlineTest(
       {
         'playwright.config.ts': `
@@ -322,11 +340,12 @@ test.describe('Publish results - testRunADO', () => {
     // In testRunADO mode, when no test points are found, it logs a different message
     expect(result.output).toContain('azure:pw:warn No test points found for test case [3] associated with test plan 4');
     expect(result.output).toContain('azure:pw:log Test results published for 0 test(s), 0 test point(s)');
+    expect(result.output).toContain('Run 789 - Completed');
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
 
-  test('testRunADO mode does not complete test run automatically', async ({ runInlineTest, server }) => {
+  test('testRunADO mode should complete test run automatically', async ({ runInlineTest, server }) => {
     server.setRoute('/_apis/Location', (_, res) => {
       setHeaders(res, headers);
       res.end(JSON.stringify(location));
@@ -376,6 +395,11 @@ test.describe('Publish results - testRunADO', () => {
       }
     });
 
+    server.setRoute('/SampleSample/_apis/test/Runs/789', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
     const result = await runInlineTest(
       {
         'playwright.config.ts': `
@@ -413,8 +437,7 @@ test.describe('Publish results - testRunADO', () => {
     expect(result.output).not.toContain('azure:pw:warn No test points found for test case');
     expect(result.output).toContain('azure:pw:log Start publishing test results for 1 test(s)');
     expect(result.output).toContain('azure:pw:log Test results published for 1 test(s), 1 test point(s)');
-    // Should NOT contain test run completion message
-    expect(result.output).not.toContain('Run 789 - Completed');
+    expect(result.output).toContain('Run 789 - Completed');
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
@@ -452,34 +475,34 @@ test.describe('Publish results - testRunADO', () => {
 
     // Mock paginated test results responses
     // First call (skip=0, top=200) - returns full page
-    server.setRoute('/SampleSample/_apis/test/Runs/999/Results?%24skip=0&%24top=200', (req, res) => {
+    server.setRoute('/SampleSample/_apis/test/Runs/789/Results?%24skip=0&%24top=200', (req, res) => {
       setHeaders(res, headers);
       const paginatedResults = createMockPaginatedTestResults(0, 200, 3, 500);
       res.end(JSON.stringify(paginatedResults));
     });
 
     // Second call (skip=200, top=200) - returns second page
-    server.setRoute('/SampleSample/_apis/test/Runs/999/Results?%24skip=200&%24top=200', (req, res) => {
+    server.setRoute('/SampleSample/_apis/test/Runs/789/Results?%24skip=200&%24top=200', (req, res) => {
       setHeaders(res, headers);
       const paginatedResults = createMockPaginatedTestResults(200, 200, 3, 500);
       res.end(JSON.stringify(paginatedResults));
     });
 
     // Third call (skip=400, top=200) - returns remaining results
-    server.setRoute('/SampleSample/_apis/test/Runs/999/Results?%24skip=400&%24top=200', (req, res) => {
+    server.setRoute('/SampleSample/_apis/test/Runs/789/Results?%24skip=400&%24top=200', (req, res) => {
       setHeaders(res, headers);
       const paginatedResults = createMockPaginatedTestResults(400, 200, 3, 500);
       res.end(JSON.stringify(paginatedResults));
     });
 
     // Fourth call (skip=500, top=200) - returns empty array (no more results)
-    server.setRoute('/SampleSample/_apis/test/Runs/999/Results?%24skip=500&%24top=200', (req, res) => {
+    server.setRoute('/SampleSample/_apis/test/Runs/789/Results?%24skip=500&%24top=200', (req, res) => {
       setHeaders(res, headers);
       res.end(JSON.stringify([]));
     });
 
     // Handle PATCH request to update test results - return the first result that matches
-    server.setRoute('/SampleSample/_apis/test/Runs/999/Results', (req, res) => {
+    server.setRoute('/SampleSample/_apis/test/Runs/789/Results', (req, res) => {
       const method = req.method;
       setHeaders(res, headers);
 
@@ -498,12 +521,12 @@ test.describe('Publish results - testRunADO', () => {
               id: '4',
             },
             testRun: {
-              id: '999',
+              id: '789',
             },
             outcome: 'Failed',
             state: 'Completed',
             priority: 0,
-            url: 'http://localhost:3000/SampleSample/_apis/test/Runs/999/Results/123456',
+            url: 'http://localhost:3000/SampleSample/_apis/test/Runs/789/Results/123456',
             lastUpdatedBy: {
               displayName: 'Test User',
               id: 'test-user-id',
@@ -516,6 +539,11 @@ test.describe('Publish results - testRunADO', () => {
         ];
         res.end(JSON.stringify(updatedResult));
       }
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/789', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
     });
 
     const result = await runInlineTest(
@@ -532,7 +560,7 @@ test.describe('Publish results - testRunADO', () => {
               logging: true,
               publishTestResultsMode: 'testRunADO',
               isExistingTestRun: true,
-              testRunId: 999,
+              testRunId: 789,
             }]
           ]
         };
@@ -551,6 +579,7 @@ test.describe('Publish results - testRunADO', () => {
     );
 
     expect(result.output).not.toContain('Failed request: (401)');
+    expect(result.output).not.toContain('azure:pw:warn No test points found for test case');
     expect(result.output).toContain('azure:pw:log [3] foobar - failed');
     expect(result.output).toContain('azure:pw:log Start publishing test results for 1 test(s)');
     // Verify pagination is working - should see multiple fetch operations
@@ -563,8 +592,7 @@ test.describe('Publish results - testRunADO', () => {
     );
     // Verify that it fetched all 500 test results (this proves pagination worked)
     expect(result.output).toContain('azure:pw:debug [_publishTestRunResults] ExistingTestCaseResultsForRun: 500');
-    // Should NOT contain test run completion message
-    expect(result.output).not.toContain('Run 999 - Completed');
+    expect(result.output).toContain('Run 789 - Completed');
     expect(result.exitCode).toBe(1);
     expect(result.failed).toBe(1);
   });
