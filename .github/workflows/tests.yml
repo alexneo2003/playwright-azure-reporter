@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,4 +26,124 @@ jobs:
       - name: Build project
         run: yarn build
       - name: Run tests
-        run: yarn test:reporter
+        id: test
+        run: |
+          yarn test:reporter 2>&1 | tee test-output.log
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        continue-on-error: true
+      
+      - name: Generate test summary
+        id: test-summary
+        if: always()
+        run: |
+          if [ -f "test-output.log" ]; then
+            # Extract test results summary
+            TOTAL_TESTS=$(grep -o '[0-9]\+ passed\|[0-9]\+ failed\|[0-9]\+ skipped' test-output.log | awk '{sum+=$1} END {print sum+0}')
+            PASSED_TESTS=$(grep -o '[0-9]\+ passed' test-output.log | awk '{sum+=$1} END {print sum+0}')
+            FAILED_TESTS=$(grep -o '[0-9]\+ failed' test-output.log | awk '{sum+=$1} END {print sum+0}')
+            SKIPPED_TESTS=$(grep -o '[0-9]\+ skipped' test-output.log | awk '{sum+=$1} END {print sum+0}')
+            
+            # Set default values if extraction failed
+            TOTAL_TESTS=${TOTAL_TESTS:-0}
+            PASSED_TESTS=${PASSED_TESTS:-0}
+            FAILED_TESTS=${FAILED_TESTS:-0}
+            SKIPPED_TESTS=${SKIPPED_TESTS:-0}
+            
+            # Determine status
+            if [ "${{ steps.test.outputs.exit_code }}" = "0" ]; then
+              STATUS="✅ Passed"
+              STATUS_COLOR="28a745"
+            else
+              STATUS="❌ Failed"
+              STATUS_COLOR="d73a49"
+            fi
+            
+            # Create summary
+            echo "status=${STATUS}" >> $GITHUB_OUTPUT
+            echo "status_color=${STATUS_COLOR}" >> $GITHUB_OUTPUT
+            echo "total_tests=${TOTAL_TESTS}" >> $GITHUB_OUTPUT
+            echo "passed_tests=${PASSED_TESTS}" >> $GITHUB_OUTPUT
+            echo "failed_tests=${FAILED_TESTS}" >> $GITHUB_OUTPUT
+            echo "skipped_tests=${SKIPPED_TESTS}" >> $GITHUB_OUTPUT
+            
+            # Extract error details if tests failed
+            if [ "${{ steps.test.outputs.exit_code }}" != "0" ]; then
+              ERROR_DETAILS=$(grep -A 5 -B 5 "Error:\|FAIL\|✗\|×" test-output.log | head -20 || echo "See full logs for error details")
+              echo "error_details<<EOF" >> $GITHUB_OUTPUT
+              echo "$ERROR_DETAILS" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "status=❌ Failed" >> $GITHUB_OUTPUT
+            echo "status_color=d73a49" >> $GITHUB_OUTPUT
+            echo "error_details=Test output file not found" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Comment PR with test results
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const status = '${{ steps.test-summary.outputs.status }}';
+            const statusColor = '${{ steps.test-summary.outputs.status_color }}';
+            const totalTests = '${{ steps.test-summary.outputs.total_tests }}';
+            const passedTests = '${{ steps.test-summary.outputs.passed_tests }}';
+            const failedTests = '${{ steps.test-summary.outputs.failed_tests }}';
+            const skippedTests = '${{ steps.test-summary.outputs.skipped_tests }}';
+            const errorDetails = '${{ steps.test-summary.outputs.error_details }}';
+            const exitCode = '${{ steps.test.outputs.exit_code }}';
+            
+            let commentBody = `## 🧪 Test Results\n\n`;
+            commentBody += `![Status](https://img.shields.io/badge/Status-${status.replace(/[^a-zA-Z0-9]/g, '%20')}-${statusColor})\n\n`;
+            
+            if (totalTests > 0) {
+              commentBody += `### 📊 Summary\n\n`;
+              commentBody += `| Metric | Count |\n`;
+              commentBody += `|--------|-------|\n`;
+              commentBody += `| Total Tests | ${totalTests} |\n`;
+              commentBody += `| ✅ Passed | ${passedTests} |\n`;
+              commentBody += `| ❌ Failed | ${failedTests} |\n`;
+              commentBody += `| ⏭️ Skipped | ${skippedTests} |\n\n`;
+            }
+            
+            if (exitCode !== '0' && errorDetails) {
+              commentBody += `### 🔍 Error Details\n\n`;
+              commentBody += `\`\`\`\n${errorDetails}\n\`\`\`\n\n`;
+            }
+            
+            commentBody += `### 📋 Workflow Details\n\n`;
+            commentBody += `- **Workflow:** ${context.workflow}\n`;
+            commentBody += `- **Run ID:** ${context.runId}\n`;
+            commentBody += `- **Commit:** ${context.sha.substring(0, 7)}\n`;
+            commentBody += `- **Branch:** ${context.ref.replace('refs/heads/', '')}\n\n`;
+            commentBody += `[View full workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId})\n`;
+            
+            // Find existing comment to update or create new one
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('🧪 Test Results')
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+            }
