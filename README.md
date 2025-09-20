@@ -283,9 +283,11 @@ Reporter options (\* - required):
   - `testResult` - Published results of tests, at the end of each test, parallel to test run..
   - `testRun` - Published test results to test run, at the end of test run.
     > **Note:** If you use `testRun` mode and using same test cases in different tests (yes i know it sounds funny), it will be overwritten with last test result.
+  - `testRunADO` - Updates existing test results in Azure DevOps test run instead of creating new results. Requires `isExistingTestRun: true` and `testRunId` to be specified.
+    > **Note:** This mode is designed for updating test results in an existing Azure DevOps test run. It will update the status and outcome of existing test results rather than creating new ones. This is useful when you want to update pre-existing test results with actual execution outcomes.
 - `isExistingTestRun` [boolean] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion. Default: `false`.
-  > **Note:** If you use `isExistingTestRun` mode, `testRunId` should be specified.
-- `testRunId` [number] - Id of test run. Used only for `existingTestRun` publishing mode. Also can be set by `AZURE_PW_TEST_RUN_ID` environment variable. Default: `undefined`.
+  > **Note:** If you use `isExistingTestRun` mode or `testRunADO` mode, `testRunId` should be specified.
+- `testRunId` [number] - Id of test run. Used for `existingTestRun` publishing mode and `testRunADO` mode. Also can be set by `AZURE_PW_TEST_RUN_ID` environment variable. Default: `undefined`.
 
   > **Note:** If you set existing test run ID from reporter options and from environment variable - reporter options will be used
 
@@ -445,7 +447,7 @@ Reporter options (\* - required):
 
 ## Usefulness
 
-- **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution.
+- **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution. For `testRunADO` mode, this variable will contain the existing test run ID that is being updated.
 
   > **Since version 1.10.0 you have access to `AZURE_PW_TEST_RUN_ID` environment variable in your ADO pipeline. You can get it from the Task Variables.**
 
