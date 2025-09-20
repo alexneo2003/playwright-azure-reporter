@@ -667,8 +667,15 @@ class AzureDevOpsReporter implements Reporter {
         this._logger?.info(`Run ${runId} - ${runUpdatedResponse.state}`, shouldForceLogs);
       } else {
         // Emit only in testRun mode to satisfy expectations; avoid noise in testResult mode with no run
-        if (this._publishTestResultsMode === 'testRun' || this._publishTestResultsMode === 'testRunADO') {
+        if (this._publishTestResultsMode === 'testRun') {
           this._logger?.info(`Run ${runId} - Skipped completion (no run created)`, true);
+        } else if (this._publishTestResultsMode === 'testRunADO' && runId && this._isExistingTestRun) {
+          const runUpdatedResponse = await this._testApi.updateTestRun(
+            { state: 'Completed' },
+            this._projectName,
+            runId
+          );
+          this._logger?.info(`Run ${runId} - ${runUpdatedResponse.state}`, shouldForceLogs);
         }
       }
     } catch (error: any) {
