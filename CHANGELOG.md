@@ -1,3 +1,18 @@
+# [1.16.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.15.0...v1.16.0) (2025-09-20)
+
+
+### Features
+
+* **ci:** add automated test results reporting to PR comments ([a0c9373](https://github.com/alexneo2003/playwright-azure-reporter/commit/a0c9373c5b02d314beeeb8fa1799ae7dfb796d14))
+* **reporter:** add testRunADO mode with pagination support ([21f0929](https://github.com/alexneo2003/playwright-azure-reporter/commit/21f0929c038a724797fb2866af95e26cc21328ad))
+
+
+### BREAKING CHANGES
+
+* **reporter:** testRunADO mode requires both testRunId and isExistingTestRun=true
+
+
+
 # [1.15.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.14.0...v1.15.0) (2025-09-16)
 
 
