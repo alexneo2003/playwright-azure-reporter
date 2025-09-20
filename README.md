@@ -291,7 +291,7 @@ Reporter options (\* - required):
 
   > **Note:** If you set existing test run ID from reporter options and from environment variable - reporter options will be used
 
-  > **Note:** If you use `isExistingTestRun` mode or `testRunADO` mode, test run doesn't complete automatically. You should complete it manually.
+  > **Note:** If you use `isExistingTestRun` mode, test run doesn't complete automatically. You should complete it manually.
 
 - `testCaseIdMatcher` [string|RegExp|string[]|RegExp[]] - A string or a regular expression to match the name of the test case to extract the test case id. Default: `/\[([\d,\s]+)\]/`
 
