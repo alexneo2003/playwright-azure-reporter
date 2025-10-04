@@ -9,6 +9,7 @@ module.exports = [
       'dist/**',
       'node_modules/**',
       'test-results/**',
+      'playwright-report/**',
       '**/.DS_Store',
       '**/coverage/**',
       '**/*.min.js',
