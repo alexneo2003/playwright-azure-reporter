@@ -1,3 +1,12 @@
+## [1.16.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.16.0...v1.16.1) (2025-10-07)
+
+
+### Bug Fixes
+
+* **reporter:** preserve TestCase getter properties when creating extended test cases ([7b20c14](https://github.com/alexneo2003/playwright-azure-reporter/commit/7b20c141349968bbf6fd2712b4e7c0c60b77f14c)), closes [#128](https://github.com/alexneo2003/playwright-azure-reporter/issues/128)
+
+
+
 # [1.16.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.15.0...v1.16.0) (2025-09-20)
 
 
