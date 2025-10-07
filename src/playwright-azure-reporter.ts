@@ -542,11 +542,11 @@ class AzureDevOpsReporter implements Reporter {
         this._logTestItem(test, testResult);
         const caseIds = this._getCaseIds(test);
         if (!caseIds || !caseIds.length) return;
-        const testCase: ITestCaseExtended = {
-          ...test,
-          testAlias: `${shortID()} - ${test.title}`,
-          testCaseIds: caseIds,
-        };
+        const testCase: ITestCaseExtended = this._createExtendedTestCase(
+          test,
+          `${shortID()} - ${test.title}`,
+          caseIds
+        );
         this._testResultsToBePublished.push({ testCase: testCase, testResult });
       }
     } catch (error: any) {
@@ -703,6 +703,24 @@ class AzureDevOpsReporter implements Reporter {
 
   printsToStdio(): boolean {
     return true;
+  }
+
+  /**
+   * Creates an ITestCaseExtended object while preserving all getters and methods from TestCase interface
+   */
+  private _createExtendedTestCase(test: TestCase, testAlias: string, testCaseIds: string[]): ITestCaseExtended {
+    return {
+      // Spread all enumerable properties
+      ...test,
+      // Explicitly preserve getters and methods
+      ok: test.ok.bind(test),
+      outcome: test.outcome.bind(test),
+      titlePath: test.titlePath.bind(test),
+      tags: test.tags,
+      // Add extended properties
+      testAlias: testAlias,
+      testCaseIds: testCaseIds,
+    };
   }
 
   private _anonymizeString(str: string | undefined): string {
@@ -1485,11 +1503,11 @@ class AzureDevOpsReporter implements Reporter {
     const caseIds = this._getCaseIds(test);
     if (!caseIds || !caseIds.length) return;
 
-    const testCase: ITestCaseExtended = {
-      ...test,
-      testAlias: `${shortID()} - ${test.title}`,
-      testCaseIds: caseIds,
-    };
+    const testCase: ITestCaseExtended = this._createExtendedTestCase(
+      test,
+      `${shortID()} - ${test.title}`,
+      caseIds
+    );
 
     this._testsAliasToBePublished.push(testCase.testAlias);
 

@@ -814,7 +814,7 @@ test.describe('Test Case ID matcher in title and tag section', () => {
           isDisabled: false,
           testCaseIdMatcher: testCaseIdMatcher.testCaseIdMatcher,
         });
-      } catch (error) {
+      } catch (error: any) {
         expect(error.message).toContain('Invalid testCaseIdMatcher. Must be a string or RegExp. Actual: 3432');
       }
     });
