@@ -1,3 +1,7 @@
+## [1.16.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.16.1...v1.16.2) (2025-10-20)
+
+
+
 ## [1.16.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.16.0...v1.16.1) (2025-10-07)
 
 
