@@ -119,11 +119,14 @@ jobs:
             commentBody += `- **Branch:** ${context.ref.replace('refs/heads/', '')}\n\n`;
             commentBody += `[View full workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId})\n`;
             
+            // Get the correct issue/PR number
+            const issueNumber = context.payload.pull_request?.number || context.issue.number;
+            
             // Find existing comment to update or create new one
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
             });
             
             const botComment = comments.data.find(comment => 
@@ -143,7 +146,7 @@ jobs:
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
+                issue_number: issueNumber,
                 body: commentBody
               });
             }

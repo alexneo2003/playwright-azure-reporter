@@ -10,7 +10,6 @@ import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces
 import * as TestPlanInterfaces from 'azure-devops-node-api/interfaces/TestPlanInterfaces';
 import * as Test from 'azure-devops-node-api/TestApi';
 import * as TestPlanApi from 'azure-devops-node-api/TestPlanApi';
-import { setVariable } from 'azure-pipelines-task-lib';
 import chalk from 'chalk';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import * as path from 'path';
@@ -1897,7 +1896,7 @@ class AzureDevOpsReporter implements Reporter {
 
   private _setAzurePWTestRunId(runId: number): void {
     process.env.AZURE_PW_TEST_RUN_ID = String(runId);
-    setVariable('AZURE_PW_TEST_RUN_ID', String(runId), false, true);
+    console.log(`##vso[task.setvariable variable=AZURE_PW_TEST_RUN_ID;isOutput=true]${String(runId)}`);
   }
 
   private async _publishTestCaseSummaryAttachment(runId: number, summary: string): Promise<void> {
