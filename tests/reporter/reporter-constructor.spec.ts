@@ -917,6 +917,85 @@ test.describe('Test Case ID matcher in annotation section', () => {
     },
   ];
 
+  // Test URL extraction from annotation descriptions
+  const urlAnnotationObjects: {
+    annotations: TestCaseAnnotation[];
+    testCaseIdMatcher: RegExp | string | Array<RegExp | string>;
+    expected: string[];
+  }[] = [
+    {
+      annotations: [
+        {
+          type: 'Test Case',
+          description: 'https://dev.azure.com/myOrg/myProject/_workitems/edit/12345',
+        },
+      ],
+      testCaseIdMatcher: [/(Test Case)/, /\/(\d+)/],
+      expected: ['12345'],
+    },
+    {
+      annotations: [
+        {
+          type: 'Test Case',
+          description:
+            'https://dev.azure.com/myOrg/myProject/_workitems/edit/12345, https://dev.azure.com/myOrg/myProject/_workitems/edit/54321',
+        },
+      ],
+      testCaseIdMatcher: [/(Test Case)/, /\/(\d+)/],
+      expected: ['12345', '54321'],
+    },
+    {
+      annotations: [
+        {
+          type: 'TestCase',
+          description: 'https://dev.azure.com/myOrg/myProject/_workitems/edit/999',
+        },
+      ],
+      testCaseIdMatcher: [/(TestCase)/, /\/(\d+)/],
+      expected: ['999'],
+    },
+    {
+      annotations: [
+        {
+          type: 'Test Case',
+          description: '[12345]',
+        },
+      ],
+      testCaseIdMatcher: [/(Test Case)/, /\[(\d+)\]/],
+      expected: ['12345'],
+    },
+    {
+      annotations: [
+        {
+          type: 'Test Case',
+          description: '[12345, 67890]',
+        },
+      ],
+      testCaseIdMatcher: [/(Test Case)/, /\[([\d,\s]+)\]/],
+      expected: ['12345, 67890'], // Will be split by comma in _getCaseIds
+    },
+  ];
+
+  urlAnnotationObjects.forEach((item) => {
+    test(`_extractMatchesFromObject should extract IDs from URLs: ${JSON.stringify(item.annotations[0].description)}`, () => {
+      const reporter = new AzureDevOpsReporter({
+        orgUrl: 'http://localhost:4000',
+        projectName: 'SampleSample',
+        planId: 4,
+        token: 'token',
+        isDisabled: false,
+        testCaseIdMatcher: item.testCaseIdMatcher,
+        testCaseIdZone: 'annotation',
+      });
+
+      const matches: string[] = [];
+      for (const annotation of item.annotations) {
+        matches.push(...(reporter as any)._extractMatchesFromObject(annotation));
+      }
+      expect.soft(matches).toEqual(item.expected);
+    });
+  });
+
   annotationObjects.forEach((item) => {
     test(`match tags with own tags matcher for ${item.testCaseIdMatcher} in annotations section`, async ({
       runInlineTest,

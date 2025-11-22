@@ -171,7 +171,7 @@ test.describe('TestPointMapper functionality', () => {
     expect(result.output).toContain('"hasTagsProperty":true');
     expect(result.output).toContain('"tagsType":"object"');
     expect(result.output).toContain('"tags":["@tagOne","@tagTwo"]');
-    
+
     // Verify filtering logic worked correctly
     expect(result.output).toContain('TESTPOINTMAPPER_FILTERING:');
     expect(result.output).toContain('"hasTagOne":true');
@@ -292,7 +292,7 @@ test.describe('TestPointMapper functionality', () => {
         test('[3] Test with other tags', { tag: ['@otherTag'] }, async () => {
           expect(1).toBe(1);
         });
-        `
+        `,
       },
       { reporter: '' }
     );
@@ -304,12 +304,12 @@ test.describe('TestPointMapper functionality', () => {
     expect(result.output).toContain('TESTCASE_INFO:');
     expect(result.output).toContain('"hasTagOne":true');
     expect(result.output).toContain('"hasTagTwo":true');
-    
+
     // Verify that tags are properly accessible for all test cases
     expect(result.output).toContain('"allTags":["@tagOne"]');
     expect(result.output).toContain('"allTags":["@tagTwo"]');
     expect(result.output).toContain('"allTags":["@otherTag"]');
-    
+
     // Verify that tags are properly accessible
     expect(result.output).not.toContain('Cannot read properties of undefined');
     expect(result.output).not.toContain('TypeError');
@@ -411,7 +411,7 @@ test.describe('TestPointMapper functionality', () => {
         test('[3] Test with empty tags', { tag: [] }, async () => {
           expect(1).toBe(1);
         });
-        `
+        `,
       },
       { reporter: '' }
     );
@@ -423,7 +423,7 @@ test.describe('TestPointMapper functionality', () => {
     expect(result.output).toContain('EDGE_CASE_TEST:');
     expect(result.output).toContain('SAFE_TAG_ACCESS:');
     expect(result.output).toContain('"tagsIsArray":true');
-    
+
     // Verify no undefined errors in edge cases
     expect(result.output).not.toContain('Cannot read properties of undefined');
     expect(result.output).not.toContain('TypeError');

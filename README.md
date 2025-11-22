@@ -334,24 +334,66 @@ Reporter options (\* - required):
 
 - `testCaseIdZone` [string] - Specifies where to look for the test case IDs. It can be either `'title'` or `'annotation'`. When set to `'title'`, the reporter will extract test case IDs from the test title and tag test section also. When set to `'annotation'`, it will extract test case IDs only from the test annotations. Default: `'title'`.
 
-  **Pay attention that if you use `testCaseIdZone: 'annotation'` and `testCaseIdMatcher` is not defined, the reporter will not extract test case IDs from the test annotations. You should define `testCaseIdMatcher` to extract test case IDs from the test annotations. Matcher should match the annotation type not the annotation description!**
+  **Pay attention that if you use `testCaseIdZone: 'annotation'` and `testCaseIdMatcher` is not defined, the reporter will not extract test case IDs from the test annotations. You should define `testCaseIdMatcher` to extract test case IDs from the test annotations.**
+
+  **When using annotation zone:** The `testCaseIdMatcher` is applied in two steps:
+  1. First matcher in the array should match the annotation **type** (e.g., `/(TestCase)/`)
+  2. Subsequent matchers extract test case IDs from the annotation **description**
+  
+  This allows extracting IDs from complex patterns like URLs, bracketed formats, or any custom format.
 
   #### Example Usage
   - Test title: `Test case [12345]`
     - `testCaseIdZone: 'title'`
     - Extracted tags: `['12345']`
 
-  - Test annotations:
+  - Test annotations with simple description:
 
     ```typescript
-    test('Test case', { annotations: [{ type: 'TestCase', description: '12345' }] }, () => {
+    test('Test case', { annotation: { type: 'TestCase', description: '12345' } }, () => {
       expect(true).toBe(true);
     });
     ```
 
     - `testCaseIdZone: 'annotation'`
     - `testCaseIdMatcher: /(TestCase)/`
-    - Extracted tags: `['12345']`]
+    - Extracted IDs: `['12345']`
+
+  - Test annotations with Azure DevOps URLs:
+
+    ```typescript
+    test('Test case', {
+      annotation: {
+        type: 'Test Case',
+        description: 'https://dev.azure.com/myOrg/myProject/_workitems/edit/12345, https://dev.azure.com/myOrg/myProject/_workitems/edit/54321'
+      }
+    }, () => {
+      expect(true).toBe(true);
+    });
+    ```
+
+    - `testCaseIdZone: 'annotation'`
+    - `testCaseIdMatcher: [/(Test Case)/, /\/(\d+)/]`
+    - Extracted IDs: `['12345', '54321']`
+    - The first matcher `/(Test Case)/` matches the annotation type
+    - The second matcher `/\/(\d+)/` extracts numeric IDs from the URLs
+
+  - Test annotations with bracketed format:
+
+    ```typescript
+    test('Test case', {
+      annotation: {
+        type: 'Test Case',
+        description: '[12345, 67890]'
+      }
+    }, () => {
+      expect(true).toBe(true);
+    });
+    ```
+
+    - `testCaseIdZone: 'annotation'`
+    - `testCaseIdMatcher: [/(Test Case)/, /\[([\d,\s]+)\]/]`
+    - Extracted IDs: `['12345', '67890']`
 
 - `rootSuiteId` [number] - The ID of the root test suite under which the test results will be published. This can be useful when you have some test suites for different test packages, like `smoke`, `integration`, `e2e`, etc., with the same test cases. In this case, you can specify the root suite ID to publish test results under the root suite. Also can be defined by the `AZURE_PW_ROOT_SUITE_ID` environment variable. Default: `undefined`.
 
