@@ -216,6 +216,9 @@ Regardless of the authentication type you choose, your token must have the follo
   - Publishing test results
   - Querying test points and configurations
   - Uploading test attachments
+- **Work Items (Read & Write)** - Required for:
+  - Marking test cases as automated (when `autoMarkTestCasesAsAutomated` is enabled)
+  - Updating test case automation status and metadata
 - **Project and Team (Read)** - Required for:
   - Accessing project information
   - Validating project existence
@@ -224,12 +227,15 @@ Regardless of the authentication type you choose, your token must have the follo
 When creating a Personal Access Token in Azure DevOps, ensure you select at least:
 
 - `Test Management: Read & write`
+- `Work Items: Read & write` (required if using `autoMarkTestCasesAsAutomated` feature)
 - `Project and Team: Read`
 
 **Full Access (Alternative):**
 If you prefer, you can use a token with `Full access` scope, which includes all required permissions.
 
 > **Note:** The reporter will fail with authentication errors if the token doesn't have sufficient permissions to perform test management operations.
+
+> **Important:** If you enable the `autoMarkTestCasesAsAutomated` feature but your token lacks Work Items write permissions, the reporter will log errors when attempting to update test case automation status, but will continue to publish test results normally.
 
 ## Configuration
 
@@ -444,6 +450,40 @@ Reporter options (\* - required):
   > Note: Key summary lines are force-logged so they appear even when general reporter logging is disabled; this ensures visibility in CI logs.
 
   > **Important:** When `publishToRun: true` is enabled, the test case summary file will only be uploaded as an attachment to the Azure DevOps test run if there are unmatched test points (i.e., `this._unmatched.noTestPoints.length > 0`). If all tests with test case IDs match the test plan, no attachment will be uploaded to avoid unnecessary file uploads, though the summary will still be displayed in console and/or written to file if those options are enabled.
+
+- `autoMarkTestCasesAsAutomated` [object] - Configuration for automatically marking test cases as automated when they are executed through the reporter. Default: `undefined`.
+  - `enabled` [boolean] - Enable automatic marking of test cases as automated. Default: `false`.
+  - `updateAutomatedTestName` [boolean] - Update the `Microsoft.VSTS.TCM.AutomatedTestName` field with the test title. Default: `true` (when enabled).
+  - `updateAutomatedTestStorage` [boolean] - Update the `Microsoft.VSTS.TCM.AutomatedTestStorage` field with the test file name. Default: `true` (when enabled).
+
+  **Example:**
+
+  ```typescript
+  autoMarkTestCasesAsAutomated: {
+    enabled: true,
+    updateAutomatedTestName: true,
+    updateAutomatedTestStorage: true
+  }
+  ```
+
+  When enabled, the reporter will automatically:
+  1. Check the automation status of each test case work item in Azure DevOps
+  2. If the test case is marked as "Not Automated", it will:
+     - Update the `Microsoft.VSTS.TCM.AutomationStatus` field to "Automated"
+     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestName` to the test title
+     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestStorage` to the test file name
+     - Generate a new GUID for the `Microsoft.VSTS.TCM.AutomatedTestId` field
+  3. If the test case is already "Automated", it will optionally update the test name and storage fields if they differ from current values
+
+  This feature is useful for:
+  - Streamlining CI/CD pipeline integrations by automatically reflecting test automation status
+  - Keeping Azure DevOps test cases synchronized with automated test execution
+  - Improving visibility for teams using Azure DevOps Test Plans and automated reporting tools
+  - Reducing manual work required to maintain test case automation metadata
+
+  > **Note:** This feature requires write access to work items in Azure DevOps. Ensure your authentication token or managed identity has the necessary permissions.
+
+  > **Behavior:** The feature works in all publishing modes (`testResult`, `testRun`, and `testRunADO`). Updates are performed after test results are successfully published to Azure DevOps.
 
 ## Usefulness
 
