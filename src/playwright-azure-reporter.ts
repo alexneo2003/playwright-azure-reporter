@@ -789,8 +789,20 @@ class AzureDevOpsReporter implements Reporter {
         for (const re of this._prepareExtractMatches(this._testCaseIdMatcher)) {
           const matches = obj[key].match(re);
           if (matches && matches.length > 1) {
-            this._logger?.debug(`[_extractMatches] Matches found: ${key} - ${matches[1]}`);
-            matchesResult.push(obj['description']);
+            this._logger?.debug(`[_extractMatches] Matches found in type: ${key} - ${matches[1]}`);
+            // Extract test case IDs from the description using the matcher
+            const description = obj['description'] || '';
+            const descriptionMatches = this._extractMatchesFromText(description);
+            
+            // If the matcher found IDs in the description, use those
+            // Otherwise, fall back to the description itself (original behavior for simple numeric values)
+            if (descriptionMatches.length > 0) {
+              this._logger?.debug(`[_extractMatches] Extracted from description: ${descriptionMatches}`);
+              matchesResult.push(...descriptionMatches);
+            } else {
+              this._logger?.debug(`[_extractMatches] No matches found, using description as-is: ${description}`);
+              matchesResult.push(description);
+            }
           }
         }
       }
