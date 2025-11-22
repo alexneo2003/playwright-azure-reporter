@@ -55,7 +55,7 @@ test.describe('Reporter TestCase Extension', () => {
       timeout: 30000,
       annotations: [
         { type: 'slow', description: 'This test is slow' },
-        { type: 'skip', description: 'Skip in CI' }
+        { type: 'skip', description: 'Skip in CI' },
       ],
       retries: 2,
       repeatEachIndex: 0,
@@ -63,24 +63,32 @@ test.describe('Reporter TestCase Extension', () => {
       type: 'test' as const,
       location: { file: '/test/file.spec.ts', line: 10, column: 5 },
       parent: {} as any, // Mock suite
-      
+
       // Mock private properties and methods that the getter uses
       _tags: ['@tagOne', '@tagTwo'],
-      _grepBaseTitlePath: function() { return ['Suite', 'Nested Suite', this.title]; },
-      
+      _grepBaseTitlePath: function () {
+        return ['Suite', 'Nested Suite', this.title];
+      },
+
       // Mock getter: tags (matching actual Playwright implementation)
       get tags(): string[] {
-        const titleTags = this._grepBaseTitlePath().join(' ').match(/@[\S]+/g) || [];
-        return [
-          ...titleTags,
-          ...this._tags,
-        ];
+        const titleTags =
+          this._grepBaseTitlePath()
+            .join(' ')
+            .match(/@[\S]+/g) || [];
+        return [...titleTags, ...this._tags];
       },
-      
+
       // Mock methods
-      ok: function() { return true; },
-      outcome: function() { return 'expected' as const; },
-      titlePath: function() { return ['Suite', 'Nested Suite', this.title]; }
+      ok: function () {
+        return true;
+      },
+      outcome: function () {
+        return 'expected' as const;
+      },
+      titlePath: function () {
+        return ['Suite', 'Nested Suite', this.title];
+      },
     };
 
     // Create a minimal reporter instance to access the private method
@@ -89,20 +97,20 @@ test.describe('Reporter TestCase Extension', () => {
       projectName: 'test-project',
       planId: 123,
       token: 'test-token',
-      isDisabled: true // Disable to avoid actual API calls
+      isDisabled: true, // Disable to avoid actual API calls
     };
-    
+
     const reporter = new AzureDevOpsReporter(reporterOptions);
-    
+
     // Access the private method using type assertion
     const createExtendedTestCase = (reporter as any)._createExtendedTestCase.bind(reporter);
-    
+
     // Test the method
     const testAlias = 'alias-123 - Test with tags';
     const testCaseIds = ['123', '456'];
-    
+
     const extendedTestCase = createExtendedTestCase(mockTestCase, testAlias, testCaseIds);
-    
+
     // Verify all original properties are preserved
     expect(extendedTestCase.id).toBe('test-id-123');
     expect(extendedTestCase.title).toBe('Test with tags @[123], @tagOne, @tagTwo');
@@ -110,27 +118,27 @@ test.describe('Reporter TestCase Extension', () => {
     expect(extendedTestCase.timeout).toBe(30000);
     expect(extendedTestCase.annotations).toEqual([
       { type: 'slow', description: 'This test is slow' },
-      { type: 'skip', description: 'Skip in CI' }
+      { type: 'skip', description: 'Skip in CI' },
     ]);
     expect(extendedTestCase.retries).toBe(2);
     expect(extendedTestCase.repeatEachIndex).toBe(0);
     expect(extendedTestCase.results).toEqual([]);
     expect(extendedTestCase.type).toBe('test');
     expect(extendedTestCase.location).toEqual({ file: '/test/file.spec.ts', line: 10, column: 5 });
-    
+
     // Verify getter properties are preserved
     expect(extendedTestCase.tags).toEqual(['@[123],', '@tagOne,', '@tagTwo', '@tagOne', '@tagTwo']);
-    
+
     // Verify methods are preserved and work correctly
     expect(typeof extendedTestCase.ok).toBe('function');
     expect(extendedTestCase.ok()).toBe(true);
-    
+
     expect(typeof extendedTestCase.outcome).toBe('function');
     expect(extendedTestCase.outcome()).toBe('expected');
-    
+
     expect(typeof extendedTestCase.titlePath).toBe('function');
     expect(extendedTestCase.titlePath()).toEqual(['Suite', 'Nested Suite', 'Test with tags @[123], @tagOne, @tagTwo']);
-    
+
     // Verify extended properties are added
     expect(extendedTestCase.testAlias).toBe('alias-123 - Test with tags');
     expect(extendedTestCase.testCaseIds).toEqual(['123', '456']);
@@ -150,23 +158,31 @@ test.describe('Reporter TestCase Extension', () => {
       type: 'test' as const,
       location: { file: '/test/file.spec.ts', line: 20, column: 5 },
       parent: {} as any,
-      
+
       // Mock private properties and methods that the getter uses
       _tags: ['@tagOne', '@tagTwo'],
-      _grepBaseTitlePath: function() { return [this.title]; },
-      
+      _grepBaseTitlePath: function () {
+        return [this.title];
+      },
+
       // Mock tags getter that returns configuration tags
       get tags(): string[] {
-        const titleTags = this._grepBaseTitlePath().join(' ').match(/@[\S]+/g) || [];
-        return [
-          ...titleTags,
-          ...this._tags,
-        ];
+        const titleTags =
+          this._grepBaseTitlePath()
+            .join(' ')
+            .match(/@[\S]+/g) || [];
+        return [...titleTags, ...this._tags];
       },
-      
-      ok: function() { return true; },
-      outcome: function() { return 'expected' as const; },
-      titlePath: function() { return ['Suite', this.title]; }
+
+      ok: function () {
+        return true;
+      },
+      outcome: function () {
+        return 'expected' as const;
+      },
+      titlePath: function () {
+        return ['Suite', this.title];
+      },
     };
 
     // Create reporter instance
@@ -179,50 +195,48 @@ test.describe('Reporter TestCase Extension', () => {
       // Test the exact testPointMapper from the user's example
       testPointMapper: async (testCase: TestCase, testPoints: any[]) => {
         const tag = testCase.tags.map((t: string) => t.toLowerCase());
-        const tagOne = tag.includes("@tagone");
-        const tagTwo = tag.includes("@tagtwo");
+        const tagOne = tag.includes('@tagone');
+        const tagTwo = tag.includes('@tagtwo');
 
         if (tagOne && tagTwo) {
-          return testPoints.filter(
-            (tp) => tp.configuration.id === "3" || tp.configuration.id === "17"
-          );
+          return testPoints.filter((tp) => tp.configuration.id === '3' || tp.configuration.id === '17');
         } else if (tagOne) {
-          return testPoints.filter((tp) => tp.configuration.id === "3");
+          return testPoints.filter((tp) => tp.configuration.id === '3');
         } else if (tagTwo) {
-          return testPoints.filter((tp) => tp.configuration.id === "17");
+          return testPoints.filter((tp) => tp.configuration.id === '17');
         } else {
-          throw new Error("invalid test configuration!");
+          throw new Error('invalid test configuration!');
         }
-      }
+      },
     };
-    
+
     const reporter = new AzureDevOpsReporter(reporterOptions);
     const createExtendedTestCase = (reporter as any)._createExtendedTestCase.bind(reporter);
-    
+
     // Create extended test case
     const extendedTestCase = createExtendedTestCase(mockTestCase, 'alias-test', ['153860', '153875']);
-    
+
     // Mock test points
     const mockTestPoints = [
-      { configuration: { id: "3" }, id: "tp1" },
-      { configuration: { id: "17" }, id: "tp2" },
-      { configuration: { id: "5" }, id: "tp3" }
+      { configuration: { id: '3' }, id: 'tp1' },
+      { configuration: { id: '17' }, id: 'tp2' },
+      { configuration: { id: '5' }, id: 'tp3' },
     ];
-    
+
     // Test that the testPointMapper works with the extended test case
     const testPointMapper = reporterOptions.testPointMapper;
     const filteredPoints = await testPointMapper(extendedTestCase, mockTestPoints);
-    
+
     // Should return both configuration 3 and 17 since both tagOne and tagTwo are present
     expect(filteredPoints).toHaveLength(2);
-    expect(filteredPoints.map(tp => tp.configuration.id)).toEqual(["3", "17"]);
-    
+    expect(filteredPoints.map((tp) => tp.configuration.id)).toEqual(['3', '17']);
+
     // Verify that tags property is accessible and works as expected
     expect(extendedTestCase.tags).toEqual(['@tagOne', '@tagTwo']);
-    
+
     // Verify the tag filtering logic works
     const tag = extendedTestCase.tags.map((t: string) => t.toLowerCase());
-    expect(tag.includes("@tagone")).toBe(true);
-    expect(tag.includes("@tagtwo")).toBe(true);
+    expect(tag.includes('@tagone')).toBe(true);
+    expect(tag.includes('@tagtwo')).toBe(true);
   });
 });

@@ -1,0 +1,15 @@
+{
+  "value": [
+    {
+      "id": "72c7ddf8-2cdc-4f60-90cd-ab71c14a399b",
+      "area": "wit",
+      "resourceName": "WorkItems",
+      "routeTemplate": "_apis/{area}/{resource}/{id}",
+      "resourceVersion": 1,
+      "minVersion": "1.0",
+      "maxVersion": "7.1",
+      "releasedVersion": "7.0"
+    }
+  ],
+  "count": 1
+}

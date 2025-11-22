@@ -53,6 +53,11 @@ module.exports = function (PORT) {
         locationUrl: `http://localhost:${PORT}`,
       },
       {
+        id: '72c7ddf8-2cdc-4f60-90cd-ab71c14a399b',
+        name: 'wit',
+        locationUrl: `http://localhost:${PORT}`,
+      },
+      {
         id: 'ad112863-ba10-4c1e-9e3c-0b6a7cb33fa1',
         name: 'AdvancedSecurity',
         locationUrl: `http://localhost:${PORT}`,
