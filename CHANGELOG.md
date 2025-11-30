@@ -1,3 +1,19 @@
+# [1.17.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.16.2...v1.17.0) (2025-11-30)
+
+
+### Features
+
+* **reporter:** add automatic test case automation status marking ([dc87cc5](https://github.com/alexneo2003/playwright-azure-reporter/commit/dc87cc511f406ad8154205029323e167536deda5)), closes [#134](https://github.com/alexneo2003/playwright-azure-reporter/issues/134)
+* **reporter:** extract test case IDs from annotation descriptions using testCaseIdMatcher ([2392fb7](https://github.com/alexneo2003/playwright-azure-reporter/commit/2392fb7f89a3430823de15b61ab900c0272289d0)), closes [#132](https://github.com/alexneo2003/playwright-azure-reporter/issues/132)
+
+
+### BREAKING CHANGES
+
+* **reporter:** Requires Work Items (Read & Write) token scope for marking test cases as automated
+* **reporter:** None - fully backward compatible
+
+
+
 ## [1.16.2](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.16.1...v1.16.2) (2025-10-20)
 
 
