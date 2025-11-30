@@ -10,6 +10,7 @@ import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces
 import * as TestPlanInterfaces from 'azure-devops-node-api/interfaces/TestPlanInterfaces';
 import * as Test from 'azure-devops-node-api/TestApi';
 import * as TestPlanApi from 'azure-devops-node-api/TestPlanApi';
+import * as WorkItemTrackingApi from 'azure-devops-node-api/WorkItemTrackingApi';
 import chalk from 'chalk';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import * as path from 'path';
@@ -73,6 +74,11 @@ export interface AzureReporterOptions {
     outputPath?: string;
     consoleOutput?: boolean;
     publishToRun?: boolean;
+  };
+  autoMarkTestCasesAsAutomated?: {
+    enabled?: boolean;
+    updateAutomatedTestName?: boolean;
+    updateAutomatedTestStorage?: boolean;
   };
 }
 
@@ -189,6 +195,11 @@ class AzureDevOpsReporter implements Reporter {
   private _testCaseSummaryOutputPath?: string;
   private _testCaseSummaryConsoleOutput = true;
   private _testCaseSummaryPublishToRun = false;
+  private _autoMarkTestCasesAsAutomatedEnabled = false;
+  private _autoMarkUpdateAutomatedTestName = false;
+  private _autoMarkUpdateAutomatedTestStorage = false;
+  private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
+  private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _unmatched: {
     noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
   } = {
@@ -248,6 +259,11 @@ class AzureDevOpsReporter implements Reporter {
     this._testCaseSummaryOutputPath = options.testCaseSummary?.outputPath;
     this._testCaseSummaryConsoleOutput = options.testCaseSummary?.consoleOutput !== false; // Default to true
     this._testCaseSummaryPublishToRun = options.testCaseSummary?.publishToRun || false;
+
+    // Initialize auto-mark test cases as automated options
+    this._autoMarkTestCasesAsAutomatedEnabled = options.autoMarkTestCasesAsAutomated?.enabled || false;
+    this._autoMarkUpdateAutomatedTestName = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestName !== false; // Default to true
+    this._autoMarkUpdateAutomatedTestStorage = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestStorage !== false; // Default to true
 
     this._validateOptions(options);
   }
@@ -696,6 +712,22 @@ class AzureDevOpsReporter implements Reporter {
         }
       } catch (summaryError: any) {
         this._logger?.error(`Error outputting test case summary: ${summaryError.message}`);
+      }
+    }
+
+    // Output auto-mark test cases as automated summary if enabled
+    if (this._autoMarkTestCasesAsAutomatedEnabled) {
+      const total =
+        this._autoMarkStats.marked +
+        this._autoMarkStats.updated +
+        this._autoMarkStats.skipped +
+        this._autoMarkStats.failed;
+
+      if (total > 0) {
+        this._logger?.info(
+          `Auto-mark summary: ${this._autoMarkStats.marked} marked, ${this._autoMarkStats.updated} updated, ${this._autoMarkStats.skipped} skipped, ${this._autoMarkStats.failed} failed`,
+          true
+        );
       }
     }
   }
@@ -1331,6 +1363,110 @@ class AzureDevOpsReporter implements Reporter {
     return false;
   }
 
+  private async _markTestCaseAsAutomated(testCaseId: string, testCase: ITestCaseExtended): Promise<void> {
+    if (!this._autoMarkTestCasesAsAutomatedEnabled) return;
+
+    try {
+      if (!this._workItemApi) this._workItemApi = await this._connection.getWorkItemTrackingApi();
+
+      // Get the work item to check automation status
+      const workItem = await this._workItemApi.getWorkItem(
+        Number(testCaseId),
+        ['Microsoft.VSTS.TCM.AutomationStatus', 'Microsoft.VSTS.TCM.AutomatedTestName', 'Microsoft.VSTS.TCM.AutomatedTestStorage']
+      );
+
+      if (!workItem) {
+        this._logger?.warn(`Work item ${testCaseId} not found, skipping automation status update`);
+        return;
+      }
+
+      const automationStatus = workItem.fields?.['Microsoft.VSTS.TCM.AutomationStatus'];
+      this._logger?.debug(`Test case ${testCaseId} automation status: ${automationStatus}`);
+
+      if (automationStatus === 'Not Automated') {
+        this._logger?.info(chalk.gray(`Marking test case ${testCaseId} as automated`));
+
+        const patchDocument: any[] = [
+          {
+            op: 'add',
+            path: '/fields/Microsoft.VSTS.TCM.AutomationStatus',
+            value: 'Automated',
+          },
+        ];
+
+        // Optionally update AutomatedTestName
+        if (this._autoMarkUpdateAutomatedTestName) {
+          patchDocument.push({
+            op: 'add',
+            path: '/fields/Microsoft.VSTS.TCM.AutomatedTestName',
+            value: testCase.title,
+          });
+        }
+
+        // Optionally update AutomatedTestStorage
+        if (this._autoMarkUpdateAutomatedTestStorage) {
+          const testStorage = testCase.location?.file ? path.basename(testCase.location.file) : 'PlaywrightTest';
+          patchDocument.push({
+            op: 'add',
+            path: '/fields/Microsoft.VSTS.TCM.AutomatedTestStorage',
+            value: testStorage,
+          });
+        }
+
+        // Add AutomatedTestId with a new GUID
+        patchDocument.push({
+          op: 'add',
+          path: '/fields/Microsoft.VSTS.TCM.AutomatedTestId',
+          value: createGuid(),
+        });
+
+        await this._workItemApi.updateWorkItem({}, patchDocument, Number(testCaseId));
+        this._logger?.info(chalk.gray(`Test case ${testCaseId} marked as automated`));
+        this._autoMarkStats.marked++;
+      } else if (automationStatus === 'Automated') {
+        this._logger?.debug(`Test case ${testCaseId} is already automated, checking if update needed`);
+
+        // If already automated, check if we need to update the test name or storage
+        const patchDocument: any[] = [];
+
+        if (this._autoMarkUpdateAutomatedTestName) {
+          const currentTestName = workItem.fields?.['Microsoft.VSTS.TCM.AutomatedTestName'];
+          if (currentTestName !== testCase.title) {
+            patchDocument.push({
+              op: 'replace',
+              path: '/fields/Microsoft.VSTS.TCM.AutomatedTestName',
+              value: testCase.title,
+            });
+          }
+        }
+
+        if (this._autoMarkUpdateAutomatedTestStorage) {
+          const testStorage = testCase.location?.file ? path.basename(testCase.location.file) : 'PlaywrightTest';
+          const currentTestStorage = workItem.fields?.['Microsoft.VSTS.TCM.AutomatedTestStorage'];
+          if (currentTestStorage !== testStorage) {
+            patchDocument.push({
+              op: 'replace',
+              path: '/fields/Microsoft.VSTS.TCM.AutomatedTestStorage',
+              value: testStorage,
+            });
+          }
+        }
+
+        if (patchDocument.length > 0) {
+          await this._workItemApi.updateWorkItem({}, patchDocument, Number(testCaseId));
+          this._logger?.info(chalk.gray(`Test case ${testCaseId} automation details updated`));
+          this._autoMarkStats.updated++;
+        } else {
+          this._autoMarkStats.skipped++;
+        }
+      }
+    } catch (error: any) {
+      this._logger?.error(`Failed to mark test case ${testCaseId} as automated: ${error.message}`);
+      this._logger?.debug(error.stack);
+      this._autoMarkStats.failed++;
+    }
+  }
+
   private async _uploadAttachmentsFunc(
     testResult: TestResult,
     testCaseResultId: number,
@@ -1567,6 +1703,13 @@ class AzureDevOpsReporter implements Reporter {
 
       if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
 
+      // Mark test cases as automated if enabled
+      if (this._autoMarkTestCasesAsAutomatedEnabled) {
+        for (const caseId of caseIds) {
+          await this._markTestCaseAsAutomated(caseId, testCase);
+        }
+      }
+
       if (this._uploadAttachments && testResult.attachments.length > 0)
         await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
 
@@ -1751,6 +1894,17 @@ class AzureDevOpsReporter implements Reporter {
           this._logger?.warn(`Failed to publish test result for test cases [${testCaseIds.join(', ')}]`);
         } else if (testCaseResult.result.count !== testCaseResults.length) {
           this._logger?.warn(`Not all test result for test cases [${testCaseIds.join(', ')}] are published`);
+        }
+
+        // Mark test cases as automated if enabled
+        if (this._autoMarkTestCasesAsAutomatedEnabled && testCaseResult.result) {
+          for (const testCaseId of testCaseIds) {
+            // Find the test case object for this ID
+            const testWithResult = testsPack.find((t) => t.testCase.testCaseIds.includes(testCaseId));
+            if (testWithResult) {
+              await this._markTestCaseAsAutomated(testCaseId, testWithResult.testCase);
+            }
+          }
         }
 
         if ((this._uploadAttachments && withAttachmentsByTestPoint.size > 0) || this._uploadLogs) {
