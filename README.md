@@ -7,6 +7,9 @@
 **Since version 1.5.0 reporter allows using configurationIds to publish results for different configurations e.g. different browsers**
 **Necessarily defining `testRun.configurationIds` or/and `testPointMapper` function in reporter config, otherwise reporter will be publishing results for all configurations**
 
+**Since version 1.9.0 reporter allows you to use test tags as Playwright it implemented in version [1.42.0](https://playwright.dev/docs/test-annotations#tag-tests)**
+**You can define test cases ids in new format, but you still can use old format with test case id in test name**
+
 **Example:**
 
 ```typescript
@@ -21,8 +24,6 @@ test.describe('Test suite', () => {
 
 **but you should define your Azure DevOps test case id in format `@[1]` where `1` is your test case id in square brackets and `@` is required prefix for playwright to recognize tags**
 
-**Since version 1.9.0 reporter allows you to use test tags as Playwright it implemented in version [1.42.0](https://playwright.dev/docs/test-annotations#tag-tests)**
-**You can define test cases ids in new format, but you still can use old format with test case id in test name**
 
 **Since version 1.11.0 reporter supports different authentication types via the `authType` option**
 **You can now specify `authType: 'pat'` for Personal Access Token (default) or `authType: 'accessToken'` for OAuth Access Token authentication. Existing configurations continue to work without changes.**
