@@ -498,6 +498,12 @@ Reporter options (\* - required):
   - `enabled` [boolean] - Enable automatic marking of test cases as automated. Default: `false`.
   - `updateAutomatedTestName` [boolean] - Update the `Microsoft.VSTS.TCM.AutomatedTestName` field with the test title. Default: `true` (when enabled).
   - `updateAutomatedTestStorage` [boolean] - Update the `Microsoft.VSTS.TCM.AutomatedTestStorage` field with the test file name. Default: `true` (when enabled).
+  - `automatedTestNameFormat` [string] - Format for the automated test name. Options: `'title'` (default) | `'titleWithParent'`. Default: `'title'`.
+    - `'title'`: Uses only the test title (e.g., `"[1] Test name"`)
+    - `'titleWithParent'`: Includes parent suite name (e.g., `"Parent Suite > [1] Test name"`)
+  - `automatedTestStorageFullPath` [boolean] - Whether to store the full file path or just the filename. Default: `false`.
+    - `false`: Stores only the filename (e.g., `"example.spec.ts"`)
+    - `true`: Stores the full file path (e.g., `"tests/features/example.spec.ts"`)
 
   **Example:**
 
@@ -505,7 +511,9 @@ Reporter options (\* - required):
   autoMarkTestCasesAsAutomated: {
     enabled: true,
     updateAutomatedTestName: true,
-    updateAutomatedTestStorage: true
+    updateAutomatedTestStorage: true,
+    automatedTestNameFormat: 'titleWithParent', // Include parent suite in test name
+    automatedTestStorageFullPath: true // Store full file path to distinguish files with same name
   }
   ```
 
@@ -513,10 +521,16 @@ Reporter options (\* - required):
   1. Check the automation status of each test case work item in Azure DevOps
   2. If the test case is marked as "Not Automated", it will:
      - Update the `Microsoft.VSTS.TCM.AutomationStatus` field to "Automated"
-     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestName` to the test title
-     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestStorage` to the test file name
+     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestName` based on `automatedTestNameFormat`:
+       - With `'title'`: Uses test title only
+       - With `'titleWithParent'`: Uses parent suite name + test title
+     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestStorage` based on `automatedTestStorageFullPath`:
+       - With `false`: Uses filename only
+       - With `true`: Uses full file path
      - Generate a new GUID for the `Microsoft.VSTS.TCM.AutomatedTestId` field
   3. If the test case is already "Automated", it will optionally update the test name and storage fields if they differ from current values
+  
+  > **Tip:** Use `automatedTestNameFormat: 'titleWithParent'` to prevent name collisions when multiple tests share the same name in different suites. Use `automatedTestStorageFullPath: true` to distinguish between files with the same name in different directories.
 
   This feature is useful for:
   - Streamlining CI/CD pipeline integrations by automatically reflecting test automation status

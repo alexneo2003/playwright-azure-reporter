@@ -441,4 +441,582 @@ test.describe('Auto-mark test cases as automated feature', () => {
     // Should not update since values are the same
     expect(workItemUpdateRequests.length).toBe(0);
   });
+
+  test('should use titleWithParent format when automatedTestNameFormat is set', async ({ runInlineTest, server }) => {
+    const workItemGetRequests: any[] = [];
+    const workItemUpdateRequests: any[] = [];
+
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/wit', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, WORK_ITEM_TRACKING_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CREATE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Points', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, POINTS_1_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results', (req, res) => {
+      setHeaders(res, headers);
+      res.end(
+        JSON.stringify({
+          count: 1,
+          value: [
+            {
+              id: 100000,
+              project: {},
+              outcome: 'Passed',
+              testRun: { id: '150' },
+              priority: 0,
+              url: 'http://localhost/result',
+              lastUpdatedBy: {},
+            },
+          ],
+        })
+      );
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    // Work Item Tracking routes
+    server.setRoute(
+      '/_apis/wit/WorkItems/1?fields=Microsoft.VSTS.TCM.AutomationStatus%2CMicrosoft.VSTS.TCM.AutomatedTestName%2CMicrosoft.VSTS.TCM.AutomatedTestStorage',
+      (req, res) => {
+        workItemGetRequests.push({ id: 1, url: req.url });
+        setHeaders(res, headers);
+        res.end(
+          JSON.stringify({
+            id: 1,
+            fields: {
+              'Microsoft.VSTS.TCM.AutomationStatus': 'Not Automated',
+            },
+          })
+        );
+      }
+    );
+
+    server.setRoute('/_apis/wit/WorkItems/1', async (req, res) => {
+      const body = await getRequestBody(req);
+      workItemUpdateRequests.push(body);
+      setHeaders(res, headers);
+      res.end(JSON.stringify({ id: 1 }));
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = {
+          reporter: [
+            ['line'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'token',
+              logging: true,
+              publishTestResultsMode: 'testResult',
+              autoMarkTestCasesAsAutomated: {
+                enabled: true,
+                updateAutomatedTestName: true,
+                updateAutomatedTestStorage: true,
+                automatedTestNameFormat: 'titleWithParent',
+              }
+            }]
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test.describe('My Suite', () => {
+          test('[1] foobar', async ({}) => {
+            expect(1).toBe(1);
+          });
+        });
+      `,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.passed).toBe(1);
+    expect(workItemGetRequests.length).toBe(1);
+    expect(workItemUpdateRequests.length).toBe(1);
+
+    const patchDocument = workItemUpdateRequests[0];
+    expect(Array.isArray(patchDocument)).toBe(true);
+
+    // Check AutomatedTestName contains parent suite
+    const testNameOp = patchDocument.find((op: any) => op.path === '/fields/Microsoft.VSTS.TCM.AutomatedTestName');
+    expect(testNameOp).toBeDefined();
+    expect(testNameOp.op).toBe('add');
+    expect(testNameOp.value).toBe('My Suite > [1] foobar');
+  });
+
+  test('should use title only format when automatedTestNameFormat is "title" (default)', async ({
+    runInlineTest,
+    server,
+  }) => {
+    const workItemGetRequests: any[] = [];
+    const workItemUpdateRequests: any[] = [];
+
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/wit', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, WORK_ITEM_TRACKING_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CREATE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Points', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, POINTS_1_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results', (req, res) => {
+      setHeaders(res, headers);
+      res.end(
+        JSON.stringify({
+          count: 1,
+          value: [
+            {
+              id: 100000,
+              project: {},
+              outcome: 'Passed',
+              testRun: { id: '150' },
+              priority: 0,
+              url: 'http://localhost/result',
+              lastUpdatedBy: {},
+            },
+          ],
+        })
+      );
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    // Work Item Tracking routes
+    server.setRoute(
+      '/_apis/wit/WorkItems/1?fields=Microsoft.VSTS.TCM.AutomationStatus%2CMicrosoft.VSTS.TCM.AutomatedTestName%2CMicrosoft.VSTS.TCM.AutomatedTestStorage',
+      (req, res) => {
+        workItemGetRequests.push({ id: 1, url: req.url });
+        setHeaders(res, headers);
+        res.end(
+          JSON.stringify({
+            id: 1,
+            fields: {
+              'Microsoft.VSTS.TCM.AutomationStatus': 'Not Automated',
+            },
+          })
+        );
+      }
+    );
+
+    server.setRoute('/_apis/wit/WorkItems/1', async (req, res) => {
+      const body = await getRequestBody(req);
+      workItemUpdateRequests.push(body);
+      setHeaders(res, headers);
+      res.end(JSON.stringify({ id: 1 }));
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = {
+          reporter: [
+            ['line'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'token',
+              logging: true,
+              publishTestResultsMode: 'testResult',
+              autoMarkTestCasesAsAutomated: {
+                enabled: true,
+                updateAutomatedTestName: true,
+                updateAutomatedTestStorage: true,
+                automatedTestNameFormat: 'title',
+              }
+            }]
+          ]
+        };
+      `,
+        'a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test.describe('My Suite', () => {
+          test('[1] foobar', async ({}) => {
+            expect(1).toBe(1);
+          });
+        });
+      `,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.passed).toBe(1);
+    expect(workItemGetRequests.length).toBe(1);
+    expect(workItemUpdateRequests.length).toBe(1);
+
+    const patchDocument = workItemUpdateRequests[0];
+    expect(Array.isArray(patchDocument)).toBe(true);
+
+    // Check AutomatedTestName does not contain parent suite
+    const testNameOp = patchDocument.find((op: any) => op.path === '/fields/Microsoft.VSTS.TCM.AutomatedTestName');
+    expect(testNameOp).toBeDefined();
+    expect(testNameOp.op).toBe('add');
+    expect(testNameOp.value).toBe('[1] foobar');
+  });
+
+  test('should use full path when automatedTestStorageFullPath is true', async ({ runInlineTest, server }) => {
+    const workItemGetRequests: any[] = [];
+    const workItemUpdateRequests: any[] = [];
+
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/wit', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, WORK_ITEM_TRACKING_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CREATE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Points', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, POINTS_1_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results', (req, res) => {
+      setHeaders(res, headers);
+      res.end(
+        JSON.stringify({
+          count: 1,
+          value: [
+            {
+              id: 100000,
+              project: {},
+              outcome: 'Passed',
+              testRun: { id: '150' },
+              priority: 0,
+              url: 'http://localhost/result',
+              lastUpdatedBy: {},
+            },
+          ],
+        })
+      );
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    // Work Item Tracking routes
+    server.setRoute(
+      '/_apis/wit/WorkItems/1?fields=Microsoft.VSTS.TCM.AutomationStatus%2CMicrosoft.VSTS.TCM.AutomatedTestName%2CMicrosoft.VSTS.TCM.AutomatedTestStorage',
+      (req, res) => {
+        workItemGetRequests.push({ id: 1, url: req.url });
+        setHeaders(res, headers);
+        res.end(
+          JSON.stringify({
+            id: 1,
+            fields: {
+              'Microsoft.VSTS.TCM.AutomationStatus': 'Not Automated',
+            },
+          })
+        );
+      }
+    );
+
+    server.setRoute('/_apis/wit/WorkItems/1', async (req, res) => {
+      const body = await getRequestBody(req);
+      workItemUpdateRequests.push(body);
+      setHeaders(res, headers);
+      res.end(JSON.stringify({ id: 1 }));
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = {
+          reporter: [
+            ['line'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'token',
+              logging: true,
+              publishTestResultsMode: 'testResult',
+              autoMarkTestCasesAsAutomated: {
+                enabled: true,
+                updateAutomatedTestName: true,
+                updateAutomatedTestStorage: true,
+                automatedTestStorageFullPath: true,
+              }
+            }]
+          ]
+        };
+      `,
+        'tests/features/a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[1] foobar', async ({}) => {
+          expect(1).toBe(1);
+        });
+      `,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.passed).toBe(1);
+    expect(workItemGetRequests.length).toBe(1);
+    expect(workItemUpdateRequests.length).toBe(1);
+
+    const patchDocument = workItemUpdateRequests[0];
+    expect(Array.isArray(patchDocument)).toBe(true);
+
+    // Check AutomatedTestStorage contains full path
+    const testStorageOp = patchDocument.find(
+      (op: any) => op.path === '/fields/Microsoft.VSTS.TCM.AutomatedTestStorage'
+    );
+    expect(testStorageOp).toBeDefined();
+    expect(testStorageOp.op).toBe('add');
+    // Should contain the full path
+    expect(testStorageOp.value).toContain('tests');
+    expect(testStorageOp.value).toContain('features');
+    expect(testStorageOp.value).toContain('a.spec.js');
+  });
+
+  test('should use basename only when automatedTestStorageFullPath is false (default)', async ({
+    runInlineTest,
+    server,
+  }) => {
+    const workItemGetRequests: any[] = [];
+    const workItemUpdateRequests: any[] = [];
+
+    server.setRoute('/_apis/Location', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(location));
+    });
+
+    server.setRoute('/_apis/ResourceAreas', (_, res) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(azureAreas(server.PORT)));
+    });
+
+    server.setRoute('/_apis/Test', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, TEST_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/core', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CORE_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/wit', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, WORK_ITEM_TRACKING_OPTIONS_RESPONSE_PATH);
+    });
+
+    server.setRoute('/_apis/projects/SampleSample', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, PROJECT_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, CREATE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Points', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, POINTS_1_RESPONSE_PATH);
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150/Results', (req, res) => {
+      setHeaders(res, headers);
+      res.end(
+        JSON.stringify({
+          count: 1,
+          value: [
+            {
+              id: 100000,
+              project: {},
+              outcome: 'Passed',
+              testRun: { id: '150' },
+              priority: 0,
+              url: 'http://localhost/result',
+              lastUpdatedBy: {},
+            },
+          ],
+        })
+      );
+    });
+
+    server.setRoute('/SampleSample/_apis/test/Runs/150', (req, res) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, COMPLETE_RUN_VALID_RESPONSE_PATH);
+    });
+
+    // Work Item Tracking routes
+    server.setRoute(
+      '/_apis/wit/WorkItems/1?fields=Microsoft.VSTS.TCM.AutomationStatus%2CMicrosoft.VSTS.TCM.AutomatedTestName%2CMicrosoft.VSTS.TCM.AutomatedTestStorage',
+      (req, res) => {
+        workItemGetRequests.push({ id: 1, url: req.url });
+        setHeaders(res, headers);
+        res.end(
+          JSON.stringify({
+            id: 1,
+            fields: {
+              'Microsoft.VSTS.TCM.AutomationStatus': 'Not Automated',
+            },
+          })
+        );
+      }
+    );
+
+    server.setRoute('/_apis/wit/WorkItems/1', async (req, res) => {
+      const body = await getRequestBody(req);
+      workItemUpdateRequests.push(body);
+      setHeaders(res, headers);
+      res.end(JSON.stringify({ id: 1 }));
+    });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': `
+        module.exports = {
+          reporter: [
+            ['line'],
+            ['${reporterPath}', { 
+              orgUrl: 'http://localhost:${server.PORT}',
+              projectName: 'SampleSample',
+              planId: 4,
+              token: 'token',
+              logging: true,
+              publishTestResultsMode: 'testResult',
+              autoMarkTestCasesAsAutomated: {
+                enabled: true,
+                updateAutomatedTestName: true,
+                updateAutomatedTestStorage: true,
+                automatedTestStorageFullPath: false,
+              }
+            }]
+          ]
+        };
+      `,
+        'tests/features/a.spec.js': `
+        import { test, expect } from '@playwright/test';
+        test('[1] foobar', async ({}) => {
+          expect(1).toBe(1);
+        });
+      `,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.passed).toBe(1);
+    expect(workItemGetRequests.length).toBe(1);
+    expect(workItemUpdateRequests.length).toBe(1);
+
+    const patchDocument = workItemUpdateRequests[0];
+    expect(Array.isArray(patchDocument)).toBe(true);
+
+    // Check AutomatedTestStorage contains only basename
+    const testStorageOp = patchDocument.find(
+      (op: any) => op.path === '/fields/Microsoft.VSTS.TCM.AutomatedTestStorage'
+    );
+    expect(testStorageOp).toBeDefined();
+    expect(testStorageOp.op).toBe('add');
+    // Should only contain the filename, not the path
+    expect(testStorageOp.value).toBe('a.spec.js');
+  });
 });
