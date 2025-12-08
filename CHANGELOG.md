@@ -1,3 +1,12 @@
+# [1.18.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.17.0...v1.18.0) (2025-12-08)
+
+
+### Features
+
+* **reporter:** extend auto-mark functionality with test name and storage path options ([8c3bb36](https://github.com/alexneo2003/playwright-azure-reporter/commit/8c3bb36d1cae083a1336014d1c6854fe78cf00a2)), closes [#136](https://github.com/alexneo2003/playwright-azure-reporter/issues/136)
+
+
+
 # [1.17.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.16.2...v1.17.0) (2025-11-30)
 
 
