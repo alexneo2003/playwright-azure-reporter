@@ -79,6 +79,8 @@ export interface AzureReporterOptions {
     enabled?: boolean;
     updateAutomatedTestName?: boolean;
     updateAutomatedTestStorage?: boolean;
+    automatedTestNameFormat?: 'title' | 'titleWithParent';
+    automatedTestStorageFullPath?: boolean;
   };
 }
 
@@ -198,6 +200,8 @@ class AzureDevOpsReporter implements Reporter {
   private _autoMarkTestCasesAsAutomatedEnabled = false;
   private _autoMarkUpdateAutomatedTestName = false;
   private _autoMarkUpdateAutomatedTestStorage = false;
+  private _autoMarkTestNameFormat: 'title' | 'titleWithParent' = 'title';
+  private _autoMarkTestStorageFullPath = false;
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _unmatched: {
@@ -264,6 +268,8 @@ class AzureDevOpsReporter implements Reporter {
     this._autoMarkTestCasesAsAutomatedEnabled = options.autoMarkTestCasesAsAutomated?.enabled || false;
     this._autoMarkUpdateAutomatedTestName = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestName !== false; // Default to true
     this._autoMarkUpdateAutomatedTestStorage = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestStorage !== false; // Default to true
+    this._autoMarkTestNameFormat = options.autoMarkTestCasesAsAutomated?.automatedTestNameFormat || 'title'; // Default to 'title'
+    this._autoMarkTestStorageFullPath = options.autoMarkTestCasesAsAutomated?.automatedTestStorageFullPath || false; // Default to false (basename only)
 
     this._validateOptions(options);
   }
@@ -1363,6 +1369,22 @@ class AzureDevOpsReporter implements Reporter {
     return false;
   }
 
+  private _getAutomatedTestStorage(testCase: ITestCaseExtended): string {
+    if (!testCase.location?.file) {
+      return 'PlaywrightTest';
+    }
+
+    const filePath = testCase.location.file;
+    
+    if (this._autoMarkTestStorageFullPath) {
+      // Return full path
+      return filePath;
+    }
+
+    // Default behavior: just the filename
+    return path.basename(filePath);
+  }
+
   private async _markTestCaseAsAutomated(testCaseId: string, testCase: ITestCaseExtended): Promise<void> {
     if (!this._autoMarkTestCasesAsAutomatedEnabled) return;
 
@@ -1396,16 +1418,21 @@ class AzureDevOpsReporter implements Reporter {
 
         // Optionally update AutomatedTestName
         if (this._autoMarkUpdateAutomatedTestName) {
+          const hasParentTitle = !!testCase.parent?.title?.trim();
+          const automatedTestName = this._autoMarkTestNameFormat === 'titleWithParent' && hasParentTitle
+            ? `${testCase.parent.title} > ${testCase.title}`
+            : testCase.title;
+          
           patchDocument.push({
             op: 'add',
             path: '/fields/Microsoft.VSTS.TCM.AutomatedTestName',
-            value: testCase.title,
+            value: automatedTestName,
           });
         }
 
         // Optionally update AutomatedTestStorage
         if (this._autoMarkUpdateAutomatedTestStorage) {
-          const testStorage = testCase.location?.file ? path.basename(testCase.location.file) : 'PlaywrightTest';
+          const testStorage = this._getAutomatedTestStorage(testCase);
           patchDocument.push({
             op: 'add',
             path: '/fields/Microsoft.VSTS.TCM.AutomatedTestStorage',
@@ -1430,18 +1457,23 @@ class AzureDevOpsReporter implements Reporter {
         const patchDocument: any[] = [];
 
         if (this._autoMarkUpdateAutomatedTestName) {
+          const hasParentTitle = !!testCase.parent?.title?.trim();
+          const automatedTestName = this._autoMarkTestNameFormat === 'titleWithParent' && hasParentTitle
+            ? `${testCase.parent.title} > ${testCase.title}`
+            : testCase.title;
+          
           const currentTestName = workItem.fields?.['Microsoft.VSTS.TCM.AutomatedTestName'];
-          if (currentTestName !== testCase.title) {
+          if (currentTestName !== automatedTestName) {
             patchDocument.push({
               op: 'replace',
               path: '/fields/Microsoft.VSTS.TCM.AutomatedTestName',
-              value: testCase.title,
+              value: automatedTestName,
             });
           }
         }
 
         if (this._autoMarkUpdateAutomatedTestStorage) {
-          const testStorage = testCase.location?.file ? path.basename(testCase.location.file) : 'PlaywrightTest';
+          const testStorage = this._getAutomatedTestStorage(testCase);
           const currentTestStorage = workItem.fields?.['Microsoft.VSTS.TCM.AutomatedTestStorage'];
           if (currentTestStorage !== testStorage) {
             patchDocument.push({
