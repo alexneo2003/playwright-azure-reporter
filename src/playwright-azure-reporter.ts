@@ -80,7 +80,8 @@ export interface AzureReporterOptions {
     updateAutomatedTestName?: boolean;
     updateAutomatedTestStorage?: boolean;
     automatedTestNameFormat?: 'title' | 'titleWithParent';
-    automatedTestStorageFullPath?: boolean;
+    automatedTestStoragePath?: boolean | ((testCase: TestCase) => string);
+    automatedTestType?: (testCase: TestCase) => string;
   };
 }
 
@@ -201,7 +202,8 @@ class AzureDevOpsReporter implements Reporter {
   private _autoMarkUpdateAutomatedTestName = false;
   private _autoMarkUpdateAutomatedTestStorage = false;
   private _autoMarkTestNameFormat: 'title' | 'titleWithParent' = 'title';
-  private _autoMarkTestStorageFullPath = false;
+  private _autoMarkTestStoragePath: boolean | ((testCase: TestCase) => string) = false;
+  private _autoMarkTestType?: (testCase: TestCase) => string;
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _unmatched: {
@@ -269,7 +271,8 @@ class AzureDevOpsReporter implements Reporter {
     this._autoMarkUpdateAutomatedTestName = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestName !== false; // Default to true
     this._autoMarkUpdateAutomatedTestStorage = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestStorage !== false; // Default to true
     this._autoMarkTestNameFormat = options.autoMarkTestCasesAsAutomated?.automatedTestNameFormat || 'title'; // Default to 'title'
-    this._autoMarkTestStorageFullPath = options.autoMarkTestCasesAsAutomated?.automatedTestStorageFullPath || false; // Default to false (basename only)
+    this._autoMarkTestStoragePath = options.autoMarkTestCasesAsAutomated?.automatedTestStoragePath ?? false; // Default to false (basename only)
+    this._autoMarkTestType = options.autoMarkTestCasesAsAutomated?.automatedTestType;
 
     this._validateOptions(options);
   }
@@ -1376,12 +1379,17 @@ class AzureDevOpsReporter implements Reporter {
 
     const filePath = testCase.location.file;
     
-    if (this._autoMarkTestStorageFullPath) {
-      // Return full path
+    // If callback function is provided, use it
+    if (typeof this._autoMarkTestStoragePath === 'function') {
+      return this._autoMarkTestStoragePath(testCase);
+    }
+    
+    // If boolean true, return full path
+    if (this._autoMarkTestStoragePath === true) {
       return filePath;
     }
 
-    // Default behavior: just the filename
+    // Default behavior (false): just the filename
     return path.basename(filePath);
   }
 
@@ -1446,6 +1454,18 @@ class AzureDevOpsReporter implements Reporter {
           path: '/fields/Microsoft.VSTS.TCM.AutomatedTestId',
           value: createGuid(),
         });
+
+        // Optionally update AutomatedTestType
+        if (this._autoMarkTestType) {
+          const testType = this._autoMarkTestType(testCase);
+          if (testType) {
+            patchDocument.push({
+              op: 'add',
+              path: '/fields/Microsoft.VSTS.TCM.AutomatedTestType',
+              value: testType,
+            });
+          }
+        }
 
         await this._workItemApi.updateWorkItem({}, patchDocument, Number(testCaseId));
         this._logger?.info(chalk.gray(`Test case ${testCaseId} marked as automated`));
