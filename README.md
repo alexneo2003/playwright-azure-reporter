@@ -502,19 +502,46 @@ Reporter options (\* - required):
   - `automatedTestNameFormat` [string] - Format for the automated test name. Options: `'title'` (default) | `'titleWithParent'`. Default: `'title'`.
     - `'title'`: Uses only the test title (e.g., `"[1] Test name"`)
     - `'titleWithParent'`: Includes parent suite name (e.g., `"Parent Suite > [1] Test name"`)
-  - `automatedTestStorageFullPath` [boolean] - Whether to store the full file path or just the filename. Default: `false`.
-    - `false`: Stores only the filename (e.g., `"example.spec.ts"`)
-    - `true`: Stores the full file path (e.g., `"tests/features/example.spec.ts"`)
+  - `automatedTestStoragePath` [boolean | function] - Controls how the test file path is stored. Default: `false`.
+    - `false` (default): Stores only the filename (e.g., `"example.spec.ts"`)
+    - `true`: Stores the full absolute file path (e.g., `"/Users/username/project/tests/features/example.spec.ts"`)
+    - `function(testCase: TestCase) => string`: Custom callback to compute the storage path. Receives the test case object and returns the desired path string.
+  - `automatedTestType` [function] - Optional callback to set the `Microsoft.VSTS.TCM.AutomatedTestType` field. Default: `undefined`.
+    - `function(testCase: TestCase) => string`: Callback that receives the test case object and returns the test type string (e.g., `"Unit Test"`, `"Integration Test"`, `"End-to-End Test"`).
+    - If the callback returns an empty string or falsy value, the field will not be set.
 
   **Example:**
 
   ```typescript
+  // Basic example with boolean values
   autoMarkTestCasesAsAutomated: {
     enabled: true,
     updateAutomatedTestName: true,
     updateAutomatedTestStorage: true,
     automatedTestNameFormat: 'titleWithParent', // Include parent suite in test name
-    automatedTestStorageFullPath: true // Store full file path to distinguish files with same name
+    automatedTestStoragePath: true // Store full absolute file path
+  }
+
+  // Advanced example with callback functions
+  autoMarkTestCasesAsAutomated: {
+    enabled: true,
+    updateAutomatedTestName: true,
+    updateAutomatedTestStorage: true,
+    automatedTestNameFormat: 'titleWithParent',
+    // Custom path logic - use relative path from project root
+    automatedTestStoragePath: (testCase) => {
+      const parts = testCase.location.file.split('/');
+      const projectIdx = parts.indexOf('my-project');
+      return projectIdx >= 0 ? parts.slice(projectIdx + 1).join('/') : testCase.location.file;
+    },
+    // Set test type based on file location
+    automatedTestType: (testCase) => {
+      const filePath = testCase.location.file;
+      if (filePath.includes('/e2e/')) return 'End-to-End Test';
+      if (filePath.includes('/integration/')) return 'Integration Test';
+      if (filePath.includes('/unit/')) return 'Unit Test';
+      return 'Functional Test';
+    }
   }
   ```
 
@@ -525,13 +552,15 @@ Reporter options (\* - required):
      - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestName` based on `automatedTestNameFormat`:
        - With `'title'`: Uses test title only
        - With `'titleWithParent'`: Uses parent suite name + test title
-     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestStorage` based on `automatedTestStorageFullPath`:
-       - With `false`: Uses filename only
-       - With `true`: Uses full file path
+     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestStorage` based on `automatedTestStoragePath`:
+       - With `false`: Uses filename only (e.g., `"test.spec.ts"`)
+       - With `true`: Uses full absolute path (e.g., `"/Users/username/project/tests/test.spec.ts"`)
+       - With callback function: Uses custom path logic (e.g., `"tests/test.spec.ts"` for relative paths)
+     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestType` if `automatedTestType` callback is provided
      - Generate a new GUID for the `Microsoft.VSTS.TCM.AutomatedTestId` field
   3. If the test case is already "Automated", it will optionally update the test name and storage fields if they differ from current values
   
-  > **Tip:** Use `automatedTestNameFormat: 'titleWithParent'` to prevent name collisions when multiple tests share the same name in different suites. Use `automatedTestStorageFullPath: true` to distinguish between files with the same name in different directories.
+  > **Tip:** Use `automatedTestNameFormat: 'titleWithParent'` to prevent name collisions when multiple tests share the same name in different suites. Use `automatedTestStoragePath` callback to create relative paths and avoid exposing sensitive information (like usernames) from absolute paths. Use `automatedTestType` callback to categorize tests based on your project structure.
 
   This feature is useful for:
   - Streamlining CI/CD pipeline integrations by automatically reflecting test automation status
