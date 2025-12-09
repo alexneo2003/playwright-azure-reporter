@@ -1,3 +1,30 @@
+# [1.19.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.18.0...v1.19.0) (2025-12-09)
+
+
+### Features
+
+* **automark:** add callback support for storage path and test type ([48d0e98](https://github.com/alexneo2003/playwright-azure-reporter/commit/48d0e984761754d98eef36568a023e8ad33e124f)), closes [#138](https://github.com/alexneo2003/playwright-azure-reporter/issues/138)
+
+
+### BREAKING CHANGES
+
+* **automark:** Renamed `automatedTestStorageFullPath` to `automatedTestStoragePath` with enhanced functionality
+
+- Replace boolean `automatedTestStorageFullPath` with flexible `automatedTestStoragePath`
+  - Supports boolean (false: basename, true: full path) for backward compatibility
+  - Supports callback function `(testCase: TestCase) => string` for custom path logic
+  - Enables relative paths to avoid exposing sensitive info (usernames) in CI/CD
+- Add new `automatedTestType` callback option
+  - Sets `Microsoft.VSTS.TCM.AutomatedTestType` field in Azure DevOps
+  - Callback signature: `(testCase: TestCase) => string`
+  - Field not set if callback returns empty/falsy value
+- Update _getAutomatedTestStorage to handle both boolean and function types
+- Add 4 comprehensive test cases covering callback scenarios
+- Update README and examples with advanced callback usage patterns
+- Maintain full backward compatibility with boolean values
+
+
+
 # [1.18.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.17.0...v1.18.0) (2025-12-08)
 
 
