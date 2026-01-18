@@ -1413,7 +1413,7 @@ class AzureDevOpsReporter implements Reporter {
       const automationStatus = workItem.fields?.['Microsoft.VSTS.TCM.AutomationStatus'];
       this._logger?.debug(`Test case ${testCaseId} automation status: ${automationStatus}`);
 
-      if (automationStatus === 'Not Automated') {
+      if (automationStatus !== 'Automated') {
         this._logger?.info(chalk.gray(`Marking test case ${testCaseId} as automated`));
 
         const patchDocument: any[] = [
