@@ -1,3 +1,12 @@
+## [1.19.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.19.0...v1.19.1) (2026-02-25)
+
+
+### Bug Fixes
+
+* **reporter:** update automation status check to mark test cases as automated correctly ([d844a59](https://github.com/alexneo2003/playwright-azure-reporter/commit/d844a592a2b773ec1ab88480f3b812a10c9789d3))
+
+
+
 # [1.19.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.18.0...v1.19.0) (2025-12-09)
 
 
