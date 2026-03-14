@@ -37,6 +37,7 @@ type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
 type TPublishTestResults = 'testResult' | 'testRun' | 'testRunADO';
+type TPublishRetryResults = 'all' | 'last' | 'grouped';
 type TTestCaseIdZone = 'title' | 'annotation';
 
 interface ITestCaseExtended extends TestCase {
@@ -83,6 +84,7 @@ export interface AzureReporterOptions {
     automatedTestStoragePath?: boolean | ((testCase: TestCase) => string);
     automatedTestType?: (testCase: TestCase) => string;
   };
+  publishRetryResults?: TPublishRetryResults;
 }
 
 interface TestResultsToTestRun {
@@ -206,6 +208,8 @@ class AzureDevOpsReporter implements Reporter {
   private _autoMarkTestType?: (testCase: TestCase) => string;
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
+  private _publishRetryResults: TPublishRetryResults = 'all';
+  private _retryResultsBuffer: Map<string, { test: TestCase; results: TestResult[] }> = new Map();
   private _unmatched: {
     noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
   } = {
@@ -273,6 +277,8 @@ class AzureDevOpsReporter implements Reporter {
     this._autoMarkTestNameFormat = options.autoMarkTestCasesAsAutomated?.automatedTestNameFormat || 'title'; // Default to 'title'
     this._autoMarkTestStoragePath = options.autoMarkTestCasesAsAutomated?.automatedTestStoragePath ?? false; // Default to false (basename only)
     this._autoMarkTestType = options.autoMarkTestCasesAsAutomated?.automatedTestType;
+
+    this._publishRetryResults = options.publishRetryResults || 'all';
 
     this._validateOptions(options);
   }
@@ -551,6 +557,35 @@ class AzureDevOpsReporter implements Reporter {
   async onTestEnd(test: TestCase, testResult: TestResult): Promise<void> {
     if (this._isDisabled) return;
     try {
+      // 'last' mode: skip intermediate retries
+      if (this._publishRetryResults === 'last') {
+        const isRetriableStatus = ['failed', 'timedOut', 'interrupted'].includes(testResult.status);
+        if (isRetriableStatus && testResult.retry < test.retries) {
+          this._logger?.debug(
+            `[publishRetryResults=last] Skipping intermediate retry ${testResult.retry}/${test.retries} for: ${test.title}`
+          );
+          return;
+        }
+      }
+
+      // 'grouped' mode: buffer results, publish on final attempt
+      if (this._publishRetryResults === 'grouped') {
+        const buffered = this._retryResultsBuffer.get(test.id) || { test, results: [] };
+        buffered.results.push(testResult);
+        this._retryResultsBuffer.set(test.id, buffered);
+
+        const isFinalAttempt = testResult.retry === test.retries || testResult.status === 'passed';
+        if (!isFinalAttempt) {
+          this._logger?.debug(
+            `[publishRetryResults=grouped] Buffering retry ${testResult.retry}/${test.retries} for: ${test.title}`
+          );
+          return;
+        }
+        this._logger?.debug(
+          `[publishRetryResults=grouped] Final attempt reached for: ${test.title}, publishing grouped result with ${buffered.results.length} attempt(s)`
+        );
+      }
+
       if (this._publishTestResultsMode === 'testResult') {
         await this._refreshTokenIfNeeded();
         const runId = await this._runIdPromise;
@@ -571,6 +606,14 @@ class AzureDevOpsReporter implements Reporter {
           `${shortID()} - ${test.title}`,
           caseIds
         );
+
+        // For 'last' and 'grouped' modes: replace previous result for same test
+        if (this._publishRetryResults !== 'all') {
+          this._testResultsToBePublished = this._testResultsToBePublished.filter(
+            (r) => r.testCase.id !== test.id
+          );
+        }
+
         this._testResultsToBePublished.push({ testCase: testCase, testResult });
       }
     } catch (error: any) {
@@ -1235,6 +1278,38 @@ class AzureDevOpsReporter implements Reporter {
     return api;
   };
 
+  private _addReportingOverrideV7 = (api: Test.ITestApi): Test.ITestApi => {
+    /**
+     * Override for API version 7.1-preview.6 to support subResults and resultGroupType fields.
+     * Required for 'grouped' publishRetryResults mode.
+     */
+    api.addTestResultsToTestRun = function (results, projectName, runId) {
+      return new Promise(async (resolve, reject) => {
+        const routeValues = {
+          project: projectName,
+          runId,
+        };
+
+        try {
+          const verData = await this.vsoClient.getVersioningData(
+            '7.1-preview.6',
+            'Test',
+            '4637d869-3a76-4468-8057-0bb02aa385cf',
+            routeValues
+          );
+          const url = verData.requestUrl;
+          const options = this.createRequestOptions('application/json', verData.apiVersion);
+          const res = await this.rest.create(url as string, results, options);
+          resolve(res as any);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    };
+
+    return api;
+  };
+
   // prettier-ignore
   private async _getPointsList(testPlanApi: TestPlanApi.ITestPlanApi, project: string, planId: number, suiteId: number, testPointIds?: string, testCaseId?: string, continuationToken?: string, returnIdentityRef?: boolean, includePointDetails?: boolean, isRecursive?: boolean): Promise<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>> {
     testPlanApi.getPointsList = function (project, planId, suiteId, testPointIds, testCaseId, continuationToken, returnIdentityRef, includePointDetails, isRecursive) {
@@ -1672,6 +1747,66 @@ class AzureDevOpsReporter implements Reporter {
     };
   }
 
+  private _createGroupedTestCaseResult(
+    testCase: ITestCaseExtended,
+    allResults: TestResult[],
+    testPoint: TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint,
+    existingTestCaseResult?: TestInterfaces.TestCaseResult
+  ): TestInterfaces.TestCaseResult {
+    const finalResult = allResults[allResults.length - 1];
+    const isFlaky = finalResult.status === 'passed' && finalResult.retry > 0;
+    const totalDuration = allResults.reduce((sum, r) => sum + r.duration, 0);
+
+    const baseResult: TestInterfaces.TestCaseResult = existingTestCaseResult
+      ? { ...existingTestCaseResult }
+      : {};
+
+    const subResults: TestInterfaces.TestSubResult[] = allResults.map((result, index) => ({
+      displayName: `Attempt ${index + 1}`,
+      outcome: this._mapToAzureState(testCase, result),
+      durationInMs: result.duration,
+      sequenceId: index,
+      errorMessage: result.error
+        ? `${testCase.title}:\n\n${result.errors
+            ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
+            .join('\n\n')}`
+        : undefined,
+      stackTrace: result.errors?.length
+        ? `${result.errors
+            ?.map((error, idx) => `STACK #${idx + 1}:\n\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+            .join('\n\n\n')}`
+        : undefined,
+      customFields: [{ fieldName: 'AttemptId', value: index + 1 }],
+      resultGroupType: TestInterfaces.ResultGroupType.None,
+    }));
+
+    const customFields: TestInterfaces.CustomTestField[] = [...(baseResult.customFields || [])];
+    if (isFlaky) {
+      customFields.push({ fieldName: 'IsTestResultFlaky', value: true });
+    }
+
+    return {
+      ...baseResult,
+      testPoint: { id: String(testPoint.id) },
+      outcome: this._mapToAzureState(testCase, finalResult),
+      state: 'Completed',
+      durationInMs: totalDuration,
+      resultGroupType: TestInterfaces.ResultGroupType.Rerun,
+      subResults,
+      customFields: customFields.length > 0 ? customFields : undefined,
+      errorMessage: finalResult.error
+        ? `${testCase.title}:\n\n${finalResult.errors
+            ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
+            .join('\n\n')}`
+        : undefined,
+      stackTrace: finalResult.errors?.length
+        ? `${finalResult.errors
+            ?.map((error, idx) => `STACK #${idx + 1}:\n\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+            .join('\n\n\n')}`
+        : undefined,
+    };
+  }
+
   private _prepareLogAttachments(testResult: TestResult) {
     const logAttachments: {
       name: string;
@@ -1744,14 +1879,29 @@ class AzureDevOpsReporter implements Reporter {
 
       this._publishedResultsCount.points += mappedTestPoints?.length || 0;
 
-      const results: TestInterfaces.TestCaseResult[] = mappedTestPoints.map((testPoint) =>
-        this._createTestCaseResult(testCase, testResult, testPoint)
-      );
+      let results: TestInterfaces.TestCaseResult[];
+      if (this._publishRetryResults === 'grouped') {
+        const buffered = this._retryResultsBuffer.get(test.id);
+        const allResults = buffered ? buffered.results : [testResult];
+        results = mappedTestPoints.map((testPoint) =>
+          this._createGroupedTestCaseResult(testCase, allResults, testPoint)
+        );
+      } else {
+        results = mappedTestPoints.map((testPoint) =>
+          this._createTestCaseResult(testCase, testResult, testPoint)
+        );
+      }
 
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
-        this._testApi
-      ).addTestResultsToTestRun(results, this._projectName, runId!)) as unknown as TestResultsToTestRun;
+      const apiOverride =
+        this._publishRetryResults === 'grouped'
+          ? this._addReportingOverrideV7(this._testApi)
+          : this._addReportingOverride(this._testApi);
+      const testCaseResult: TestResultsToTestRun = (await apiOverride.addTestResultsToTestRun(
+        results,
+        this._projectName,
+        runId!
+      )) as unknown as TestResultsToTestRun;
 
       if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
 
@@ -1762,17 +1912,38 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
 
-      if (this._uploadAttachments && testResult.attachments.length > 0)
-        await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
+      // Upload attachments — for grouped mode, upload from all retry attempts
+      if (this._uploadAttachments) {
+        const attemptResults =
+          this._publishRetryResults === 'grouped'
+            ? (this._retryResultsBuffer.get(test.id)?.results || [testResult])
+            : [testResult];
+        for (const attemptResult of attemptResults) {
+          if (attemptResult.attachments.length > 0) {
+            await this._uploadAttachmentsFunc(attemptResult, testCaseResult.result.value![0].id, test);
+          }
+        }
+      }
 
       if (this._uploadLogs) {
         this._logger?.info(chalk.gray(`Uploading stdout.log for test: ${test.title}`));
-        const logAttachment = this._prepareLogAttachments(testResult);
-        await this._uploadLogsAttachmentsFunc(
-          { ...testResult, attachments: logAttachment },
-          testCaseResult.result.value![0].id,
-          test
-        );
+        const attemptResults =
+          this._publishRetryResults === 'grouped'
+            ? (this._retryResultsBuffer.get(test.id)?.results || [testResult])
+            : [testResult];
+        for (const attemptResult of attemptResults) {
+          const logAttachment = this._prepareLogAttachments(attemptResult);
+          await this._uploadLogsAttachmentsFunc(
+            { ...attemptResult, attachments: logAttachment },
+            testCaseResult.result.value![0].id,
+            test
+          );
+        }
+      }
+
+      // Clean up grouped buffer after publishing
+      if (this._publishRetryResults === 'grouped') {
+        this._retryResultsBuffer.delete(test.id);
       }
 
       this._removePublished(testCase.testAlias);
@@ -1869,11 +2040,22 @@ class AzureDevOpsReporter implements Reporter {
             }
 
             testCaseIds.push(...testCase.testCaseIds);
-            testCaseResults.push(
-              ...testPoints.map((testPoint) =>
-                this._createTestCaseResult(testCase, testResult, testPoint, existingTestCaseResult)
-              )
-            );
+            if (this._publishRetryResults === 'grouped') {
+              const buffered = this._retryResultsBuffer.get(testCase.id);
+              const allResults = buffered ? buffered.results : [testResult];
+              testCaseResults.push(
+                ...testPoints.map((testPoint) =>
+                  this._createGroupedTestCaseResult(testCase, allResults, testPoint, existingTestCaseResult)
+                )
+              );
+              this._retryResultsBuffer.delete(testCase.id);
+            } else {
+              testCaseResults.push(
+                ...testPoints.map((testPoint) =>
+                  this._createTestCaseResult(testCase, testResult, testPoint, existingTestCaseResult)
+                )
+              );
+            }
 
             if (this._uploadAttachments && testResult.attachments.length > 0) {
               for (const testPoint of testPoints) {
@@ -1935,7 +2117,11 @@ class AzureDevOpsReporter implements Reporter {
             },
           };
         } else {
-          testCaseResult = (await this._addReportingOverride(this._testApi).addTestResultsToTestRun(
+          const apiOverride =
+            this._publishRetryResults === 'grouped'
+              ? this._addReportingOverrideV7(this._testApi)
+              : this._addReportingOverride(this._testApi);
+          testCaseResult = (await apiOverride.addTestResultsToTestRun(
             testCaseResults,
             this._projectName,
             runId!
