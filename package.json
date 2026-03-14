@@ -3,7 +3,19 @@
   "version": "1.19.1",
   "description": "Playwright Azure Reporter",
   "main": "./dist/playwright-azure-reporter.js",
-  "types": "./dist/playwright-azure-reporter.d.js",
+  "types": "./dist/playwright-azure-reporter.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/playwright-azure-reporter.d.ts",
+      "require": "./dist/playwright-azure-reporter.js",
+      "import": "./dist/playwright-azure-reporter.js"
+    },
+    "./dist/playwright-azure-reporter": {
+      "types": "./dist/playwright-azure-reporter.d.ts",
+      "require": "./dist/playwright-azure-reporter.js",
+      "import": "./dist/playwright-azure-reporter.js"
+    }
+  },
   "scripts": {
     "test": "yarn playwright test",
     "test:reporter": "yarn playwright test -c tests/reporter/playwright.config.ts",
