@@ -264,6 +264,22 @@ Reporter options (\* - required):
 - `uploadAttachments` [boolean] - Uploading attachments (screenshot/video) after test ended. Default: `false`.
 - `attachmentsType` [(string|RegExp)[]] - List of attachments types or a RegEx to match the name of the attachment that will be uploaded. Default: `['screenshot']`
 - `uploadLogs` [boolean] - Uploading logs that were created during test execution like stdout/stderr. Doesn't depend on `uploadAttachments` option. Default: `false`.
+- `publishRetryResults` [string] - Controls how retry results are published to Azure DevOps. Available options:
+  - `'all'` - Every retry attempt is published as a separate test result (default, preserves current behavior)
+  - `'last'` - Only the final retry attempt for each test is published. Intermediate failed attempts are skipped.
+  - `'grouped'` - Publishes one test result per test with all retry attempts as sub-results using Azure DevOps' native rerun hierarchy (`resultGroupType: Rerun`). Tests that pass after failures are automatically marked as flaky via `IsTestResultFlaky` custom field.
+
+  Default: `'all'`.
+
+  > **Note:** The `'grouped'` mode requires Azure DevOps API version 7.1+. The `'last'` and `'grouped'` modes are designed for use with Playwright's `retries` setting in `playwright.config.ts`.
+
+  **Example:**
+  ```typescript
+  ['@alex_neo/playwright-azure-reporter', {
+    // ... other options
+    publishRetryResults: 'grouped',
+  }]
+  ```
 - `isDisabled` [boolean] - Disable reporter. Default: `false`.
 - `testRunTitle` [string] - Title of test run using to create new test run. Default: `Playwright Test Run`.
 - `testRunConfig` - Extra data to pass when Test Run creating. Read [doc](https://learn.microsoft.com/en-us/rest/api/azure/devops/test/runs/create?view=azure-devops-rest-7.1&tabs=HTTP#request-body) from more information. Default: `empty`.
