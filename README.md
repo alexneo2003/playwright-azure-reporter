@@ -2,130 +2,44 @@
 
 ![GitHub](https://img.shields.io/github/license/alexneo2003/playwright-azure-reporter) ![npm (scoped)](https://img.shields.io/npm/v/@alex_neo/playwright-azure-reporter) ![npm](https://img.shields.io/npm/dw/@alex_neo/playwright-azure-reporter) ![npm](https://img.shields.io/npm/dt/@alex_neo/playwright-azure-reporter)
 
-## A must read!
+A Playwright reporter that publishes test results to Azure DevOps Test Plans.
 
-**Since version 1.5.0 reporter allows using configurationIds to publish results for different configurations e.g. different browsers**
-**Necessarily defining `testRun.configurationIds` or/and `testPointMapper` function in reporter config, otherwise reporter will be publishing results for all configurations**
+## Table of Contents
 
-**Since version 1.9.0 reporter allows you to use test tags as Playwright it implemented in version [1.42.0](https://playwright.dev/docs/test-annotations#tag-tests)**
-**You can define test cases ids in new format, but you still can use old format with test case id in test name**
+- [Quick Start](#quick-start)
+- [Defining Test Case IDs](#defining-test-case-ids)
+  - [In Test Title](#in-test-title)
+  - [Using Tags](#using-tags)
+  - [Using Annotations](#using-annotations)
+- [Configuration](#configuration)
+  - [Required Options](#required-options)
+  - [General Options](#general-options)
+  - [Authentication](#authentication)
+  - [Publishing Modes](#publishing-modes)
+  - [Retry Results](#retry-results)
+  - [Attachments & Logs](#attachments--logs)
+  - [Test Point Mapping](#test-point-mapping)
+  - [Test Case ID Matching](#test-case-id-matching)
+  - [Test Case Summary](#test-case-summary)
+  - [Auto-Mark as Automated](#auto-mark-as-automated)
+- [CI/CD Integration](#cicd-integration)
+- [Releases](#releases)
 
-**Example:**
+## Quick Start
 
-```typescript
-test.describe('Test suite', () => {
-  test('Test name @tag1 @tag2', {
-    tag: ['@[1]'] // <<-- test case id
-  } () => {
-    expect(true).toBe(true);
-  });
-});
-```
-
-**but you should define your Azure DevOps test case id in format `@[1]` where `1` is your test case id in square brackets and `@` is required prefix for playwright to recognize tags**
-
-
-**Since version 1.11.0 reporter supports different authentication types via the `authType` option**
-**You can now specify `authType: 'pat'` for Personal Access Token (default) or `authType: 'accessToken'` for OAuth Access Token authentication. Existing configurations continue to work without changes.**
-
-
-## How to integrate
-
-Install package
+Install the package:
 
 ```bash
 npm install @alex_neo/playwright-azure-reporter
 ```
 
-or
-
-```bash
-yarn add @alex_neo/playwright-azure-reporter
-```
-
-## Usage
-
-You must register an ID already existing test cases from Azure DevOps before running tests.
-
-> **You need write testCaseId wraped in square brackets at the test name.**
-
-You can define multiple test cases for a single test with next format:
-
-- `[1] Test name` - single test case
-- `[1,2,3] Test name` - multiple test cases
-- `[16, 17, 18] Test name` - multiple test cases with spaces
-- `[1, 2, 3] Test name [4] Test name [5][6] Test name` - with combined format
-
-For example:
+Add the reporter to your `playwright.config.ts`:
 
 ```typescript
-describe('Test suite', () => {
-  test('[1] First Test', () => {
-    expect(true).toBe(true);
-  });
-
-  test('Correct test [3]', () => {
-    expect(true).toBe(true);
-  });
-
-  test.skip('Skipped test [4]', () => {
-    expect(true).toBe(true);
-  });
-
-  test('[6] Failed test', () => {
-    expect(true).toBe(false);
-  });
-
-  test('[7] Test seven [8] Test eight [9] Test nine', () => {
-    expect(true).toBe(true);
-  });
-
-  test('[10,11,12] Test ten, eleven, twelve', () => {
-    expect(true).toBe(true);
-  });
-
-  test('[13, 14, 15] Test thirteen, fourteen, fifteen', () => {
-    expect(true).toBe(true);
-  });
-
-  test('[16, 17, 18] Test sixteen, seventeen, eighteen [19] Test nineteen', () => {
-    expect(true).toBe(true);
-  });
-});
-```
-
-Or you can use tags to define test cases ids (since v1.9.0) (read more [here](https://playwright.dev/docs/test-annotations#tag-tests)):
-
-```typescript
-test.describe('Test suite', () => {
-  test('Test name', {
-    tag: ['@[1]', '@smoke', '@slow']
-  } () => {
-    expect(true).toBe(true);
-  });
-});
-```
-
-Configure Playwright Azure Reporter with `playwright-azure-reporter` package.
-
-`playwright.config.ts`
-
-```typescript
-import type { PlaywrightTestConfig } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 import type { AzureReporterOptions } from '@alex_neo/playwright-azure-reporter';
 
-/**
- * See https://playwright.dev/docs/test-configuration.
- */
-const config: PlaywrightTestConfig = {
-  testDir: './tests',
-  timeout: 30 * 1000,
-  expect: {
-    timeout: 5000,
-  },
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+export default defineConfig({
   reporter: [
     ['list'],
     [
@@ -133,45 +47,98 @@ const config: PlaywrightTestConfig = {
       {
         orgUrl: 'https://dev.azure.com/your-organization-name',
         token: process.env.AZURE_TOKEN,
-        authType: 'pat', // 'pat', 'accessToken', or 'managedIdentity'
         planId: 44,
-        projectName: 'SampleSample',
-        environment: 'AQA',
-        logging: true,
-        testRunTitle: 'Playwright Test Run',
+        projectName: 'SampleProject',
         publishTestResultsMode: 'testRun',
-        uploadAttachments: true,
-        attachmentsType: ['screenshot', 'video', 'trace'],
-        testCaseIdMatcher: /@\[(\d+)\]/, // please use this pattern to extract test case id from test name, be careful with the pattern!!!
-        testRunConfig: {
-          owner: {
-            displayName: 'Alex Neo',
-          },
-          comment: 'Playwright Test Run',
-          // the configuration ids of this test run, use
-          // https://dev.azure.com/{organization}/{project}/_apis/test/configurations to get the ids of  your project.
-          // if multiple configuration ids are used in one run a testPointMapper should be used to pick the correct one,
-          // otherwise the results are pushed to all.
-          configurationIds: [1],
-        },
       } as AzureReporterOptions,
     ],
   ],
-  use: {
-    screenshot: 'only-on-failure',
-    actionTimeout: 0,
-    trace: 'on-first-retry',
-  },
-};
-
-export default config;
+});
 ```
 
-## Authentication
+Each test must reference an existing Azure DevOps test case ID. See [Defining Test Case IDs](#defining-test-case-ids) for all supported formats.
 
-The reporter supports three authentication methods to connect to Azure DevOps:
+## Defining Test Case IDs
 
-### Personal Access Token (PAT) - Default
+You must link each test to an existing test case in Azure DevOps before running tests. There are three ways to do this.
+
+### In Test Title
+
+Wrap test case IDs in square brackets inside the test name:
+
+- `[1] Test name` - single test case
+- `[1,2,3] Test name` - multiple test cases
+- `[1, 2, 3] Test name [4] another [5][6] combined` - mixed formats
+
+```typescript
+test.describe('Test suite', () => {
+  test('[1] First Test', () => {
+    expect(true).toBe(true);
+  });
+
+  test('[10,11,12] Multiple test cases', () => {
+    expect(true).toBe(true);
+  });
+});
+```
+
+### Using Tags
+
+Use Playwright's [tag syntax](https://playwright.dev/docs/test-annotations#tag-tests) with the format `@[ID]`:
+
+```typescript
+test.describe('Test suite', () => {
+  test('Test name', {
+    tag: ['@[1]', '@smoke', '@slow'],
+  }, () => {
+    expect(true).toBe(true);
+  });
+});
+```
+
+The `@` prefix is required by Playwright. Non-ID tags (like `@smoke`) are ignored by the reporter.
+
+### Using Annotations
+
+Use Playwright's [annotation API](https://playwright.dev/docs/test-annotations) with `testCaseIdZone: 'annotation'`:
+
+```typescript
+test('Test case', {
+  annotation: { type: 'TestCase', description: '12345' },
+}, () => {
+  expect(true).toBe(true);
+});
+```
+
+See [Test Case ID Matching](#test-case-id-matching) for advanced matching patterns with annotations.
+
+## Configuration
+
+### Required Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `orgUrl` | `string` | Full URL for your organization. Example: `https://dev.azure.com/your-organization-name` |
+| `projectName` | `string` | Name of your Azure DevOps project |
+| `planId` | `number` | ID of the test plan (from the test plan URL: `planId=4`) |
+
+> **Note:** Some APIs (e.g. ProfileApi) must be hit at the deployment level: `https://vssps.dev.azure.com/{yourorgname}`
+
+### General Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `isDisabled` | `boolean` | `false` | Disable the reporter entirely |
+| `environment` | `string` | `undefined` | Prefix for test run names (e.g. `'QA'`) |
+| `logging` | `boolean` | `false` | Enable debug logging |
+| `testRunTitle` | `string` | `'Playwright Test Run'` | Title for newly created test runs |
+| `testRunConfig` | `object` | `undefined` | Extra data passed when creating a test run. See [API docs](https://learn.microsoft.com/en-us/rest/api/azure/devops/test/runs/create?view=azure-devops-rest-7.1&tabs=HTTP#request-body) |
+
+### Authentication
+
+The reporter supports three authentication methods:
+
+#### Personal Access Token (PAT) - Default
 
 ```typescript
 {
@@ -180,7 +147,7 @@ The reporter supports three authentication methods to connect to Azure DevOps:
 }
 ```
 
-### Access Token
+#### Access Token
 
 ```typescript
 {
@@ -189,7 +156,7 @@ The reporter supports three authentication methods to connect to Azure DevOps:
 }
 ```
 
-### Azure Managed Identity
+#### Azure Managed Identity
 
 ```typescript
 {
@@ -201,424 +168,331 @@ The reporter supports three authentication methods to connect to Azure DevOps:
 
 **When to use each:**
 
-- **PAT**: Use when you have a Personal Access Token generated from Azure DevOps. Suitable for most individual use cases.
-- **Access Token**: Use when you have an OAuth access token. Suitable for applications using Azure DevOps OAuth flows or CI/CD environments with token-based authentication.
-- **Managed Identity**: Use when running in Azure environments with managed identity configured. Automatically handles authentication using Azure DefaultAzureCredential, supporting multiple auth methods like Azure CLI (`az login`), managed identity, environment variables, etc.
+- **PAT**: Personal Access Token from Azure DevOps. Suitable for most use cases.
+- **Access Token**: OAuth access token. Suitable for CI/CD environments with token-based authentication.
+- **Managed Identity**: Azure environments with managed identity. Uses `DefaultAzureCredential` supporting Azure CLI, managed identity, environment variables, etc.
 
-For more detailed examples, see [Authentication Examples](tests/examples/authType-examples.md).
+For more examples, see [Authentication Examples](tests/examples/authType-examples.md).
 
-### Required Token Scopes
+#### Required Token Scopes
 
-Regardless of the authentication type you choose, your token must have the following Azure DevOps scopes:
+| Scope | Access | Purpose |
+|-------|--------|---------|
+| Test Management | Read & Write | Creating/updating test runs, publishing results, uploading attachments |
+| Work Items | Read & Write | Marking test cases as automated (only if `autoMarkTestCasesAsAutomated` is enabled) |
+| Project and Team | Read | Accessing project information |
 
-**Required Scopes:**
+Alternatively, use a token with **Full access** scope.
 
-- **Test Management (Read & Write)** - Required for:
-  - Creating and updating test runs
-  - Publishing test results
-  - Querying test points and configurations
-  - Uploading test attachments
-- **Work Items (Read & Write)** - Required for:
-  - Marking test cases as automated (when `autoMarkTestCasesAsAutomated` is enabled)
-  - Updating test case automation status and metadata
-- **Project and Team (Read)** - Required for:
-  - Accessing project information
-  - Validating project existence
+> **Note:** If your token lacks Work Items write permissions but `autoMarkTestCasesAsAutomated` is enabled, the reporter will log errors for automation updates but continue publishing test results normally.
 
-**Minimal Scope Configuration:**
-When creating a Personal Access Token in Azure DevOps, ensure you select at least:
+### Publishing Modes
 
-- `Test Management: Read & write`
-- `Work Items: Read & write` (required if using `autoMarkTestCasesAsAutomated` feature)
-- `Project and Team: Read`
+Control how and when test results are sent to Azure DevOps with `publishTestResultsMode`:
 
-**Full Access (Alternative):**
-If you prefer, you can use a token with `Full access` scope, which includes all required permissions.
+| Mode | Default | Description |
+|------|---------|-------------|
+| `'testResult'` | Yes | Results published after each test completes, in parallel with test execution |
+| `'testRun'` | | Results batched and published at the end of the test run |
+| `'testRunADO'` | | Updates existing results in an Azure DevOps test run (requires `isExistingTestRun: true` and `testRunId`) |
 
-> **Note:** The reporter will fail with authentication errors if the token doesn't have sufficient permissions to perform test management operations.
+> **Note:** In `testRun` mode, if the same test case ID appears in multiple tests, only the last result is kept.
 
-> **Important:** If you enable the `autoMarkTestCasesAsAutomated` feature but your token lacks Work Items write permissions, the reporter will log errors when attempting to update test case automation status, but will continue to publish test results normally.
+#### Existing Test Runs
 
-## Configuration
+To publish results to an existing test run instead of creating a new one:
 
-Reporter options (\* - required):
-
-- `token` [string] - Azure DevOps token, you can find more information [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows). Required for `'pat'` and `'accessToken'` authTypes, not needed for `'managedIdentity'`.
-- `authType` [string] - Specifies the authentication type to use with Azure DevOps. Available options:
-  - `'pat'` - Personal Access Token (default)
-  - `'accessToken'` - Access Token from Azure DevOps API
-  - `'managedIdentity'` - Azure Managed Identity authentication
-
-  Default: `'pat'`. For backward compatibility, existing configurations without `authType` will continue to work unchanged. See [Authentication Examples](tests/examples/authType-examples.md) for detailed usage.
-
-- `applicationIdURI` [string] - Required when `authType` is `'managedIdentity'`. Specifies the application ID URI for Azure DevOps. Typically `'499b84ac-1321-427f-aa17-267ca6975798/.default'`.
-
-- \*`orgUrl` [string] - Full url for your organization space. Example: `https://dev.azure.com/your-organization-name`
-
-  > **Note:** some API's (e.g. ProfileApi) can't be hit at the org level, and has to be hit at the deployment level, so url should be structured like https://vssps.dev.azure.com/{yourorgname}
-
-- \*`projectName` [string] - Name of your project (also can be got from run URL). Example: `https://dev.azure.com/alex-neo/SampleProject/` - **SampleProject**
-- \*`planId` [number] - Id of test plan. You can find it in test plan URL. Example: `https://dev.azure.com/alex-neo/SampleProject/_testPlans/execute?planId=4&suiteId=6` - **planId=4**
-- `environment` [any] - Any string that will be used as environment name. Will be used as prefix for all test runs. Default: `undefined`. Example: `QA`
-- `logging` [boolean] - Enabled debug logging from reporter or not. Default: `false`.
-- `uploadAttachments` [boolean] - Uploading attachments (screenshot/video) after test ended. Default: `false`.
-- `attachmentsType` [(string|RegExp)[]] - List of attachments types or a RegEx to match the name of the attachment that will be uploaded. Default: `['screenshot']`
-- `uploadLogs` [boolean] - Uploading logs that were created during test execution like stdout/stderr. Doesn't depend on `uploadAttachments` option. Default: `false`.
-- `publishRetryResults` [string] - Controls how retry results are published to Azure DevOps. Available options:
-  - `'all'` - Every retry attempt is published as a separate test result (default, preserves current behavior)
-  - `'last'` - Only the final retry attempt for each test is published. Intermediate failed attempts are skipped.
-  - `'grouped'` - Publishes one test result per test with all retry attempts as sub-results using Azure DevOps' native rerun hierarchy (`resultGroupType: Rerun`). Tests that pass after failures are automatically marked as flaky via `IsTestResultFlaky` custom field.
-
-  Default: `'all'`.
-
-  > **Note:** The `'grouped'` mode requires Azure DevOps API version 7.1+. The `'last'` and `'grouped'` modes are designed for use with Playwright's `retries` setting in `playwright.config.ts`.
-
-  **Example:**
-  ```typescript
-  ['@alex_neo/playwright-azure-reporter', {
-    // ... other options
-    publishRetryResults: 'grouped',
-  }]
-  ```
-- `isDisabled` [boolean] - Disable reporter. Default: `false`.
-- `testRunTitle` [string] - Title of test run using to create new test run. Default: `Playwright Test Run`.
-- `testRunConfig` - Extra data to pass when Test Run creating. Read [doc](https://learn.microsoft.com/en-us/rest/api/azure/devops/test/runs/create?view=azure-devops-rest-7.1&tabs=HTTP#request-body) from more information. Default: `empty`.
-- `testPointMapper` [function] - A callback to map the test runs to test configurations, e.g. by browser
-
+```typescript
+{
+  publishTestResultsMode: 'testRunADO',
+  isExistingTestRun: true,
+  testRunId: 12345, // or set AZURE_PW_TEST_RUN_ID env variable
+}
 ```
-  import { TestCase } from '@playwright/test/reporter'
-  import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces'
 
+- `isExistingTestRun` [`boolean`] - Publish to an existing test run without creating/completing it. Default: `false`.
+- `testRunId` [`number`] - ID of the existing test run. Can also be set via `AZURE_PW_TEST_RUN_ID` env variable. Reporter options take precedence over the env variable.
+
+> **Note:** When using `isExistingTestRun`, the test run is not completed automatically. You must complete it manually.
+
+### Retry Results
+
+Control how retry attempts are published with `publishRetryResults`:
+
+| Mode | Description |
+|------|-------------|
+| `'all'` | Every retry attempt is published as a separate test result (default) |
+| `'last'` | Only the final attempt is published. Intermediate failures are skipped |
+| `'grouped'` | One result per test with all attempts as sub-results using ADO's native rerun hierarchy |
+
+In `'grouped'` mode:
+- Results use `resultGroupType: Rerun` with `subResults` for each attempt
+- Tests that pass after failures are automatically marked as flaky via `IsTestResultFlaky` custom field
+
+```typescript
+{
+  publishRetryResults: 'grouped',
+  // works with Playwright's retries setting
+}
+```
+
+### Attachments & Logs
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `uploadAttachments` | `boolean` | `false` | Upload attachments (screenshots/video) after each test |
+| `attachmentsType` | `(string\|RegExp)[]` | `['screenshot']` | Filter which attachments to upload by type or name pattern |
+| `uploadLogs` | `boolean` | `false` | Upload stdout/stderr logs (independent of `uploadAttachments`) |
+
+### Test Point Mapping
+
+#### `testPointMapper`
+
+A callback to map tests to specific test configurations (e.g. by browser):
+
+```typescript
+import { TestCase } from '@playwright/test/reporter';
+import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
+
+{
   testPointMapper: async (testCase: TestCase, testPoints: TestPoint[]) => {
-    switch(testCase.parent.project()?.use.browserName) {
+    switch (testCase.parent.project()?.use.browserName) {
       case 'chromium':
-        return testPoints.filter((testPoint) => testPoint.configuration.id === '3');
+        return testPoints.filter((tp) => tp.configuration.id === '3');
       case 'firefox':
-        return testPoints.filter((testPoint) => testPoint.configuration.id === '4');
+        return testPoints.filter((tp) => tp.configuration.id === '4');
       case 'webkit':
-        return testPoints.filter((testPoint) => testPoint.configuration.id === '5');
+        return testPoints.filter((tp) => tp.configuration.id === '5');
       default:
-        throw new Error("invalid test configuration!");
+        throw new Error('invalid test configuration!');
     }
-  }
+  },
+  testRunConfig: {
+    // Get configuration IDs from:
+    // https://dev.azure.com/{organization}/{project}/_apis/test/configurations
+    configurationIds: [3, 4, 5],
+  },
+}
 ```
 
-- `publishTestResultsMode` - Mode of publishing test results. Default: `'testResult'`. Available options:
-  - `testResult` - Published results of tests, at the end of each test, parallel to test run..
-  - `testRun` - Published test results to test run, at the end of test run.
-    > **Note:** If you use `testRun` mode and using same test cases in different tests (yes i know it sounds funny), it will be overwritten with last test result.
-  - `testRunADO` - Updates existing test results in Azure DevOps test run instead of creating new results. Requires `isExistingTestRun: true` and `testRunId` to be specified.
-    > **Note:** This mode is designed for updating test results in an existing Azure DevOps test run. It will update the status and outcome of existing test results rather than creating new ones. This is useful when you want to update pre-existing test results with actual execution outcomes.
-- `isExistingTestRun` [boolean] - Published test results to the existing test run. In this mode test results only added to the existing test run without its creation and completion. Default: `false`.
-  > **Note:** If you use `isExistingTestRun` mode or `testRunADO` mode, `testRunId` should be specified.
-- `testRunId` [number] - Id of test run. Used for `existingTestRun` publishing mode and `testRunADO` mode. Also can be set by `AZURE_PW_TEST_RUN_ID` environment variable. Default: `undefined`.
+> **Important:** Define `testRunConfig.configurationIds` and/or `testPointMapper`, otherwise results are published for all configurations.
 
-  > **Note:** If you set existing test run ID from reporter options and from environment variable - reporter options will be used
+#### `rootSuiteId`
 
-  > **Note:** If you use `isExistingTestRun` mode, test run doesn't complete automatically. You should complete it manually.
+Restricts test point resolution to a specific suite. Useful when different suites (e.g. `smoke`, `integration`) contain the same test case IDs. Can also be set via `AZURE_PW_ROOT_SUITE_ID` env variable. Reporter options take precedence.
 
-- `testCaseIdMatcher` [string|RegExp|string[]|RegExp[]] - A string or a regular expression to match the name of the test case to extract the test case id. Default: `/\[([\d,\s]+)\]/`
+```
+Automation Tests
+  - Smoke Tests (suiteId: 5)
+    - Test 1 (caseId: 1)
+    - Test 2 (caseId: 2)
+  - Integration Tests (suiteId: 6)
+    - Test 1 (caseId: 1)
+    - Test 2 (caseId: 2)
+```
 
-  #### Example Test Titles
-  - Test title: `Test case @tag1=123`
-    - `testCaseIdMatcher: /@tag1=(\d+)/`
-    - Extracted tags: `['123']`
+Without `rootSuiteId`, running smoke tests would also match test points in Integration Tests. Set `rootSuiteId: 5` to scope results to Smoke Tests only.
 
-  - Test title: `Test case @TestCase=123 [@TestCase=456]`
-    - `testCaseIdMatcher: /@TestCase=(\d+)/`
-    - Extracted tags: `['123', '456']`
+### Test Case ID Matching
 
-  - Test title: `Test case test123 TEST456`
-    - `testCaseIdMatcher: [/[a-z]+(\d+)/, /[A-Z]+(\d+)/]`
-    - Extracted tags: `['123', '456']`
-  - Test title: `Test case @tag1=123 @tag2=456`
-    - `testCaseIdMatcher: ['@tag1=(\\d+)', '@tag2=(\\d+)']`
-    - Extracted tags: `['123', '456']`
+#### `testCaseIdMatcher`
 
-  #### Error Handling
+A string, RegExp, or array of either, used to extract test case IDs. Default: `/\[([\d,\s]+)\]/`
 
-  If an invalid `testCaseIdMatcher` is provided, an error will be thrown. For example:
+**Examples with test titles:**
 
-  ```typescript
-   reporter: [
-    ['list'],
-    [
-      '@alex_neo/playwright-azure-reporter',
-      {
-        orgUrl: 'http://localhost:4000',
-        projectName: 'SampleProject',
-        planId: 4,
-        token: 'your-token',
-        isDisabled: false,
-        testCaseIdMatcher: 1234, // Invalid pattern
-      }
-    ],
-  // This will throw an error: "Invalid testCaseIdMatcher. Must be a string or RegExp. Actual: 1234"
-  ```
+| Test Title | Matcher | Extracted IDs |
+|-----------|---------|---------------|
+| `Test case @tag1=123` | `/@tag1=(\d+)/` | `['123']` |
+| `Test case @TC=123 [@TC=456]` | `/@TC=(\d+)/` | `['123', '456']` |
+| `Test case test123 TEST456` | `[/[a-z]+(\d+)/, /[A-Z]+(\d+)/]` | `['123', '456']` |
 
-- `testCaseIdZone` [string] - Specifies where to look for the test case IDs. It can be either `'title'` or `'annotation'`. When set to `'title'`, the reporter will extract test case IDs from the test title and tag test section also. When set to `'annotation'`, it will extract test case IDs only from the test annotations. Default: `'title'`.
+If an invalid matcher is provided (e.g. a number), an error is thrown: `"Invalid testCaseIdMatcher. Must be a string or RegExp."`.
 
-  **Pay attention that if you use `testCaseIdZone: 'annotation'` and `testCaseIdMatcher` is not defined, the reporter will not extract test case IDs from the test annotations. You should define `testCaseIdMatcher` to extract test case IDs from the test annotations.**
+#### `testCaseIdZone`
 
-  **When using annotation zone:** The `testCaseIdMatcher` is applied in two steps:
-  1. First matcher in the array should match the annotation **type** (e.g., `/(TestCase)/`)
-  2. Subsequent matchers extract test case IDs from the annotation **description**
-  
-  This allows extracting IDs from complex patterns like URLs, bracketed formats, or any custom format.
+Specifies where to look for test case IDs: `'title'` (default) or `'annotation'`.
 
-  #### Example Usage
-  - Test title: `Test case [12345]`
-    - `testCaseIdZone: 'title'`
-    - Extracted tags: `['12345']`
+- `'title'` - Extracts IDs from the test title and tags
+- `'annotation'` - Extracts IDs from test annotations only
 
-  - Test annotations with simple description:
+> **Important:** When using `testCaseIdZone: 'annotation'`, you must also define `testCaseIdMatcher`.
 
-    ```typescript
-    test('Test case', { annotation: { type: 'TestCase', description: '12345' } }, () => {
-      expect(true).toBe(true);
-    });
-    ```
+**When using annotation zone**, the matcher works in two steps:
+1. First matcher matches the annotation **type** (e.g. `/(TestCase)/`)
+2. Subsequent matchers extract IDs from the annotation **description**
 
-    - `testCaseIdZone: 'annotation'`
-    - `testCaseIdMatcher: /(TestCase)/`
-    - Extracted IDs: `['12345']`
+**Annotation examples:**
 
-  - Test annotations with Azure DevOps URLs:
+Simple description:
 
-    ```typescript
-    test('Test case', {
-      annotation: {
-        type: 'Test Case',
-        description: 'https://dev.azure.com/myOrg/myProject/_workitems/edit/12345, https://dev.azure.com/myOrg/myProject/_workitems/edit/54321'
-      }
-    }, () => {
-      expect(true).toBe(true);
-    });
-    ```
+```typescript
+// testCaseIdZone: 'annotation', testCaseIdMatcher: /(TestCase)/
+test('Test case', {
+  annotation: { type: 'TestCase', description: '12345' },
+}, () => { /* ... */ });
+// Extracted: ['12345']
+```
 
-    - `testCaseIdZone: 'annotation'`
-    - `testCaseIdMatcher: [/(Test Case)/, /\/(\d+)/]`
-    - Extracted IDs: `['12345', '54321']`
-    - The first matcher `/(Test Case)/` matches the annotation type
-    - The second matcher `/\/(\d+)/` extracts numeric IDs from the URLs
+Azure DevOps URLs:
 
-  - Test annotations with bracketed format:
+```typescript
+// testCaseIdZone: 'annotation', testCaseIdMatcher: [/(Test Case)/, /\/(\d+)/]
+test('Test case', {
+  annotation: {
+    type: 'Test Case',
+    description: 'https://dev.azure.com/org/project/_workitems/edit/12345, https://dev.azure.com/org/project/_workitems/edit/54321',
+  },
+}, () => { /* ... */ });
+// Extracted: ['12345', '54321']
+```
 
-    ```typescript
-    test('Test case', {
-      annotation: {
-        type: 'Test Case',
-        description: '[12345, 67890]'
-      }
-    }, () => {
-      expect(true).toBe(true);
-    });
-    ```
+Bracketed format:
 
-    - `testCaseIdZone: 'annotation'`
-    - `testCaseIdMatcher: [/(Test Case)/, /\[([\d,\s]+)\]/]`
-    - Extracted IDs: `['12345', '67890']`
+```typescript
+// testCaseIdZone: 'annotation', testCaseIdMatcher: [/(Test Case)/, /\[([\d,\s]+)\]/]
+test('Test case', {
+  annotation: { type: 'Test Case', description: '[12345, 67890]' },
+}, () => { /* ... */ });
+// Extracted: ['12345', '67890']
+```
 
-- `rootSuiteId` [number] - The ID of the root test suite under which the test results will be published. This can be useful when you have some test suites for different test packages, like `smoke`, `integration`, `e2e`, etc., with the same test cases. In this case, you can specify the root suite ID to publish test results under the root suite. Also can be defined by the `AZURE_PW_ROOT_SUITE_ID` environment variable. Default: `undefined`.
+### Test Case Summary
 
-  > **Note:** If you set root suite ID from reporter options and from environment variable - reporter options will be used
+Generate a report of test cases that don't match the test plan. Helps identify missing, misconfigured, or unassigned test cases.
 
-  > **Example:**
-  > Let's say you have the following test suites/cases structure
-  >
-  > ```
-  > Automation Tests
-  >   - Smoke Tests (suiteId: 5)
-  >     - Test 1 (caseId: 1)
-  >     - Test 2 (caseId: 2)
-  >   - Integration Tests (suiteId: 6)
-  >     - Test 1 (caseId: 1)
-  >     - Test 2 (caseId: 2)
-  >     - Test 3 (caseId: 3)
-  >     - Test 4 (caseId: 4)
-  > ```
-  >
-  > And when you run tests with the `Smoke Tests` project without specifying the `rootSuiteId`, the test results will be published under the root suite `Automation Tests` for test cases in the `Smoke Tests` suite and `Integration Tests` suite. It will look like you have redundant results inside the test run for the same test cases in different suites. To avoid this, you can specify the `rootSuiteId: 5` to publish test results only under the `Smoke Tests` suite.
-
-- `testCaseSummary` [object] - Configuration for generating a summary report of test cases that don't match the test plan. Default: `undefined`.
-  - `enabled` [boolean] - Enable test case summary generation. Default: `false`.
-  - `outputPath` [string] - File path where the summary report will be written. If not specified, no file will be created. Default: `undefined`.
-  - `consoleOutput` [boolean] - Whether to output the summary to console. Default: `true`.
-  - `publishToRun` [boolean] - When `true`, the generated summary (Markdown) is uploaded as an attachment to the Azure DevOps test run (if a run ID exists). Default: `false`. Works together with `outputPath` (file still written if specified) and `consoleOutput` (console printing still occurs unless you explicitly set `consoleOutput: false`).
-
-  **Example:**
-
-  ```typescript
+```typescript
+{
   testCaseSummary: {
     enabled: true,
     outputPath: './test-case-summary.md',
     consoleOutput: true,
-    publishToRun: true
-  }
-  ```
+    publishToRun: true,
+  },
+}
+```
 
-  When enabled, the reporter will track test cases that have test case IDs but no matching test points in the Azure DevOps test plan. This helps identify:
-  - Test cases that don't exist in the specified test plan
-  - Test cases that are not assigned to the correct configurations
-  - Test cases that are not included in the test plan suite structure
+| Sub-option | Type | Default | Description |
+|------------|------|---------|-------------|
+| `enabled` | `boolean` | `false` | Enable summary generation |
+| `outputPath` | `string` | `undefined` | File path for the summary report |
+| `consoleOutput` | `boolean` | `true` | Print summary to console |
+| `publishToRun` | `boolean` | `false` | Upload summary as a Markdown attachment to the ADO test run |
 
-  The summary includes recommendations for resolving issues, including specific configuration IDs and names when available.
+**Output channels** work independently - enable any combination:
 
-  **Behavior matrix:**
-  - Only `consoleOutput: true`: Printed to console only
-  - `outputPath` + `consoleOutput: true`: Printed and written to file
-  - `publishToRun: true` + (optional `outputPath`): Uploaded as run attachment; also printed and/or written depending on the other flags
-  - Set any channel off explicitly by setting its flag to `false` (e.g. `consoleOutput: false` to suppress console)
+| `consoleOutput` | `outputPath` | `publishToRun` | Result |
+|:-:|:-:|:-:|--------|
+| true | - | - | Console only |
+| true | set | - | Console + file |
+| - | - | true | ADO attachment only |
+| true | set | true | All three channels |
 
-  **Example summary (actual generated format):**
+When all test cases match, a success message is logged instead.
 
-  ```markdown
-  # Test Case Summary
+> **Note:** When `publishToRun: true`, the attachment is only uploaded if unmatched test points exist. Key summary lines are always logged regardless of the `logging` setting to ensure CI visibility.
 
-  ⚠️ Found 1 test(s) with test case IDs that don't match the test plan:
+**Example output:**
 
-  ## Tests with No Matching Test Points (1)
+```markdown
+# Test Case Summary
 
-  These tests have valid test case IDs but no matching test points in the test plan:
+Found 1 test(s) with test case IDs that don't match the test plan:
 
-  - **[777] Test with file output**
-    - File: /path/to/project/test-results/.../a.spec.js:3
-    - Test Case IDs: [777]
+## Tests with No Matching Test Points (1)
 
-  ## Recommendations
+- **[777] Test with file output**
+  - File: tests/example.spec.ts:3
+  - Test Case IDs: [777]
 
-  - Verify test case IDs exist in Azure DevOps test plan 4
-  - Check that test cases are assigned to configurations: [10, 20] (Firefox on Ubuntu, Safari on macOS)
-  - Ensure test cases are included in the test plan suite structure
-  - Add missing test cases to the test plan or assign them to the correct configurations
-  ```
+## Recommendations
 
-  When `outputPath` is set you'll see a log line:
+- Verify test case IDs exist in Azure DevOps test plan 4
+- Check that test cases are assigned to configurations: [10, 20] (Firefox, Safari)
+- Ensure test cases are included in the test plan suite structure
+```
 
-  ```text
-  Test case summary written to: ./test-case-summary.md
-  ```
+### Auto-Mark as Automated
 
-  And if `publishToRun: true` a Markdown attachment with the same content is uploaded to the run.
+Automatically update Azure DevOps test case work items to reflect their automation status when tests are executed.
 
-  When all tests with IDs are matched you'll instead see:
-
-  ```text
-  Test case summary: All tests with test case IDs found matching test points in the test plan.
-  ```
-
-  > Note: Key summary lines are force-logged so they appear even when general reporter logging is disabled; this ensures visibility in CI logs.
-
-  > **Important:** When `publishToRun: true` is enabled, the test case summary file will only be uploaded as an attachment to the Azure DevOps test run if there are unmatched test points (i.e., `this._unmatched.noTestPoints.length > 0`). If all tests with test case IDs match the test plan, no attachment will be uploaded to avoid unnecessary file uploads, though the summary will still be displayed in console and/or written to file if those options are enabled.
-
-- `autoMarkTestCasesAsAutomated` [object] - Configuration for automatically marking test cases as automated when they are executed through the reporter. Default: `undefined`.
-  - `enabled` [boolean] - Enable automatic marking of test cases as automated. Default: `false`.
-  - `updateAutomatedTestName` [boolean] - Update the `Microsoft.VSTS.TCM.AutomatedTestName` field with the test title. Default: `true` (when enabled).
-  - `updateAutomatedTestStorage` [boolean] - Update the `Microsoft.VSTS.TCM.AutomatedTestStorage` field with the test file name. Default: `true` (when enabled).
-  - `automatedTestNameFormat` [string] - Format for the automated test name. Options: `'title'` (default) | `'titleWithParent'`. Default: `'title'`.
-    - `'title'`: Uses only the test title (e.g., `"[1] Test name"`)
-    - `'titleWithParent'`: Includes parent suite name (e.g., `"Parent Suite > [1] Test name"`)
-  - `automatedTestStoragePath` [boolean | function] - Controls how the test file path is stored. Default: `false`.
-    - `false` (default): Stores only the filename (e.g., `"example.spec.ts"`)
-    - `true`: Stores the full absolute file path (e.g., `"/Users/username/project/tests/features/example.spec.ts"`)
-    - `function(testCase: TestCase) => string`: Custom callback to compute the storage path. Receives the test case object and returns the desired path string.
-  - `automatedTestType` [function] - Optional callback to set the `Microsoft.VSTS.TCM.AutomatedTestType` field. Default: `undefined`.
-    - `function(testCase: TestCase) => string`: Callback that receives the test case object and returns the test type string (e.g., `"Unit Test"`, `"Integration Test"`, `"End-to-End Test"`).
-    - If the callback returns an empty string or falsy value, the field will not be set.
-
-  **Example:**
-
-  ```typescript
-  // Basic example with boolean values
+```typescript
+{
   autoMarkTestCasesAsAutomated: {
     enabled: true,
     updateAutomatedTestName: true,
     updateAutomatedTestStorage: true,
-    automatedTestNameFormat: 'titleWithParent', // Include parent suite in test name
-    automatedTestStoragePath: true // Store full absolute file path
-  }
+  },
+}
+```
 
-  // Advanced example with callback functions
+| Sub-option | Type | Default | Description |
+|------------|------|---------|-------------|
+| `enabled` | `boolean` | `false` | Enable automatic marking |
+| `updateAutomatedTestName` | `boolean` | `true` | Set `AutomatedTestName` field |
+| `updateAutomatedTestStorage` | `boolean` | `true` | Set `AutomatedTestStorage` field |
+| `automatedTestNameFormat` | `string` | `'title'` | `'title'` or `'titleWithParent'` (includes parent suite name) |
+| `automatedTestStoragePath` | `boolean \| function` | `false` | `false`: filename only, `true`: full path, `function`: custom callback |
+| `automatedTestType` | `function` | `undefined` | Callback to set `AutomatedTestType` (e.g. `'Unit Test'`, `'E2E Test'`) |
+
+**What it does:**
+
+1. Checks each test case's automation status in Azure DevOps
+2. If "Not Automated": sets `AutomationStatus` to "Automated", updates name/storage/type fields, generates a new `AutomatedTestId` GUID
+3. If already "Automated": optionally updates name and storage fields if they differ
+
+**Advanced example:**
+
+```typescript
+{
   autoMarkTestCasesAsAutomated: {
     enabled: true,
     updateAutomatedTestName: true,
     updateAutomatedTestStorage: true,
     automatedTestNameFormat: 'titleWithParent',
-    // Custom path logic - use relative path from project root
     automatedTestStoragePath: (testCase) => {
+      // Use relative path from project root
       const parts = testCase.location.file.split('/');
-      const projectIdx = parts.indexOf('my-project');
-      return projectIdx >= 0 ? parts.slice(projectIdx + 1).join('/') : testCase.location.file;
+      const idx = parts.indexOf('my-project');
+      return idx >= 0 ? parts.slice(idx + 1).join('/') : testCase.location.file;
     },
-    // Set test type based on file location
     automatedTestType: (testCase) => {
-      const filePath = testCase.location.file;
-      if (filePath.includes('/e2e/')) return 'End-to-End Test';
-      if (filePath.includes('/integration/')) return 'Integration Test';
-      if (filePath.includes('/unit/')) return 'Unit Test';
+      if (testCase.location.file.includes('/e2e/')) return 'End-to-End Test';
+      if (testCase.location.file.includes('/integration/')) return 'Integration Test';
       return 'Functional Test';
-    }
-  }
-  ```
+    },
+  },
+}
+```
 
-  When enabled, the reporter will automatically:
-  1. Check the automation status of each test case work item in Azure DevOps
-  2. If the test case is marked as "Not Automated", it will:
-     - Update the `Microsoft.VSTS.TCM.AutomationStatus` field to "Automated"
-     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestName` based on `automatedTestNameFormat`:
-       - With `'title'`: Uses test title only
-       - With `'titleWithParent'`: Uses parent suite name + test title
-     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestStorage` based on `automatedTestStoragePath`:
-       - With `false`: Uses filename only (e.g., `"test.spec.ts"`)
-       - With `true`: Uses full absolute path (e.g., `"/Users/username/project/tests/test.spec.ts"`)
-       - With callback function: Uses custom path logic (e.g., `"tests/test.spec.ts"` for relative paths)
-     - Optionally set the `Microsoft.VSTS.TCM.AutomatedTestType` if `automatedTestType` callback is provided
-     - Generate a new GUID for the `Microsoft.VSTS.TCM.AutomatedTestId` field
-  3. If the test case is already "Automated", it will optionally update the test name and storage fields if they differ from current values
-  
-  > **Tip:** Use `automatedTestNameFormat: 'titleWithParent'` to prevent name collisions when multiple tests share the same name in different suites. Use `automatedTestStoragePath` callback to create relative paths and avoid exposing sensitive information (like usernames) from absolute paths. Use `automatedTestType` callback to categorize tests based on your project structure.
+> **Tip:** Use `automatedTestNameFormat: 'titleWithParent'` to prevent name collisions across suites. Use `automatedTestStoragePath` callback to avoid exposing absolute paths.
 
-  This feature is useful for:
-  - Streamlining CI/CD pipeline integrations by automatically reflecting test automation status
-  - Keeping Azure DevOps test cases synchronized with automated test execution
-  - Improving visibility for teams using Azure DevOps Test Plans and automated reporting tools
-  - Reducing manual work required to maintain test case automation metadata
+> **Note:** Requires Work Items write permissions. Works in all publishing modes (`testResult`, `testRun`, `testRunADO`).
 
-  > **Note:** This feature requires write access to work items in Azure DevOps. Ensure your authentication token or managed identity has the necessary permissions.
+## CI/CD Integration
 
-  > **Behavior:** The feature works in all publishing modes (`testResult`, `testRun`, and `testRunADO`). Updates are performed after test results are successfully published to Azure DevOps.
+### Environment Variables
 
-## Usefulness
+| Variable | Description |
+|----------|-------------|
+| `AZURE_PW_TEST_RUN_ID` | Set automatically after the test run is created. Available as `process.env.AZURE_PW_TEST_RUN_ID`. In `testResult` mode it's set at the start; in `testRun` mode at the end; in `testRunADO` mode it contains the existing run ID. |
+| `AZURE_PW_ROOT_SUITE_ID` | Alternative to the `rootSuiteId` option |
+| `AZUREPWDEBUG` | Enable debug logging: `'1'` = enabled, `'0'` = disabled (default) |
 
-- **AZURE_PW_TEST_RUN_ID** - Id of current test run. It will be set in environment variables after test run created. Can be accessed by `process.env.AZURE_PW_TEST_RUN_ID`. Pay attention what `publishTestResultsMode` configuration you use. If you use `testResult` mode - this variable will be set when test run created, at the start of tests execution, if you use `testRun` mode - this variable will be set when test run completed, at the end of tests execution. For `testRunADO` mode, this variable will contain the existing test run ID that is being updated.
+### Azure DevOps Pipeline Example
 
-  > **Since version 1.10.0 you have access to `AZURE_PW_TEST_RUN_ID` environment variable in your ADO pipeline. You can get it from the Task Variables.**
+```yaml
+- script: npx playwright test
+  displayName: 'Run Playwright tests'
+  name: 'playwright'
+  env:
+    CI: 'true'
+    AZUREPWDEBUG: '1'
 
-  Example of usage in Azure DevOps pipeline:
-
-  ```yaml
-  - script: npx playwright test
-    displayName: 'Run Playwright tests'
-    name: 'playwright'
-    env:
-      CI: 'true'
-
-  - script: echo $(playwright.AZURE_PW_TEST_RUN_ID)
-    displayName: 'Print test run id'
-  ```
-
-- **AZUREPWDEBUG** - Enable debug logging from reporter `0` - disabled, `1` - enabled. Default: `0`.
-
-  Example of usage in Azure DevOps pipeline:
-
-  ```yaml
-  - script: npx playwright test
-    displayName: 'Run Playwright tests'
-    name: 'playwright'
-    env:
-      CI: 'true'
-      AZUREPWDEBUG: '1'
-  ```
+# Access the test run ID from subsequent steps (since v1.10.0)
+- script: echo $(playwright.AZURE_PW_TEST_RUN_ID)
+  displayName: 'Print test run id'
+```
 
 ## Releases
 
