@@ -223,15 +223,10 @@ Control how retry attempts are published with `publishRetryResults`:
 |------|-------------|
 | `'all'` | Every retry attempt is published as a separate test result (default) |
 | `'last'` | Only the final attempt is published. Intermediate failures are skipped |
-| `'grouped'` | One result per test with all attempts as sub-results using ADO's native rerun hierarchy |
-
-In `'grouped'` mode:
-- Results use `resultGroupType: Rerun` with `subResults` for each attempt
-- Tests that pass after failures are automatically marked as flaky via `IsTestResultFlaky` custom field
 
 ```typescript
 {
-  publishRetryResults: 'grouped',
+  publishRetryResults: 'last',
   // works with Playwright's retries setting
 }
 ```
