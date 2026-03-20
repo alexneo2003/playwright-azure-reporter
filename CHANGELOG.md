@@ -1,3 +1,17 @@
+# [1.20.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.19.1...v1.20.0) (2026-03-20)
+
+
+### Bug Fixes
+
+* correct type definitions and update exports in package.json ([9b455b6](https://github.com/alexneo2003/playwright-azure-reporter/commit/9b455b67dc7a49dc1541d1c394906ae8a97bcb9e))
+
+
+### Features
+
+* **reporter:** add options for publishRetryResults and mark flaky tests ([49b7d32](https://github.com/alexneo2003/playwright-azure-reporter/commit/49b7d32ce391fa3985dbc364473721fb830edf96))
+
+
+
 ## [1.19.1](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.19.0...v1.19.1) (2026-02-25)
 
 
