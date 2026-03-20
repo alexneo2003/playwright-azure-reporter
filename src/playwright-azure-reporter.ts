@@ -37,6 +37,7 @@ type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
 type TPublishTestResults = 'testResult' | 'testRun' | 'testRunADO';
+type TPublishRetryResults = 'all' | 'last';
 type TTestCaseIdZone = 'title' | 'annotation';
 
 interface ITestCaseExtended extends TestCase {
@@ -83,6 +84,7 @@ export interface AzureReporterOptions {
     automatedTestStoragePath?: boolean | ((testCase: TestCase) => string);
     automatedTestType?: (testCase: TestCase) => string;
   };
+  publishRetryResults?: TPublishRetryResults;
 }
 
 interface TestResultsToTestRun {
@@ -206,6 +208,7 @@ class AzureDevOpsReporter implements Reporter {
   private _autoMarkTestType?: (testCase: TestCase) => string;
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
+  private _publishRetryResults: TPublishRetryResults = 'all';
   private _unmatched: {
     noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
   } = {
@@ -273,6 +276,8 @@ class AzureDevOpsReporter implements Reporter {
     this._autoMarkTestNameFormat = options.autoMarkTestCasesAsAutomated?.automatedTestNameFormat || 'title'; // Default to 'title'
     this._autoMarkTestStoragePath = options.autoMarkTestCasesAsAutomated?.automatedTestStoragePath ?? false; // Default to false (basename only)
     this._autoMarkTestType = options.autoMarkTestCasesAsAutomated?.automatedTestType;
+
+    this._publishRetryResults = options.publishRetryResults || 'all';
 
     this._validateOptions(options);
   }
@@ -551,6 +556,17 @@ class AzureDevOpsReporter implements Reporter {
   async onTestEnd(test: TestCase, testResult: TestResult): Promise<void> {
     if (this._isDisabled) return;
     try {
+      // 'last' mode: skip intermediate retries
+      if (this._publishRetryResults === 'last') {
+        const isRetriableStatus = ['failed', 'timedOut', 'interrupted'].includes(testResult.status);
+        if (isRetriableStatus && testResult.retry < test.retries) {
+          this._logger?.debug(
+            `[publishRetryResults=last] Skipping intermediate retry ${testResult.retry}/${test.retries} for: ${test.title}`
+          );
+          return;
+        }
+      }
+
       if (this._publishTestResultsMode === 'testResult') {
         await this._refreshTokenIfNeeded();
         const runId = await this._runIdPromise;
@@ -571,6 +587,14 @@ class AzureDevOpsReporter implements Reporter {
           `${shortID()} - ${test.title}`,
           caseIds
         );
+
+        // For 'last' mode: replace previous result for same test
+        if (this._publishRetryResults === 'last') {
+          this._testResultsToBePublished = this._testResultsToBePublished.filter(
+            (r) => r.testCase.id !== test.id
+          );
+        }
+
         this._testResultsToBePublished.push({ testCase: testCase, testResult });
       }
     } catch (error: any) {
@@ -1749,9 +1773,12 @@ class AzureDevOpsReporter implements Reporter {
       );
 
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      const testCaseResult: TestResultsToTestRun = (await this._addReportingOverride(
-        this._testApi
-      ).addTestResultsToTestRun(results, this._projectName, runId!)) as unknown as TestResultsToTestRun;
+      const apiOverride = this._addReportingOverride(this._testApi);
+      const testCaseResult: TestResultsToTestRun = (await apiOverride.addTestResultsToTestRun(
+        results,
+        this._projectName,
+        runId!
+      )) as unknown as TestResultsToTestRun;
 
       if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
 
@@ -1762,8 +1789,11 @@ class AzureDevOpsReporter implements Reporter {
         }
       }
 
-      if (this._uploadAttachments && testResult.attachments.length > 0)
-        await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
+      if (this._uploadAttachments) {
+        if (testResult.attachments.length > 0) {
+          await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
+        }
+      }
 
       if (this._uploadLogs) {
         this._logger?.info(chalk.gray(`Uploading stdout.log for test: ${test.title}`));
@@ -1935,7 +1965,8 @@ class AzureDevOpsReporter implements Reporter {
             },
           };
         } else {
-          testCaseResult = (await this._addReportingOverride(this._testApi).addTestResultsToTestRun(
+          const apiOverride = this._addReportingOverride(this._testApi);
+          testCaseResult = (await apiOverride.addTestResultsToTestRun(
             testCaseResults,
             this._projectName,
             runId!
