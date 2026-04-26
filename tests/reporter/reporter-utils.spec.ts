@@ -20,8 +20,8 @@ test.describe('Reporter utils', () => {
 
   test('getExtensionFromFilename', async () => {
     expect(getExtensionFromFilename('test.png')).toBe('png');
-    expect(getExtensionFromFilename('test.jpg')).toBe('jpeg');
-    expect(getExtensionFromFilename('test.jpeg')).toBe('jpeg');
+    expect(getExtensionFromFilename('test.jpg')).toBe('jpg');
+    expect(getExtensionFromFilename('test.jpeg')).toBe('jpg');
     expect(getExtensionFromFilename('test.gif')).toBe('gif');
     expect(getExtensionFromFilename('test.txt')).toBe('txt');
     expect(getExtensionFromFilename('test.html')).toBe('html');
@@ -33,7 +33,7 @@ test.describe('Reporter utils', () => {
 
   test('getExtensionFromContentType', async () => {
     expect(getExtensionFromContentType('image/png')).toBe('png');
-    expect(getExtensionFromContentType('image/jpeg')).toBe('jpeg');
+    expect(getExtensionFromContentType('image/jpeg')).toBe('jpg');
     expect(getExtensionFromContentType('image/gif')).toBe('gif');
     expect(getExtensionFromContentType('text/plain')).toBe('txt');
     expect(getExtensionFromContentType('text/html')).toBe('html');
