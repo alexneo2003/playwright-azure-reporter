@@ -231,6 +231,40 @@ Control how retry attempts are published with `publishRetryResults`:
 }
 ```
 
+### Test Step Results
+
+Publish the outcome of each `test.step()` call as a step-level result inside the Azure DevOps test case result.
+
+```typescript
+{
+  publishTestStepResults: true,
+}
+```
+
+Steps are mapped to Azure test case steps by a numeric ID extracted from the step title using the `[N]` syntax (same convention as test case IDs). Steps without an explicit `[N]` are auto-numbered sequentially.
+
+```typescript
+test('[31] login flow', async ({ page }) => {
+  await test.step('[1] navigate to login page', async () => {
+    await page.goto('/login');
+  });
+
+  await test.step('[2] fill credentials', async () => {
+    await page.fill('#username', 'user');
+    await page.fill('#password', 'pass');
+  });
+
+  // No ID — auto-numbered as step 3
+  await test.step('submit form', async () => {
+    await page.click('#submit');
+  });
+});
+```
+
+Each step result includes: outcome (`Passed`/`Failed`), error message (if failed), and duration.
+
+> **Note:** The numeric ID in `[N]` must match the step number in the Azure test case work item (steps are 1-based). The `actionPath` sent to Azure is computed as `(N + 1)` in 8-digit hex, which matches Azure's internal step ID format.
+
 ### Attachments & Logs
 
 | Option | Type | Default | Description |
