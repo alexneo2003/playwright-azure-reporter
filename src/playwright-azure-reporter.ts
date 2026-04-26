@@ -1,5 +1,5 @@
 import { DefaultAzureCredential } from '@azure/identity';
-import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
+import { Reporter, TestCase, TestResult, TestStep } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
@@ -85,6 +85,7 @@ export interface AzureReporterOptions {
     automatedTestType?: (testCase: TestCase) => string;
   };
   publishRetryResults?: TPublishRetryResults;
+  publishTestStepResults?: boolean;
 }
 
 interface TestResultsToTestRun {
@@ -209,6 +210,7 @@ class AzureDevOpsReporter implements Reporter {
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _publishRetryResults: TPublishRetryResults = 'all';
+  private _publishTestStepResults = false;
   private _unmatched: {
     noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
   } = {
@@ -278,6 +280,7 @@ class AzureDevOpsReporter implements Reporter {
     this._autoMarkTestType = options.autoMarkTestCasesAsAutomated?.automatedTestType;
 
     this._publishRetryResults = options.publishRetryResults || 'all';
+    this._publishTestStepResults = options.publishTestStepResults || false;
 
     this._validateOptions(options);
   }
@@ -1671,6 +1674,49 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  private _buildStepActionResults(steps: TestStep[]): TestInterfaces.TestIterationDetailsModel | undefined {
+    const userSteps = steps.filter((s) => s.category === 'test.step');
+    if (userSteps.length === 0) return undefined;
+
+    const stepIdRegex = /\[(\d+)\]/;
+    let counter = 1;
+
+    const actionResults: TestInterfaces.TestActionResultModel[] = userSteps.map((step) => {
+      const match = stepIdRegex.exec(step.title);
+      let stepId: number;
+      if (match) {
+        stepId = parseInt(match[1], 10);
+        counter = stepId + 1;
+      } else {
+        stepId = counter++;
+      }
+
+      // Azure step IDs start at 2 internally; actionPath is (stepId + 1) in 8-digit hex
+      const actionPath = (stepId + 1).toString(16).padStart(8, '0');
+      const completedDate = new Date(step.startTime.getTime() + step.duration);
+
+      return {
+        actionPath,
+        stepIdentifier: String(stepId),
+        outcome: step.error ? 'Failed' : 'Passed',
+        errorMessage: step.error?.message?.replace(/\[.*?m/g, ''),
+        durationInMs: step.duration,
+        startedDate: step.startTime,
+        completedDate,
+        iterationId: 1,
+      };
+    });
+
+    const totalDuration = actionResults.reduce((sum, r) => sum + (r.durationInMs ?? 0), 0);
+
+    return {
+      id: 1,
+      outcome: actionResults.some((r) => r.outcome === 'Failed') ? 'Failed' : 'Passed',
+      durationInMs: totalDuration,
+      actionResults,
+    };
+  }
+
   private _createTestCaseResult(
     testCase: ITestCaseExtended,
     testResult: TestResult,
@@ -1679,7 +1725,7 @@ class AzureDevOpsReporter implements Reporter {
   ): TestInterfaces.TestCaseResult {
     const baseResult: TestInterfaces.TestCaseResult = existingTestCaseResult ? { ...existingTestCaseResult } : {};
 
-    return {
+    const caseResult: TestInterfaces.TestCaseResult = {
       ...baseResult,
       testPoint: { id: String(testPoint.id) },
       outcome: this._mapToAzureState(testCase, testResult),
@@ -1694,6 +1740,15 @@ class AzureDevOpsReporter implements Reporter {
         ?.map((error, idx) => `STACK #${idx + 1}:\n\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
         .join('\n\n\n')}`,
     };
+
+    if (this._publishTestStepResults) {
+      const iterationDetails = this._buildStepActionResults(testResult.steps);
+      if (iterationDetails) {
+        (caseResult as any).iterationDetails = [iterationDetails];
+      }
+    }
+
+    return caseResult;
   }
 
   private _prepareLogAttachments(testResult: TestResult) {
