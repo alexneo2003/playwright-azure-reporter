@@ -8,9 +8,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
-      packages: write
       pull-requests: write
     steps:
       - name: Checkout
@@ -30,7 +30,6 @@ jobs:
         run: |
           yarn test:reporter 2>&1 | tee test-output.log
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-        continue-on-error: true
       
       - name: Generate test summary
         id: test-summary

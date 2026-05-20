@@ -335,5 +335,4 @@ test.describe('publishRetryResults', () => {
       expect(result.flaky).toBe(1);
     });
   });
-
 });

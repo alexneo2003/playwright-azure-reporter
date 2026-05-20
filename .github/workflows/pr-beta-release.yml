@@ -10,6 +10,7 @@ jobs:
   check-conditions:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
@@ -91,9 +92,9 @@ jobs:
     needs: check-conditions
     if: needs.check-conditions.outputs.should-release == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
-      packages: write
       pull-requests: write
     steps:
       - name: Checkout PR source branch
@@ -300,6 +301,7 @@ jobs:
   pr-opened-info:
     if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'synchronize')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
