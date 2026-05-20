@@ -11,6 +11,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -37,9 +38,9 @@ jobs:
   beta-release:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -149,8 +150,14 @@ jobs:
           git tag "v${{ steps.version.outputs.new-version }}"
 
       - name: Push changes
+        env:
+          BRANCH: ${{ github.event.inputs.branch || 'main' }}
         run: |
-          git push origin ${{ github.event.inputs.branch || 'main' }}
+          if [[ ! "$BRANCH" =~ ^[a-zA-Z0-9/_.-]{1,255}$ ]]; then
+            echo "Invalid branch name: $BRANCH"
+            exit 1
+          fi
+          git push origin "$BRANCH"
           git push origin "v${{ steps.version.outputs.new-version }}"
 
       - name: Build for publishing
