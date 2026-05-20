@@ -23,15 +23,13 @@ jobs:
         id: check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
           # Check if comment contains beta release trigger
-          COMMENT_BODY="${{ github.event.comment.body }}"
           if [[ "$COMMENT_BODY" =~ /beta-release|/release-beta ]]; then
             echo "Beta release comment detected"
-
-            # Check if the commenter is the repository owner or has write access
-            COMMENT_USER="${{ github.event.comment.user.login }}"
-            REPO_OWNER="${{ github.repository_owner }}"
 
             echo "Comment user: $COMMENT_USER"
             echo "Repository owner: $REPO_OWNER"
