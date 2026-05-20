@@ -1741,7 +1741,7 @@ class AzureDevOpsReporter implements Reporter {
     if (this._publishTestStepResults) {
       const iterationDetails = this._buildStepActionResults(testResult.steps);
       if (iterationDetails) {
-        (caseResult as any).iterationDetails = [iterationDetails];
+        (caseResult as unknown as { iterationDetails: TestInterfaces.TestIterationDetailsModel[] }).iterationDetails = [iterationDetails];
       }
     }
 
