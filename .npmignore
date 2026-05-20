@@ -2,3 +2,17 @@ node_modules/
 test-results/
 playwright-report/
 src
+.github/
+.husky/
+.vscode/
+.env*
+.npmrc
+tsconfig.json
+eslint.config.js
+prettier.config.js
+tests/
+**/*.spec.ts
+**/*.test.ts
+playwright.config.ts
+CHANGELOG.md
+.beta-release.json

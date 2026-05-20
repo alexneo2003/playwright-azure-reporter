@@ -6,3 +6,8 @@ yarn-error.log
 .vscode
 .taskkey
 .env
+.env.local
+.env.*.local
+*.key
+*.pem
+.DS_Store

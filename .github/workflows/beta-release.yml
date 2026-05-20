@@ -11,17 +11,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.inputs.branch || 'main' }}
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: '>=18'
 
@@ -37,12 +38,12 @@ jobs:
   beta-release:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
-      packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.inputs.branch || 'main' }}
           fetch-depth: 0
@@ -74,7 +75,7 @@ jobs:
           fi
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: '>=18'
           registry-url: 'https://registry.npmjs.org'
@@ -149,8 +150,14 @@ jobs:
           git tag "v${{ steps.version.outputs.new-version }}"
 
       - name: Push changes
+        env:
+          BRANCH: ${{ github.event.inputs.branch || 'main' }}
         run: |
-          git push origin ${{ github.event.inputs.branch || 'main' }}
+          if [[ ! "$BRANCH" =~ ^[a-zA-Z0-9/_.-]{1,255}$ ]]; then
+            echo "Invalid branch name: $BRANCH"
+            exit 1
+          fi
+          git push origin "$BRANCH"
           git push origin "v${{ steps.version.outputs.new-version }}"
 
       - name: Build for publishing
