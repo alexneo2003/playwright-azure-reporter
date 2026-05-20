@@ -66,8 +66,8 @@ class Logger {
     this.logMessage('error', message, chalk.red);
   }
 
-  debug(message: any) {
-    this.logMessage('debug', message, chalk.blue);
+  debug(message: unknown) {
+    this.logMessage('debug', message as string, chalk.blue);
   }
 }
 
