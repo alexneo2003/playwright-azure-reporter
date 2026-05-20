@@ -18,7 +18,7 @@ import * as restm from 'typed-rest-client/RestClient';
 import { isRegExp } from 'util/types';
 
 import Logger from './logger';
-import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID } from './utils';
+import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID, stripAnsi } from './utils';
 
 // https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
 enum EAzureTestStatuses {
@@ -1687,11 +1687,11 @@ class AzureDevOpsReporter implements Reporter {
       durationInMs: testResult.duration,
       errorMessage: testResult.error
         ? `${testCase.title}:\n\n${testResult.errors
-            ?.map((error, idx) => `ERROR #${idx + 1}:\n${error.message?.replace(/\u001b\[.*?m/g, '')}`)
+            ?.map((error, idx) => `ERROR #${idx + 1}:\n${stripAnsi(error.message)}`)
             .join('\n\n')}`
         : undefined,
       stackTrace: `${testResult.errors
-        ?.map((error, idx) => `STACK #${idx + 1}:\n\n${error.stack?.replace(/\u001b\[.*?m/g, '')}`)
+        ?.map((error, idx) => `STACK #${idx + 1}:\n\n${stripAnsi(error.stack)}`)
         .join('\n\n\n')}`,
     };
   }
