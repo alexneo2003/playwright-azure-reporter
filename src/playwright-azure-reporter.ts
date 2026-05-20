@@ -4,7 +4,7 @@ import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
 import { IRequestHandler, IRequestOptions } from 'azure-devops-node-api/interfaces/common/VsoBaseInterfaces';
-import VSSInterfaces from 'azure-devops-node-api/interfaces/common/VSSInterfaces';
+import * as VSSInterfaces from 'azure-devops-node-api/interfaces/common/VSSInterfaces';
 import { TeamProject } from 'azure-devops-node-api/interfaces/CoreInterfaces';
 import * as TestInterfaces from 'azure-devops-node-api/interfaces/TestInterfaces';
 import * as TestPlanInterfaces from 'azure-devops-node-api/interfaces/TestPlanInterfaces';
@@ -138,6 +138,11 @@ interface Headers {
   connection: string;
 }
 
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  return new Error(String(error));
+}
+
 class AzureDevOpsReporter implements Reporter {
   private _logger: Logger | undefined;
   private _testApi!: Test.ITestApi;
@@ -171,10 +176,10 @@ class AzureDevOpsReporter implements Reporter {
   private _tokenExpiresOn?: Date;
   private _runIdPromise: Promise<number | void>;
   private _resolveRunId: (value: number) => void = () => {};
-  private _rejectRunId: (reason: any) => void = () => {};
-  private _publishResultsPromise: Promise<any | void>;
+  private _rejectRunId: (reason: unknown) => void = () => {};
+  private _publishResultsPromise: Promise<void>;
   private _resolvePublishResults: () => void = () => {};
-  private _rejectPublishResults: (reason: any) => void = () => {};
+  private _rejectPublishResults: (reason: unknown) => void = () => {};
   private _testRunConfig: TTestRunConfig = {} as TTestRunConfig;
   private _testPointMapper: (
     testCase: TestCase,
@@ -193,7 +198,7 @@ class AzureDevOpsReporter implements Reporter {
   private _expectedTestPointsByRootSuite: Array<TestPlanInterfaces.TestPoint> = [];
   private _testPointsByRootSuitePromise: Promise<boolean | void>;
   private _resolveTestPointsByRootSuite: (value: boolean) => void = () => {};
-  private _rejectTestPointsByRootSuite: (reason: any) => void = () => {};
+  private _rejectTestPointsByRootSuite: (reason: unknown) => void = () => {};
   private _uploadLogs = false;
   private _configurationNames: string[] = [];
   private _testCaseSummaryEnabled = false;
@@ -407,8 +412,8 @@ class AzureDevOpsReporter implements Reporter {
           this._logger?.debug(`Token expires on: ${this._tokenExpiresOn.toISOString()}`);
         }
         return azdev.getHandlerFromToken(tokenResponse.token);
-      } catch (error: any) {
-        this._logger?.error(`Failed to get token from Azure Managed Identity: ${error.message}`);
+      } catch (error) {
+        this._logger?.error(`Failed to get token from Azure Managed Identity: ${toError(error).message}`);
         throw error;
       }
     } else if (this._authType === 'pat') {
@@ -456,8 +461,8 @@ class AzureDevOpsReporter implements Reporter {
         } else {
           this._logger?.debug('Token unchanged after refresh request');
         }
-      } catch (error: any) {
-        this._logger?.warn(`Failed to refresh token: ${error.message}`);
+      } catch (error) {
+        this._logger?.warn(`Failed to refresh token: ${toError(error).message}`);
       }
     }
   }
@@ -484,8 +489,8 @@ class AzureDevOpsReporter implements Reporter {
             configurationNames.push(configuration.name);
             this._logger?.debug(`Fetched configuration: ${configuration.name} (ID: ${configId})`);
           }
-        } catch (error: any) {
-          this._logger?.warn(`Failed to fetch configuration with ID ${configId}: ${error.message}`);
+        } catch (error) {
+          this._logger?.warn(`Failed to fetch configuration with ID ${configId}: ${toError(error).message}`);
         }
       }
 
@@ -493,8 +498,8 @@ class AzureDevOpsReporter implements Reporter {
       if (configurationNames.length > 0) {
         this._logger?.info(`Loaded ${configurationNames.length} configuration(s): ${configurationNames.join(', ')}`);
       }
-    } catch (error: any) {
-      this._logger?.error(`Failed to fetch configuration names: ${error.message}`);
+    } catch (error) {
+      this._logger?.error(`Failed to fetch configuration names: ${toError(error).message}`);
     }
   }
 
@@ -539,15 +544,16 @@ class AzureDevOpsReporter implements Reporter {
           this._rejectRunId('Failed to create test run. Reporting is disabled.');
         }
       }
-    } catch (error: any) {
-      this._logger?.debug(error.message);
-      if (error.message.includes('401')) {
+    } catch (error) {
+      const err = toError(error);
+      this._logger?.debug(err.message);
+      if (err.message.includes('401')) {
         this._logger?.error('Failed to create test run. Check your token. Reporting is disabled.');
-      } else if (error.message.includes('getaddrinfo ENOTFOUND')) {
+      } else if (err.message.includes('getaddrinfo ENOTFOUND')) {
         this._logger?.error('Failed to create test run. Check your orgUrl. Reporting is disabled.');
       } else {
         this._logger?.error('Failed to create test run. Reporting is disabled.');
-        this._logger?.error(error.stack);
+        this._logger?.error(err.stack ?? '');
       }
       this._setIsDisable(true);
     }
@@ -597,9 +603,9 @@ class AzureDevOpsReporter implements Reporter {
 
         this._testResultsToBePublished.push({ testCase: testCase, testResult });
       }
-    } catch (error: any) {
-      this._logger?.error(`Failed to publish test result. \n ${error.message}`);
-      this._logger?.error(error.stack);
+    } catch (error) {
+      this._logger?.error(`Failed to publish test result. \n ${toError(error).message}`);
+      this._logger?.error(toError(error).stack ?? '');
     }
   }
 
@@ -608,8 +614,8 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       await this._performOnEnd();
-    } catch (error: any) {
-      this._logger?.error(`Error in onEnd: ${error.message}`);
+    } catch (error) {
+      this._logger?.error(`Error in onEnd: ${toError(error).message}`);
     }
   }
 
@@ -701,8 +707,8 @@ class AzureDevOpsReporter implements Reporter {
             ) {
               await this._publishTestCaseSummaryAttachment(runId, summary);
             }
-          } catch (summaryError: any) {
-            this._logger?.error(`Error outputting test case summary: ${summaryError.message}`);
+          } catch (summaryError) {
+            this._logger?.error(`Error outputting test case summary: ${toError(summaryError).message}`);
           }
         }
         return;
@@ -726,8 +732,8 @@ class AzureDevOpsReporter implements Reporter {
           this._logger?.info(`Run ${runId} - ${runUpdatedResponse.state}`, shouldForceLogs);
         }
       }
-    } catch (error: any) {
-      this._logger?.error(`Error on onEnd hook ${error as string}`);
+    } catch (error) {
+      this._logger?.error(`Error on onEnd hook ${String(error)}`);
     }
 
     // Always output test case summary if enabled, regardless of execution path
@@ -743,8 +749,8 @@ class AzureDevOpsReporter implements Reporter {
         ) {
           await this._publishTestCaseSummaryAttachment(runIdVal, summary);
         }
-      } catch (summaryError: any) {
-        this._logger?.error(`Error outputting test case summary: ${summaryError.message}`);
+      } catch (summaryError) {
+        this._logger?.error(`Error outputting test case summary: ${toError(summaryError).message}`);
       }
     }
 
@@ -794,16 +800,17 @@ class AzureDevOpsReporter implements Reporter {
     return str.replace(/./g, '*');
   }
 
-  private _anonymizeObject(obj: any, keys: string[]): any {
+  private _anonymizeObject(obj: unknown, keys: string[]): unknown {
     if (typeof obj !== 'object' || obj === null) return obj;
     if (Array.isArray(obj)) return obj.map((item) => this._anonymizeObject(item, keys));
     if (isRegExp(obj)) return obj.toString();
-    const result: any = {};
-    for (const key in obj) {
+    const result: Record<string, unknown> = {};
+    const record = obj as Record<string, unknown>;
+    for (const key in record) {
       if (keys.includes(key)) {
-        result[key] = this._anonymizeString(obj[key]);
+        result[key] = this._anonymizeString(String(record[key]));
       } else {
-        result[key] = this._anonymizeObject(obj[key], keys);
+        result[key] = this._anonymizeObject(record[key], keys);
       }
     }
     return result;
@@ -956,8 +963,8 @@ class AzureDevOpsReporter implements Reporter {
         if (adTestRun?.id) return adTestRun;
         else throw new Error('Failed to create test run');
       }
-    } catch (error: any) {
-      this._logger?.error(error.stack);
+    } catch (error) {
+      this._logger?.error(toError(error).stack ?? '');
       this._setIsDisable(true);
     }
   }
@@ -973,8 +980,8 @@ class AzureDevOpsReporter implements Reporter {
       const project = await this._coreApi.getProject(projectName);
       if (project) return project;
       else throw new Error(`Project ${projectName} does not exist. Reporting is disabled.`);
-    } catch (error: any) {
-      this._logger?.error(error.stack);
+    } catch (error) {
+      this._logger?.error(toError(error).stack ?? '');
       this._setIsDisable(true);
     }
   }
@@ -1218,8 +1225,8 @@ class AzureDevOpsReporter implements Reporter {
           }
         }
       }
-    } catch (error: any) {
-      this._logger?.error(error.stack);
+    } catch (error) {
+      this._logger?.error(toError(error).stack ?? '');
     }
     return result;
   }
@@ -1249,7 +1256,7 @@ class AzureDevOpsReporter implements Reporter {
           const url = verData.requestUrl;
           const options = this.createRequestOptions('application/json', verData.apiVersion);
           const res = await this.rest.create(url as string, results, options);
-          resolve(res as any);
+          resolve(res as unknown as TestInterfaces.TestCaseResult[]);
         } catch (error) {
           reject(error);
         }
@@ -1283,12 +1290,13 @@ class AzureDevOpsReporter implements Reporter {
           let ret = this.formatResponse(res.result, TestPlanInterfaces.TypeInfo.TestPoint, true);
 
           // Handle the continuation token
-          if (res.headers['x-ms-continuationtoken']) {
-            ret.continuationToken = res.headers['x-ms-continuationtoken'];
+          const headers = res.headers as Record<string, string>;
+          if (headers['x-ms-continuationtoken']) {
+            ret.continuationToken = headers['x-ms-continuationtoken'];
           }
 
           resolve(ret);
-        } catch (error: any) {
+        } catch (error) {
           reject(error);
         }
       });
@@ -1310,8 +1318,8 @@ class AzureDevOpsReporter implements Reporter {
         points = points.concat(nextPoints);
       }
       return points;
-    } catch (error: any) {
-      this._logger?.error(error.stack);
+    } catch (error) {
+      this._logger?.error(toError(error).stack ?? '');
       return [];
     }
   };
@@ -1337,8 +1345,8 @@ class AzureDevOpsReporter implements Reporter {
       }
       
       return allResults;
-    } catch (error: any) {
-      this._logger?.error(`Error fetching test results: ${error.stack}`);
+    } catch (error) {
+      this._logger?.error(`Error fetching test results: ${toError(error).stack ?? ''}`);
       return [];
     }
   };
@@ -1381,8 +1389,8 @@ class AzureDevOpsReporter implements Reporter {
             return true;
           }
         }
-      } catch (error: any) {
-        this._logger?.debug(`Attempt ${attempt}: Cannot access file ${filePath} - ${error.message}`);
+      } catch (error) {
+        this._logger?.debug(`Attempt ${attempt}: Cannot access file ${filePath} - ${toError(error).message}`);
       }
 
       if (attempt < maxRetries) {
@@ -1440,9 +1448,9 @@ class AzureDevOpsReporter implements Reporter {
       if (automationStatus !== 'Automated') {
         this._logger?.info(chalk.gray(`Marking test case ${testCaseId} as automated`));
 
-        const patchDocument: any[] = [
+        const patchDocument: VSSInterfaces.JsonPatchOperation[] = [
           {
-            op: 'add',
+            op: 'add' as unknown as VSSInterfaces.Operation,
             path: '/fields/Microsoft.VSTS.TCM.AutomationStatus',
             value: 'Automated',
           },
@@ -1456,7 +1464,7 @@ class AzureDevOpsReporter implements Reporter {
             : testCase.title;
           
           patchDocument.push({
-            op: 'add',
+            op: 'add' as unknown as VSSInterfaces.Operation,
             path: '/fields/Microsoft.VSTS.TCM.AutomatedTestName',
             value: automatedTestName,
           });
@@ -1466,7 +1474,7 @@ class AzureDevOpsReporter implements Reporter {
         if (this._autoMarkUpdateAutomatedTestStorage) {
           const testStorage = this._getAutomatedTestStorage(testCase);
           patchDocument.push({
-            op: 'add',
+            op: 'add' as unknown as VSSInterfaces.Operation,
             path: '/fields/Microsoft.VSTS.TCM.AutomatedTestStorage',
             value: testStorage,
           });
@@ -1474,7 +1482,7 @@ class AzureDevOpsReporter implements Reporter {
 
         // Add AutomatedTestId with a new GUID
         patchDocument.push({
-          op: 'add',
+          op: 'add' as unknown as VSSInterfaces.Operation,
           path: '/fields/Microsoft.VSTS.TCM.AutomatedTestId',
           value: createGuid(),
         });
@@ -1484,7 +1492,7 @@ class AzureDevOpsReporter implements Reporter {
           const testType = this._autoMarkTestType(testCase);
           if (testType) {
             patchDocument.push({
-              op: 'add',
+              op: 'add' as unknown as VSSInterfaces.Operation,
               path: '/fields/Microsoft.VSTS.TCM.AutomatedTestType',
               value: testType,
             });
@@ -1498,18 +1506,18 @@ class AzureDevOpsReporter implements Reporter {
         this._logger?.debug(`Test case ${testCaseId} is already automated, checking if update needed`);
 
         // If already automated, check if we need to update the test name or storage
-        const patchDocument: any[] = [];
+        const patchDocument: VSSInterfaces.JsonPatchOperation[] = [];
 
         if (this._autoMarkUpdateAutomatedTestName) {
           const hasParentTitle = !!testCase.parent?.title?.trim();
           const automatedTestName = this._autoMarkTestNameFormat === 'titleWithParent' && hasParentTitle
             ? `${testCase.parent.title} > ${testCase.title}`
             : testCase.title;
-          
+
           const currentTestName = workItem.fields?.['Microsoft.VSTS.TCM.AutomatedTestName'];
           if (currentTestName !== automatedTestName) {
             patchDocument.push({
-              op: 'replace',
+              op: 'replace' as unknown as VSSInterfaces.Operation,
               path: '/fields/Microsoft.VSTS.TCM.AutomatedTestName',
               value: automatedTestName,
             });
@@ -1521,7 +1529,7 @@ class AzureDevOpsReporter implements Reporter {
           const currentTestStorage = workItem.fields?.['Microsoft.VSTS.TCM.AutomatedTestStorage'];
           if (currentTestStorage !== testStorage) {
             patchDocument.push({
-              op: 'replace',
+              op: 'replace' as unknown as VSSInterfaces.Operation,
               path: '/fields/Microsoft.VSTS.TCM.AutomatedTestStorage',
               value: testStorage,
             });
@@ -1536,9 +1544,9 @@ class AzureDevOpsReporter implements Reporter {
           this._autoMarkStats.skipped++;
         }
       }
-    } catch (error: any) {
-      this._logger?.error(`Failed to mark test case ${testCaseId} as automated: ${error.message}`);
-      this._logger?.debug(error.stack);
+    } catch (error) {
+      this._logger?.error(`Failed to mark test case ${testCaseId} as automated: ${toError(error).message}`);
+      this._logger?.debug(toError(error).stack ?? '');
       this._autoMarkStats.failed++;
     }
   }
@@ -1579,9 +1587,9 @@ class AzureDevOpsReporter implements Reporter {
                   fileName: name + '.' + ext,
                   stream: readFileSync(attachment.path, { encoding: 'base64' }),
                 };
-              } catch (readError: any) {
+              } catch (readError) {
                 this._logger?.warn(
-                  `Failed to read attachment file ${attachment.path}: ${readError.message}, skipping upload`
+                  `Failed to read attachment file ${attachment.path}: ${toError(readError).message}, skipping upload`
                 );
                 continue;
               }
@@ -1603,8 +1611,8 @@ class AzureDevOpsReporter implements Reporter {
           if (!response?.id) throw new Error(`Failed to upload attachment for test: ${test.title}`);
           attachmentsResult.push(response.url);
         }
-      } catch (error: any) {
-        this._logger?.error(error.stack);
+      } catch (error) {
+        this._logger?.error(toError(error).stack ?? '');
       }
     }
     this._logger?.info(chalk.gray('Uploaded attachments'));
@@ -1647,8 +1655,8 @@ class AzureDevOpsReporter implements Reporter {
             continue;
           }
         }
-      } catch (error: any) {
-        this._logger?.error(error.stack);
+      } catch (error) {
+        this._logger?.error(toError(error).stack ?? '');
       }
     }
     this._logger?.info(chalk.gray('Uploaded logs attachments'));
@@ -1809,9 +1817,9 @@ class AzureDevOpsReporter implements Reporter {
       this._publishedResultsCount.tests++;
       this._logger?.info(chalk.gray(`Result published: ${test.title}`));
       return testCaseResult;
-    } catch (error: any) {
+    } catch (error) {
       this._removePublished(testCase.testAlias);
-      this._logger?.error(error.stack);
+      this._logger?.error(toError(error).stack ?? '');
     }
   }
 
@@ -2048,8 +2056,8 @@ class AzureDevOpsReporter implements Reporter {
       }
 
       this._resolvePublishResults();
-    } catch (error: any) {
-      this._logger?.error(error.stack);
+    } catch (error) {
+      this._logger?.error(toError(error).stack ?? '');
       this._rejectPublishResults(error);
     }
   }
@@ -2124,8 +2132,8 @@ class AzureDevOpsReporter implements Reporter {
 
         writeFileSync(this._testCaseSummaryOutputPath, summary, 'utf8');
         this._logger?.info(`Test case summary written to: ${this._testCaseSummaryOutputPath}`);
-      } catch (error: any) {
-        this._logger?.error(`Failed to write test case summary to file: ${error.message}`);
+      } catch (error) {
+        this._logger?.error(`Failed to write test case summary to file: ${toError(error).message}`);
       }
     }
 
@@ -2174,7 +2182,7 @@ class AzureDevOpsReporter implements Reporter {
         fileName: fileNameToAttach,
         stream: contentBase64,
         comment: 'Generated by Playwright Azure Reporter',
-      } as any;
+      };
 
       const response = await this._testApi.createTestRunAttachment(attachmentRequestModel, this._projectName, runId);
 
@@ -2183,8 +2191,8 @@ class AzureDevOpsReporter implements Reporter {
       } else {
         this._logger?.info(`Test case summary attached to run ${runId} as ${attachmentRequestModel.fileName}`);
       }
-    } catch (error: any) {
-      this._logger?.error(`Failed to publish test case summary attachment: ${error.message}`);
+    } catch (error) {
+      this._logger?.error(`Failed to publish test case summary attachment: ${toError(error).message}`);
     }
   }
 }
