@@ -4,6 +4,11 @@
   "description": "Playwright Azure Reporter",
   "main": "./dist/playwright-azure-reporter.js",
   "types": "./dist/playwright-azure-reporter.d.ts",
+  "files": [
+    "dist/**/*",
+    "LICENSE",
+    "README.md"
+  ],
   "exports": {
     ".": {
       "types": "./dist/playwright-azure-reporter.d.ts",
@@ -50,7 +55,8 @@
     "reporter"
   ],
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "author": {
     "name": "Oleksii Galagan",
@@ -75,12 +81,12 @@
     "@types/debug": "^4.1.7",
     "@types/mime": "^3.0.1",
     "@types/node": "^20.16.5",
-    "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
     "@typescript-eslint/eslint-plugin-tslint": "^7.0.2",
-    "@typescript-eslint/parser": "^8.41.0",
+    "@typescript-eslint/parser": "^8.59.4",
     "conventional-changelog-cli": "^5.0.0",
     "conventional-github-releaser": "^3.1.5",
-    "eslint": "^9.34.0",
+    "eslint": "^10.4.0",
     "eslint-config-standard": "^17.0.0",
     "eslint-plugin-import": "^2.27.5",
     "eslint-plugin-jsdoc": "^54.1.1",
@@ -90,7 +96,6 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "husky": "^9.1.7",
     "prettier": "^3.6.2",
-    "socksv5": "^0.0.6",
     "typescript": "^5.9.2"
   }
 }
