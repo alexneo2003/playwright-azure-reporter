@@ -25,3 +25,7 @@ export function createGuid(): string {
 export function shortID(): string {
   return crypto.randomBytes(8).toString('hex');
 }
+
+export function stripAnsi(str: string | undefined): string | undefined {
+  return str?.replace(/\[[0-9;]*m/g, '');
+}
