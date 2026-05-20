@@ -14,7 +14,6 @@ import * as WorkItemTrackingApi from 'azure-devops-node-api/WorkItemTrackingApi'
 import chalk from 'chalk';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import * as path from 'path';
-import * as restm from 'typed-rest-client/RestClient';
 import { isRegExp } from 'util/types';
 
 import Logger from './logger';
@@ -365,7 +364,13 @@ class AzureDevOpsReporter implements Reporter {
 
     this._orgUrl = options.orgUrl;
     this._projectName = options.projectName;
-    this._planId = parseInt(options.planId.toString());
+    const parsedPlanId = parseInt(options.planId.toString(), 10);
+    if (isNaN(parsedPlanId)) {
+      this._logger?.warn(`'planId' value "${options.planId}" is not a valid integer. Reporting is disabled.`);
+      this._setIsDisable(true);
+      return;
+    }
+    this._planId = parsedPlanId;
     this._token = options.token;
     this._authType = options.authType || 'pat';
     this._applicationIdURI = options.applicationIdURI;
@@ -1240,27 +1245,19 @@ class AzureDevOpsReporter implements Reporter {
      * https://github.com/microsoft/azure-devops-node-api/issues/318#issuecomment-498802402
      */
     api.addTestResultsToTestRun = function (results, projectName, runId) {
-      return new Promise(async (resolve, reject) => {
-        const routeValues = {
-          project: projectName,
-          runId,
-        };
+      const routeValues = {
+        project: projectName,
+        runId,
+      };
 
-        try {
-          const verData = await this.vsoClient.getVersioningData(
-            '5.0-preview.5',
-            'Test',
-            '4637d869-3a76-4468-8057-0bb02aa385cf',
-            routeValues
-          );
+      return this.vsoClient
+        .getVersioningData('5.0-preview.5', 'Test', '4637d869-3a76-4468-8057-0bb02aa385cf', routeValues)
+        .then((verData) => {
           const url = verData.requestUrl;
           const options = this.createRequestOptions('application/json', verData.apiVersion);
-          const res = await this.rest.create(url as string, results, options);
-          resolve(res as unknown as TestInterfaces.TestCaseResult[]);
-        } catch (error) {
-          reject(error);
-        }
-      });
+          return this.rest.create(url as string, results, options);
+        })
+        .then((res) => res as unknown as TestInterfaces.TestCaseResult[]);
     };
 
     return api;
@@ -1269,36 +1266,28 @@ class AzureDevOpsReporter implements Reporter {
   // prettier-ignore
   private async _getPointsList(testPlanApi: TestPlanApi.ITestPlanApi, project: string, planId: number, suiteId: number, testPointIds?: string, testCaseId?: string, continuationToken?: string, returnIdentityRef?: boolean, includePointDetails?: boolean, isRecursive?: boolean): Promise<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>> {
     testPlanApi.getPointsList = function (project, planId, suiteId, testPointIds, testCaseId, continuationToken, returnIdentityRef, includePointDetails, isRecursive) {
-      return new Promise(async (resolve, reject) => {
-        try {
-          const routeValues = { project, planId, suiteId };
-          const queryValues = { testPointIds, testCaseId, continuationToken, returnIdentityRef, includePointDetails, isRecursive };
-          const verData = await testPlanApi.vsoClient.getVersioningData(
-            '7.2-preview.2',
-            'testplan',
-            '52df686e-bae4-4334-b0ee-b6cf4e6f6b73',
-            routeValues,
-            queryValues
-          );
+      const routeValues = { project, planId, suiteId };
+      const queryValues = { testPointIds, testCaseId, continuationToken, returnIdentityRef, includePointDetails, isRecursive };
+      return testPlanApi.vsoClient.getVersioningData(
+        '7.2-preview.2',
+        'testplan',
+        '52df686e-bae4-4334-b0ee-b6cf4e6f6b73',
+        routeValues,
+        queryValues
+      ).then((verData) => {
+        const url: string = verData.requestUrl as string;
+        const options = this.createRequestOptions('application/json', verData.apiVersion);
+        return this.rest.get<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>>(url, options);
+      }).then((res) => {
+        const ret = this.formatResponse(res.result, TestPlanInterfaces.TypeInfo.TestPoint, true);
 
-          let url: string = verData.requestUrl!;
-          let options = this.createRequestOptions('application/json', verData.apiVersion);
-
-          let res: restm.IRestResponse<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>>;
-          res = await this.rest.get<VSSInterfaces.PagedList<TestPlanInterfaces.TestPoint>>(url, options);
-
-          let ret = this.formatResponse(res.result, TestPlanInterfaces.TypeInfo.TestPoint, true);
-
-          // Handle the continuation token
-          const headers = res.headers as Record<string, string>;
-          if (headers['x-ms-continuationtoken']) {
-            ret.continuationToken = headers['x-ms-continuationtoken'];
-          }
-
-          resolve(ret);
-        } catch (error) {
-          reject(error);
+        // Handle the continuation token
+        const headers = res.headers as Record<string, string>;
+        if (headers['x-ms-continuationtoken']) {
+          ret.continuationToken = headers['x-ms-continuationtoken'];
         }
+
+        return ret;
       });
     };
 
