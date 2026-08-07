@@ -1,3 +1,19 @@
+## v1.20.1
+
+Released: 2026-08-07
+
+### Bug Fixes
+- fix(reporter): report test.fail() expected failures as Passed in Azure (2aeb932)
+- fix(reporter): low-severity hardening — parseInt validation, gitignore, Promise pattern (L2/L3/L4/L8) (bd61c8a)
+- fix(npm): add files whitelist and improve .npmignore (M3) (97ec66e)
+- fix(reporter): fix VSSInterfaces import and Operation enum values (7d8a42c)
+- fix(reporter): unify ANSI escape stripping via stripAnsi utility (M1) (cd9f7fb)
+- fix(deps): upgrade eslint and typescript-eslint to latest, remove socksv5 (c0fa97f)
+- fix(security): pin all GitHub Actions to immutable commit SHAs (H4) (24c227f)
+- fix(security): address workflow security issues H1/H2/H3/L7 and jpeg extension bug (a44d428)
+- fix(workflow): streamline beta release comment check by consolidating environment variables (29a456c)
+- fix(ci): fix changelog generation and GitHub Release notes in publish workflow (b54f074)
+
 # [1.20.0](https://github.com/alexneo2003/playwright-azure-reporter/compare/v1.19.1...v1.20.0) (2026-03-20)
 
 
