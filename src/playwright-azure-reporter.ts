@@ -1663,6 +1663,8 @@ class AzureDevOpsReporter implements Reporter {
       } else {
         return EAzureTestStatuses['other'];
       }
+    } else if (test.outcome() === 'expected') {
+      return EAzureTestStatuses['passed'];
     } else {
       return EAzureTestStatuses[status];
     }
