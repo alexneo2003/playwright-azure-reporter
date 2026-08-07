@@ -1,4 +1,4 @@
-import { TestCase } from '@playwright/test/reporter';
+import { TestCase, TestResult } from '@playwright/test/reporter';
 
 import AzureDevOpsReporter from '../../dist/playwright-azure-reporter';
 import { getExtensionFromContentType, getExtensionFromFilename, getMimeTypeFromFilename } from '../../src/utils';
@@ -238,5 +238,91 @@ test.describe('Reporter TestCase Extension', () => {
     const tag = extendedTestCase.tags.map((t: string) => t.toLowerCase());
     expect(tag.includes('@tagone')).toBe(true);
     expect(tag.includes('@tagtwo')).toBe(true);
+  });
+});
+
+test.describe('Reporter _mapToAzureState', () => {
+  const reporterOptions = {
+    orgUrl: 'https://dev.azure.com/test',
+    projectName: 'test-project',
+    planId: 123,
+    token: 'test-token',
+    isDisabled: true, // Disable to avoid actual API calls
+  };
+
+  const buildTestCase = (outcome: TestCase['outcome'], annotations: TestCase['annotations'] = []): TestCase =>
+    ({
+      annotations,
+      outcome,
+    }) as unknown as TestCase;
+
+  const buildTestResult = (status: TestResult['status']): TestResult => ({ status }) as unknown as TestResult;
+
+  const mapToAzureState = (testCase: TestCase, testResult: TestResult): string => {
+    const reporter = new AzureDevOpsReporter(reporterOptions);
+    return (reporter as any)._mapToAzureState(testCase, testResult);
+  };
+
+  test('maps a normal passed test to Passed', async () => {
+    const testCase = buildTestCase(() => 'expected');
+    const testResult = buildTestResult('passed');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('Passed');
+  });
+
+  test('maps a normal (unexpected) failed test to Failed', async () => {
+    const testCase = buildTestCase(() => 'unexpected');
+    const testResult = buildTestResult('failed');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('Failed');
+  });
+
+  test('maps a test.fail() test that failed as expected to Passed', async () => {
+    // Playwright considers this outcome 'expected' even though testResult.status is 'failed'
+    const testCase = buildTestCase(() => 'expected');
+    const testResult = buildTestResult('failed');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('Passed');
+  });
+
+  test('maps a flaky (unexpected) failed attempt to Failed', async () => {
+    const testCase = buildTestCase(() => 'flaky');
+    const testResult = buildTestResult('failed');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('Failed');
+  });
+
+  test('maps a timedOut test to Timeout when unexpected', async () => {
+    const testCase = buildTestCase(() => 'unexpected');
+    const testResult = buildTestResult('timedOut');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('Timeout');
+  });
+
+  test('maps skipped test with fixme annotation to Paused', async () => {
+    const testCase = buildTestCase(
+      () => 'skipped',
+      [{ type: 'fixme', description: '' }]
+    );
+    const testResult = buildTestResult('skipped');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('Paused');
+  });
+
+  test('maps skipped test with skip annotation to NotApplicable', async () => {
+    const testCase = buildTestCase(
+      () => 'skipped',
+      [{ type: 'skip', description: '' }]
+    );
+    const testResult = buildTestResult('skipped');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('NotApplicable');
+  });
+
+  test('maps skipped test with no annotation to Blocked', async () => {
+    const testCase = buildTestCase(() => 'skipped');
+    const testResult = buildTestResult('skipped');
+
+    expect(mapToAzureState(testCase, testResult)).toBe('Blocked');
   });
 });
