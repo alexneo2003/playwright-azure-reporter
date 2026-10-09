@@ -126,7 +126,7 @@ test.describe('Publish test step results', () => {
     expect(result.output).not.toContain('Published step results');
   });
 
-  test('publishTestSteps: true sends steps with a PATCH after the POST, never inside the POST', async ({
+  test('publishTestSteps enabled sends steps with a PATCH after the POST, never inside the POST', async ({
     runInlineTest,
     server,
   }) => {
@@ -135,7 +135,10 @@ test.describe('Publish test step results', () => {
 
     const result = await runInlineTest(
       {
-        'playwright.config.ts': reporterConfig(server.PORT, 'publishTestSteps: true,'),
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'publishTestSteps: { enabled: true, alignWithTestCase: false },'
+        ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
           test('[3] foobar', async () => {
@@ -201,7 +204,10 @@ test.describe('Publish test step results', () => {
 
     const result = await runInlineTest(
       {
-        'playwright.config.ts': reporterConfig(server.PORT, 'publishTestSteps: true,'),
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'publishTestSteps: { enabled: true, alignWithTestCase: false },'
+        ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
           test('[3] foobar', async () => {
@@ -241,7 +247,10 @@ test.describe('Publish test step results', () => {
 
     const result = await runInlineTest(
       {
-        'playwright.config.ts': reporterConfig(server.PORT, 'publishTestSteps: true,'),
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'publishTestSteps: { enabled: true, alignWithTestCase: false },'
+        ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
           test('[3] foobar', async () => {
@@ -277,7 +286,10 @@ test.describe('Publish test step results', () => {
 
     const result = await runInlineTest(
       {
-        'playwright.config.ts': reporterConfig(server.PORT, 'publishTestSteps: true,'),
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'publishTestSteps: { enabled: true, alignWithTestCase: false },'
+        ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
           test('[3] foobar', async () => {
@@ -311,7 +323,10 @@ test.describe('Publish test step results', () => {
 
     const result = await runInlineTest(
       {
-        'playwright.config.ts': reporterConfig(server.PORT, 'publishTestSteps: true,'),
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'publishTestSteps: { enabled: true, alignWithTestCase: false },'
+        ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
           test('[3] foobar', async () => {
@@ -343,7 +358,7 @@ test.describe('Publish test step results', () => {
       {
         'playwright.config.ts': reporterConfig(
           server.PORT,
-          `publishTestSteps: { enabled: true, categories: ['test.step', 'expect'], testStepIdMatcher: /step#(\\d+)/ },`
+          `publishTestSteps: { enabled: true, categories: ['test.step', 'expect'], testStepIdMatcher: /step#(\\d+)/, alignWithTestCase: false },`
         ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
@@ -392,7 +407,10 @@ test.describe('Publish test step results', () => {
 
     const result = await runInlineTest(
       {
-        'playwright.config.ts': reporterConfig(server.PORT, 'publishTestSteps: true,'),
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'publishTestSteps: { enabled: true, alignWithTestCase: false },'
+        ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
           test('[3] foobar no steps', async () => {
@@ -425,7 +443,10 @@ test.describe('Publish test step results', () => {
 
     const result = await runInlineTest(
       {
-        'playwright.config.ts': reporterConfig(server.PORT, 'publishTestSteps: true,'),
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'publishTestSteps: { enabled: true, alignWithTestCase: false },'
+        ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
           test('[3] foobar', async () => {
@@ -465,7 +486,7 @@ test.describe('Publish test step results', () => {
       {
         'playwright.config.ts': reporterConfig(
           server.PORT,
-          `publishTestSteps: true, publishTestResultsMode: 'testRun',`
+          `publishTestSteps: { enabled: true, alignWithTestCase: false }, publishTestResultsMode: 'testRun',`
         ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';
@@ -535,7 +556,7 @@ test.describe('Publish test step results', () => {
       {
         'playwright.config.ts': reporterConfig(
           server.PORT,
-          `publishTestSteps: true, publishTestResultsMode: 'testRunADO', isExistingTestRun: true, testRunId: 789,`
+          `publishTestSteps: { enabled: true, alignWithTestCase: false }, publishTestResultsMode: 'testRunADO', isExistingTestRun: true, testRunId: 789,`
         ),
         'a.spec.js': `
           import { test, expect } from '@playwright/test';

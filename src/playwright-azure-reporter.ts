@@ -17,7 +17,14 @@ import * as path from 'path';
 import { isRegExp } from 'util/types';
 
 import Logger from './logger';
-import { buildIterationDetails, DEFAULT_TEST_STEPS_OPTIONS, TestStepsMappingOptions } from './test-steps';
+import {
+  buildIterationDetails,
+  collectSteps,
+  DEFAULT_TEST_STEPS_OPTIONS,
+  parseWorkItemSteps,
+  TestStepsMappingOptions,
+  WorkItemStep,
+} from './test-steps';
 import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID, stripAnsi } from './utils';
 
 // https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
@@ -47,6 +54,12 @@ type TPublishTestStepsOptions = {
   testStepIdMatcher?: string | RegExp;
   /** Nesting depth of steps to publish. Default: 1 (top-level steps only). */
   maxDepth?: number;
+  /**
+   * Read the steps of the test case work item (`Microsoft.VSTS.TCM.Steps`) and map Playwright steps onto
+   * their real ids; work item steps the test never reached are reported as NotExecuted.
+   * Requires the "Work Items (Read)" token scope. Default: true.
+   */
+  alignWithTestCase?: boolean;
 };
 type TTestStepsUpdate = { resultId: number; iterationDetails: TestInterfaces.TestIterationDetailsModel };
 
@@ -228,6 +241,10 @@ class AzureDevOpsReporter implements Reporter {
   private _publishTestSteps = false;
   private _testStepsOptions: TestStepsMappingOptions = { ...DEFAULT_TEST_STEPS_OPTIONS };
   private _testStepsStats = { results: 0, steps: 0, unmapped: 0 };
+  private _testStepsAlignWithTestCase = true;
+  private _workItemStepsCache = new Map<string, Promise<WorkItemStep[] | undefined>>();
+  private _testStepsAlignmentWarned = false;
+  private _testCasesWithoutSteps = new Set<string>();
   private _unmatched: {
     noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
   } = {
@@ -320,6 +337,9 @@ class AzureDevOpsReporter implements Reporter {
     }
     if (typeof option.maxDepth === 'number' && option.maxDepth >= 1) {
       this._testStepsOptions.maxDepth = Math.floor(option.maxDepth);
+    }
+    if (option.alignWithTestCase === false) {
+      this._testStepsAlignWithTestCase = false;
     }
   }
 
@@ -1714,18 +1734,77 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   /**
-   * Maps the Playwright steps of a test result to an Azure DevOps iteration.
+   * Reads the steps of a test case work item, once per test case per run.
+   * Resolves to `undefined` when the work item cannot be read, in which case
+   * step ids fall back to the positional N + 1 scheme.
+   */
+  private _getWorkItemSteps(testCaseId: string): Promise<WorkItemStep[] | undefined> {
+    const cached = this._workItemStepsCache.get(testCaseId);
+    if (cached) return cached;
+
+    const promise = (async (): Promise<WorkItemStep[] | undefined> => {
+      try {
+        if (!this._workItemApi) this._workItemApi = await this._connection.getWorkItemTrackingApi();
+        const workItem = await this._workItemApi.getWorkItem(Number(testCaseId), ['Microsoft.VSTS.TCM.Steps']);
+        if (!workItem) {
+          this._logger?.warn(`[testSteps] Work item ${testCaseId} not found, using positional step ids`);
+          return undefined;
+        }
+        const steps = parseWorkItemSteps(workItem.fields?.['Microsoft.VSTS.TCM.Steps']);
+        this._logger?.debug(`[testSteps] Test case ${testCaseId} has ${steps.length} step(s) in Azure DevOps`);
+        return steps;
+      } catch (error) {
+        const message = toError(error).message;
+        if (!this._testStepsAlignmentWarned) {
+          this._testStepsAlignmentWarned = true;
+          this._logger?.warn(
+            `[testSteps] Cannot read the steps of test case ${testCaseId}: ${message}. ` +
+              'Falling back to positional step ids (step N -> id N + 1). ' +
+              'Reading steps requires the "Work Items (Read)" token scope; set publishTestSteps.alignWithTestCase: false to skip it. ' +
+              'Further failures of this kind are logged at debug level only.'
+          );
+        } else {
+          this._logger?.debug(`[testSteps] Cannot read the steps of test case ${testCaseId}: ${message}`);
+        }
+        return undefined;
+      }
+    })();
+
+    this._workItemStepsCache.set(testCaseId, promise);
+    return promise;
+  }
+
+  /**
+   * Maps the Playwright steps of a test result to an Azure DevOps iteration for one test case.
    * Returns `undefined` when step publishing is disabled or the test has no publishable steps.
    */
-  private _buildTestStepsIteration(
+  private async _buildTestStepsIteration(
     testCase: ITestCaseExtended,
-    testResult: TestResult
-  ): TestInterfaces.TestIterationDetailsModel | undefined {
+    testResult: TestResult,
+    testCaseId: string
+  ): Promise<TestInterfaces.TestIterationDetailsModel | undefined> {
     if (!this._publishTestSteps) return undefined;
+
+    const workItemSteps = this._testStepsAlignWithTestCase ? await this._getWorkItemSteps(testCaseId) : undefined;
+
+    if (workItemSteps && workItemSteps.length === 0) {
+      const stepCount = collectSteps(testResult.steps, this._testStepsOptions).length;
+      if (stepCount === 0) return undefined;
+      if (!this._testCasesWithoutSteps.has(testCaseId)) {
+        this._testCasesWithoutSteps.add(testCaseId);
+        this._logger?.warn(
+          `[testSteps] Test case ${testCaseId} has no steps in Azure DevOps, ${stepCount} Playwright step(s) of test "${testCase.title}" are not published. ` +
+            'Add steps to the test case or set publishTestSteps.alignWithTestCase: false.'
+        );
+      }
+      this._testStepsStats.unmapped += stepCount;
+      return undefined;
+    }
 
     const mapping = buildIterationDetails(testResult.steps, this._testStepsOptions, {
       testOutcome: this._mapToAzureState(testCase, testResult),
       testDuration: testResult.duration,
+      workItemSteps,
     });
 
     if (!mapping) {
@@ -1741,6 +1820,95 @@ class AzureDevOpsReporter implements Reporter {
     this._testStepsStats.unmapped += mapping.unmapped.length;
 
     return mapping.iterationDetails;
+  }
+
+  /**
+   * Builds the iteration for every test point of a test result, keyed by test point id.
+   * Test points of the same test case share one iteration object.
+   */
+  private async _buildTestStepsIterationsByTestPoint(
+    testCase: ITestCaseExtended,
+    testResult: TestResult,
+    testPoints: Array<TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint>
+  ): Promise<Map<string, TestInterfaces.TestIterationDetailsModel>> {
+    const byTestPoint = new Map<string, TestInterfaces.TestIterationDetailsModel>();
+    if (!this._publishTestSteps) return byTestPoint;
+
+    const byTestCase = new Map<string, TestInterfaces.TestIterationDetailsModel | undefined>();
+    for (const testPoint of testPoints) {
+      const testCaseId = String((testPoint as TestInterfaces.TestPoint).testCase?.id ?? testCase.testCaseIds[0]);
+      if (!byTestCase.has(testCaseId)) {
+        byTestCase.set(testCaseId, await this._buildTestStepsIteration(testCase, testResult, testCaseId));
+      }
+      const iterationDetails = byTestCase.get(testCaseId);
+      if (iterationDetails) byTestPoint.set(String(testPoint.id), iterationDetails);
+    }
+    return byTestPoint;
+  }
+
+  /**
+   * Finds the created result id for each test point through the results query,
+   * the same way attachments are matched in testRun mode.
+   */
+  private async _resolveResultIdsByTestPoint(runId: number, resultIds: number[]): Promise<Map<string, number>> {
+    const resolved = new Map<string, number>();
+    if (resultIds.length === 0) return resolved;
+    if (!this._testApi) this._testApi = await this._connection.getTestApi();
+    const query: TestInterfaces.TestResultsQuery = {
+      fields: [''],
+      results: resultIds.map((id) => ({ id, testRun: { id: String(runId) } })),
+    };
+    const data = await this._testApi.getTestResultsByQuery(query, this._projectName);
+    for (const result of data.results ?? []) {
+      const id = Number(result.id);
+      if (result.testPoint?.id && Number.isInteger(id)) resolved.set(String(result.testPoint.id), id);
+    }
+    return resolved;
+  }
+
+  /**
+   * testResult mode: publishes step results on the results just created for one test.
+   * When every test point shares the same iteration, all created ids are PATCHed directly;
+   * otherwise result ids are resolved by test point first.
+   */
+  private async _publishTestStepsForCreatedResults(
+    runId: number,
+    testCase: ITestCaseExtended,
+    testResult: TestResult,
+    testPoints: Array<TestInterfaces.TestPoint | TestPlanInterfaces.TestPoint>,
+    created: ValueEntity[]
+  ): Promise<void> {
+    const byTestPoint = await this._buildTestStepsIterationsByTestPoint(testCase, testResult, testPoints);
+    if (byTestPoint.size === 0) return;
+
+    const createdIds = created.map((value) => Number(value.id)).filter((id) => Number.isInteger(id));
+    const distinct = new Set(byTestPoint.values());
+
+    if (distinct.size === 1 && byTestPoint.size === testPoints.length) {
+      const [iterationDetails] = distinct;
+      await this._publishTestStepsIterations(
+        runId,
+        createdIds.map((resultId) => ({ resultId, iterationDetails }))
+      );
+      return;
+    }
+
+    const updates: TTestStepsUpdate[] = [];
+    try {
+      const resolved = await this._resolveResultIdsByTestPoint(runId, createdIds);
+      for (const [testPointId, iterationDetails] of byTestPoint.entries()) {
+        const resultId = resolved.get(testPointId);
+        if (!resultId) {
+          this._logger?.warn(`Test result for test point [${testPointId}] is missing, step results are not published!`);
+          continue;
+        }
+        updates.push({ resultId, iterationDetails });
+      }
+    } catch (error) {
+      this._logger?.error(`[testSteps] Failed to resolve test result ids: ${toError(error).message}`);
+      return;
+    }
+    await this._publishTestStepsIterations(runId, updates);
   }
 
   /**
@@ -1895,14 +2063,13 @@ class AzureDevOpsReporter implements Reporter {
       if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
 
       // Publish step results on the created test results (one per test point)
-      const iterationDetails = this._buildTestStepsIteration(testCase, testResult);
-      if (iterationDetails) {
-        const updates: TTestStepsUpdate[] = (testCaseResult.result.value ?? [])
-          .map((created) => Number(created.id))
-          .filter((resultId) => Number.isInteger(resultId))
-          .map((resultId) => ({ resultId, iterationDetails }));
-        await this._publishTestStepsIterations(runId!, updates);
-      }
+      await this._publishTestStepsForCreatedResults(
+        runId!,
+        testCase,
+        testResult,
+        mappedTestPoints,
+        testCaseResult.result.value ?? []
+      );
 
       // Mark test cases as automated if enabled
       if (this._autoMarkTestCasesAsAutomatedEnabled) {
@@ -2029,15 +2196,21 @@ class AzureDevOpsReporter implements Reporter {
             );
             testCaseResults.push(...createdResults);
 
-            const iterationDetails = this._buildTestStepsIteration(testCase, testResult);
-            if (iterationDetails) {
+            const iterationsByTestPoint = await this._buildTestStepsIterationsByTestPoint(
+              testCase,
+              testResult,
+              testPoints
+            );
+            testPoints.forEach((testPoint, index) => {
+              const iterationDetails = iterationsByTestPoint.get(String(testPoint.id));
+              if (!iterationDetails) return;
               if (isUpdatingExistingRun) {
                 // testRunADO already PATCHes existing results: steps ride the same request
-                createdResults.forEach((result) => (result.iterationDetails = [iterationDetails]));
+                createdResults[index].iterationDetails = [iterationDetails];
               } else {
-                testPoints.forEach((testPoint) => stepsByTestPoint.set(String(testPoint.id), iterationDetails));
+                stepsByTestPoint.set(String(testPoint.id), iterationDetails);
               }
-            }
+            });
 
             if (this._uploadAttachments && testResult.attachments.length > 0) {
               for (const testPoint of testPoints) {
