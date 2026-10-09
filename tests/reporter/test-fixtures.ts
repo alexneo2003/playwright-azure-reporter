@@ -227,6 +227,12 @@ export function cleanEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     TEST_WORKER_INDEX: undefined,
     TEST_PARLLEL_INDEX: undefined,
     NODE_OPTIONS: undefined,
+    // Reporter state the unit tests leave behind: a reporter constructed in this process
+    // (for example with isDisabled: true) writes these into process.env, and an inline run
+    // that inherits them starts with a silent or misconfigured reporter.
+    AZURE_PW_DISABLED: undefined,
+    AZURE_PW_TEST_RUN_ID: undefined,
+    AZURE_PW_ROOT_SUITE_ID: undefined,
     ...env,
   };
 }
