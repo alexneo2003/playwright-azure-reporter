@@ -17,6 +17,7 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [Authentication](#authentication)
   - [Publishing Modes](#publishing-modes)
   - [Retry Results](#retry-results)
+  - [Test Step Results](#test-step-results)
   - [Attachments & Logs](#attachments--logs)
   - [Test Point Mapping](#test-point-mapping)
   - [Test Case ID Matching](#test-case-id-matching)
@@ -181,6 +182,7 @@ For more examples, see [Authentication Examples](tests/examples/authType-example
 |-------|--------|---------|
 | Test Management | Read & Write | Creating/updating test runs, publishing results, uploading attachments |
 | Work Items | Read & Write | Marking test cases as automated (only if `autoMarkTestCasesAsAutomated` is enabled) |
+| Work Items | Read | Aligning published steps with the test case (only if `publishTestSteps` is enabled with `alignWithTestCase`, the default) |
 | Project and Team | Read | Accessing project information |
 
 Alternatively, use a token with **Full access** scope.
@@ -234,15 +236,41 @@ Control how retry attempts are published with `publishRetryResults`:
 
 ### Test Step Results
 
-Publish the outcome of each `test.step()` call as a step-level result inside the Azure DevOps test case result.
+Publish the outcome of every `test.step()` as a step result of the Azure DevOps test case result, so the **Steps** view of a result shows which steps passed, failed or were never reached.
 
 ```typescript
 {
-  publishTestStepResults: true,
+  publishTestSteps: true,
 }
 ```
 
-Steps are mapped to Azure test case steps by a numeric ID extracted from the step title using the `[N]` syntax (same convention as test case IDs). Steps without an explicit `[N]` are auto-numbered sequentially.
+or, with options:
+
+```typescript
+{
+  publishTestSteps: {
+    enabled: true,
+    categories: ['test.step'],       // Playwright step categories to publish
+    testStepIdMatcher: /\[(\d+)\]/,  // explicit step number in the step title
+    maxDepth: 1,                     // 1 = top-level steps only
+    alignWithTestCase: true,         // read the test case steps from Azure DevOps
+  },
+}
+```
+
+| Sub-option | Type | Default | Description |
+|------------|------|---------|-------------|
+| `enabled` | `boolean` | `false` | Enable step publishing (required in the object form) |
+| `categories` | `string[]` | `['test.step']` | Playwright step categories to publish. Add `'expect'` or `'pw:api'` to publish assertions or Playwright calls as steps |
+| `testStepIdMatcher` | `string \| RegExp` | `/\[(\d+)\]/` | Extracts an explicit step number from the step title; group 1 is the number |
+| `maxDepth` | `number` | `1` | How deep nested steps are collected. `1` publishes top-level steps only |
+| `alignWithTestCase` | `boolean` | `true` | Read `Microsoft.VSTS.TCM.Steps` of the test case and map onto its real step ids. Requires the **Work Items (Read)** token scope |
+
+#### How steps are matched
+
+1. Each published step gets a **step number**: an explicit `[N]` in the title wins, otherwise the number continues after the previous step (`1, 2, 3, ...`). The number refers to the position of the step in the Azure DevOps test case (1-based).
+2. With `alignWithTestCase: true` (default) the reporter reads the steps of the test case work item once per run and maps number `N` onto the id of the N-th step. This keeps results correct after steps were deleted or reordered in Azure DevOps. Work item steps the test never reached are published as `NotExecuted`, with a note naming the step that failed.
+3. Without alignment (option `false`, missing token scope, or the work item cannot be read) number `N` maps to step id `N + 1`, which is the id Azure DevOps assigns to steps that were never deleted or reordered.
 
 ```typescript
 test('[31] login flow', async ({ page }) => {
@@ -255,16 +283,25 @@ test('[31] login flow', async ({ page }) => {
     await page.fill('#password', 'pass');
   });
 
-  // No ID — auto-numbered as step 3
+  // No number: continues as step 3
   await test.step('submit form', async () => {
     await page.click('#submit');
   });
 });
 ```
 
-Each step result includes: outcome (`Passed`/`Failed`), error message (if failed), and duration.
+Each step result carries the outcome (`Passed`, `Failed`, `NotExecuted`), the error message, the duration, the start and end time, and the Playwright step title as comment. A step counts as failed when it or any nested step has an error, so a failed `expect.soft()` inside a `test.step()` marks that step `Failed` while later steps keep their own outcome. With Playwright 1.63 or newer, `test.step(title, body, { params, subtitle })` adds the params as iteration parameters and the subtitle to the comment (see [Playwright Compatibility](#playwright-compatibility)).
 
-> **Note:** The numeric ID in `[N]` must match the step number in the Azure test case work item (steps are 1-based). The `actionPath` sent to Azure is computed as `(N + 1)` in 8-digit hex, which matches Azure's internal step ID format.
+Step results are sent with a second request after the test result is created (Azure DevOps ignores step details on the request that creates a result). Works in all publishing modes (`testResult`, `testRun`, `testRunADO`). A failed step request is logged and never fails the publishing of the test result itself.
+
+A `Test steps summary` line is printed at the end of the run. Steps that could not be published are logged with the reason:
+
+- the test case has fewer steps than the test;
+- two steps resolve to the same number;
+- the step maps to a **Shared Steps** reference in the test case (shared steps are not supported);
+- the test case has no steps at all (nothing is published for it).
+
+> **Note:** `[N]` in a step title and `[N]` in a test title are matched independently: `testCaseIdMatcher` only looks at test titles, `testStepIdMatcher` only at step titles.
 
 ### Attachments & Logs
 
