@@ -1,5 +1,5 @@
 import { DefaultAzureCredential } from '@azure/identity';
-import { Reporter, TestCase, TestResult, TestStep } from '@playwright/test/reporter';
+import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
@@ -17,6 +17,7 @@ import * as path from 'path';
 import { isRegExp } from 'util/types';
 
 import Logger from './logger';
+import { buildIterationDetails, DEFAULT_TEST_STEPS_OPTIONS, TestStepsMappingOptions } from './test-steps';
 import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID, stripAnsi } from './utils';
 
 // https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
@@ -38,6 +39,16 @@ type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: Test
 type TPublishTestResults = 'testResult' | 'testRun' | 'testRunADO';
 type TPublishRetryResults = 'all' | 'last';
 type TTestCaseIdZone = 'title' | 'annotation';
+type TPublishTestStepsOptions = {
+  enabled?: boolean;
+  /** Playwright step categories to publish. Default: `['test.step']`. */
+  categories?: string[];
+  /** Extracts an explicit step number from the step title, group 1 is the number. Default: `/\[(\d+)\]/`. */
+  testStepIdMatcher?: string | RegExp;
+  /** Nesting depth of steps to publish. Default: 1 (top-level steps only). */
+  maxDepth?: number;
+};
+type TTestStepsUpdate = { resultId: number; iterationDetails: TestInterfaces.TestIterationDetailsModel };
 
 interface ITestCaseExtended extends TestCase {
   testAlias: string;
@@ -84,7 +95,7 @@ export interface AzureReporterOptions {
     automatedTestType?: (testCase: TestCase) => string;
   };
   publishRetryResults?: TPublishRetryResults;
-  publishTestStepResults?: boolean;
+  publishTestSteps?: boolean | TPublishTestStepsOptions;
 }
 
 interface TestResultsToTestRun {
@@ -214,7 +225,9 @@ class AzureDevOpsReporter implements Reporter {
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _publishRetryResults: TPublishRetryResults = 'all';
-  private _publishTestStepResults = false;
+  private _publishTestSteps = false;
+  private _testStepsOptions: TestStepsMappingOptions = { ...DEFAULT_TEST_STEPS_OPTIONS };
+  private _testStepsStats = { results: 0, steps: 0, unmapped: 0 };
   private _unmatched: {
     noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
   } = {
@@ -278,15 +291,36 @@ class AzureDevOpsReporter implements Reporter {
     // Initialize auto-mark test cases as automated options
     this._autoMarkTestCasesAsAutomatedEnabled = options.autoMarkTestCasesAsAutomated?.enabled || false;
     this._autoMarkUpdateAutomatedTestName = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestName !== false; // Default to true
-    this._autoMarkUpdateAutomatedTestStorage = options.autoMarkTestCasesAsAutomated?.updateAutomatedTestStorage !== false; // Default to true
+    this._autoMarkUpdateAutomatedTestStorage =
+      options.autoMarkTestCasesAsAutomated?.updateAutomatedTestStorage !== false; // Default to true
     this._autoMarkTestNameFormat = options.autoMarkTestCasesAsAutomated?.automatedTestNameFormat || 'title'; // Default to 'title'
     this._autoMarkTestStoragePath = options.autoMarkTestCasesAsAutomated?.automatedTestStoragePath ?? false; // Default to false (basename only)
     this._autoMarkTestType = options.autoMarkTestCasesAsAutomated?.automatedTestType;
 
     this._publishRetryResults = options.publishRetryResults || 'all';
-    this._publishTestStepResults = options.publishTestStepResults || false;
+    this._initPublishTestSteps(options.publishTestSteps);
 
     this._validateOptions(options);
+  }
+
+  private _initPublishTestSteps(option: AzureReporterOptions['publishTestSteps']): void {
+    if (!option) return;
+    if (typeof option === 'boolean') {
+      this._publishTestSteps = true;
+      return;
+    }
+    if (!option.enabled) return;
+    this._publishTestSteps = true;
+    if (option.categories?.length) {
+      this._testStepsOptions.categories = [...option.categories];
+    }
+    if (option.testStepIdMatcher) {
+      this._testStepsOptions.testStepIdMatcher =
+        typeof option.testStepIdMatcher === 'string' ? new RegExp(option.testStepIdMatcher) : option.testStepIdMatcher;
+    }
+    if (typeof option.maxDepth === 'number' && option.maxDepth >= 1) {
+      this._testStepsOptions.maxDepth = Math.floor(option.maxDepth);
+    }
   }
 
   _validateOptions(options: AzureReporterOptions): void {
@@ -596,17 +630,11 @@ class AzureDevOpsReporter implements Reporter {
         this._logTestItem(test, testResult);
         const caseIds = this._getCaseIds(test);
         if (!caseIds || !caseIds.length) return;
-        const testCase: ITestCaseExtended = this._createExtendedTestCase(
-          test,
-          `${shortID()} - ${test.title}`,
-          caseIds
-        );
+        const testCase: ITestCaseExtended = this._createExtendedTestCase(test, `${shortID()} - ${test.title}`, caseIds);
 
         // For 'last' mode: replace previous result for same test
         if (this._publishRetryResults === 'last') {
-          this._testResultsToBePublished = this._testResultsToBePublished.filter(
-            (r) => r.testCase.id !== test.id
-          );
+          this._testResultsToBePublished = this._testResultsToBePublished.filter((r) => r.testCase.id !== test.id);
         }
 
         this._testResultsToBePublished.push({ testCase: testCase, testResult });
@@ -777,6 +805,15 @@ class AzureDevOpsReporter implements Reporter {
         );
       }
     }
+
+    if (this._publishTestSteps && (this._testStepsStats.results > 0 || this._testStepsStats.unmapped > 0)) {
+      const { results, steps, unmapped } = this._testStepsStats;
+      this._logger?.info(
+        `Test steps summary: ${steps} step result(s) published for ${results} test result(s)` +
+          (unmapped > 0 ? `, ${unmapped} step(s) not mapped` : ''),
+        true
+      );
+    }
   }
 
   printsToStdio(): boolean {
@@ -873,7 +910,7 @@ class AzureDevOpsReporter implements Reporter {
             // Extract test case IDs from the description using the matcher
             const description = obj['description'] || '';
             const descriptionMatches = this._extractMatchesFromText(description);
-            
+
             // If the matcher found IDs in the description, use those
             // Otherwise, fall back to the description itself (original behavior for simple numeric values)
             if (descriptionMatches.length > 0) {
@@ -1402,12 +1439,12 @@ class AzureDevOpsReporter implements Reporter {
     }
 
     const filePath = testCase.location.file;
-    
+
     // If callback function is provided, use it
     if (typeof this._autoMarkTestStoragePath === 'function') {
       return this._autoMarkTestStoragePath(testCase);
     }
-    
+
     // If boolean true, return full path
     if (this._autoMarkTestStoragePath === true) {
       return filePath;
@@ -1424,10 +1461,11 @@ class AzureDevOpsReporter implements Reporter {
       if (!this._workItemApi) this._workItemApi = await this._connection.getWorkItemTrackingApi();
 
       // Get the work item to check automation status
-      const workItem = await this._workItemApi.getWorkItem(
-        Number(testCaseId),
-        ['Microsoft.VSTS.TCM.AutomationStatus', 'Microsoft.VSTS.TCM.AutomatedTestName', 'Microsoft.VSTS.TCM.AutomatedTestStorage']
-      );
+      const workItem = await this._workItemApi.getWorkItem(Number(testCaseId), [
+        'Microsoft.VSTS.TCM.AutomationStatus',
+        'Microsoft.VSTS.TCM.AutomatedTestName',
+        'Microsoft.VSTS.TCM.AutomatedTestStorage',
+      ]);
 
       if (!workItem) {
         this._logger?.warn(`Work item ${testCaseId} not found, skipping automation status update`);
@@ -1451,10 +1489,11 @@ class AzureDevOpsReporter implements Reporter {
         // Optionally update AutomatedTestName
         if (this._autoMarkUpdateAutomatedTestName) {
           const hasParentTitle = !!testCase.parent?.title?.trim();
-          const automatedTestName = this._autoMarkTestNameFormat === 'titleWithParent' && hasParentTitle
-            ? `${testCase.parent.title} > ${testCase.title}`
-            : testCase.title;
-          
+          const automatedTestName =
+            this._autoMarkTestNameFormat === 'titleWithParent' && hasParentTitle
+              ? `${testCase.parent.title} > ${testCase.title}`
+              : testCase.title;
+
           patchDocument.push({
             op: 'add' as unknown as VSSInterfaces.Operation,
             path: '/fields/Microsoft.VSTS.TCM.AutomatedTestName',
@@ -1502,9 +1541,10 @@ class AzureDevOpsReporter implements Reporter {
 
         if (this._autoMarkUpdateAutomatedTestName) {
           const hasParentTitle = !!testCase.parent?.title?.trim();
-          const automatedTestName = this._autoMarkTestNameFormat === 'titleWithParent' && hasParentTitle
-            ? `${testCase.parent.title} > ${testCase.title}`
-            : testCase.title;
+          const automatedTestName =
+            this._autoMarkTestNameFormat === 'titleWithParent' && hasParentTitle
+              ? `${testCase.parent.title} > ${testCase.title}`
+              : testCase.title;
 
           const currentTestName = workItem.fields?.['Microsoft.VSTS.TCM.AutomatedTestName'];
           if (currentTestName !== automatedTestName) {
@@ -1673,47 +1713,78 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
-  private _buildStepActionResults(steps: TestStep[]): TestInterfaces.TestIterationDetailsModel | undefined {
-    const userSteps = steps.filter((s) => s.category === 'test.step');
-    if (userSteps.length === 0) return undefined;
+  /**
+   * Maps the Playwright steps of a test result to an Azure DevOps iteration.
+   * Returns `undefined` when step publishing is disabled or the test has no publishable steps.
+   */
+  private _buildTestStepsIteration(
+    testCase: ITestCaseExtended,
+    testResult: TestResult
+  ): TestInterfaces.TestIterationDetailsModel | undefined {
+    if (!this._publishTestSteps) return undefined;
 
-    const stepIdRegex = /\[(\d+)\]/;
-    let counter = 1;
-
-    const actionResults: TestInterfaces.TestActionResultModel[] = userSteps.map((step) => {
-      const match = stepIdRegex.exec(step.title);
-      let stepId: number;
-      if (match) {
-        stepId = parseInt(match[1], 10);
-        counter = stepId + 1;
-      } else {
-        stepId = counter++;
-      }
-
-      // Azure step IDs start at 2 internally; actionPath is (stepId + 1) in 8-digit hex
-      const actionPath = (stepId + 1).toString(16).padStart(8, '0');
-      const completedDate = new Date(step.startTime.getTime() + step.duration);
-
-      return {
-        actionPath,
-        stepIdentifier: String(stepId),
-        outcome: step.error ? 'Failed' : 'Passed',
-        errorMessage: step.error?.message?.replace(/\[.*?m/g, ''),
-        durationInMs: step.duration,
-        startedDate: step.startTime,
-        completedDate,
-        iterationId: 1,
-      };
+    const mapping = buildIterationDetails(testResult.steps, this._testStepsOptions, {
+      testOutcome: this._mapToAzureState(testCase, testResult),
+      testDuration: testResult.duration,
     });
 
-    const totalDuration = actionResults.reduce((sum, r) => sum + (r.durationInMs ?? 0), 0);
+    if (!mapping) {
+      this._logger?.debug(`[testSteps] No publishable steps for test: ${testCase.title}`);
+      return undefined;
+    }
 
-    return {
-      id: 1,
-      outcome: actionResults.some((r) => r.outcome === 'Failed') ? 'Failed' : 'Passed',
-      durationInMs: totalDuration,
-      actionResults,
-    };
+    for (const unmapped of mapping.unmapped) {
+      this._logger?.warn(
+        `[testSteps] Step "${unmapped.title}" (#${unmapped.stepNumber}) of test "${testCase.title}" is not published: ${unmapped.reason}`
+      );
+    }
+    this._testStepsStats.unmapped += mapping.unmapped.length;
+
+    return mapping.iterationDetails;
+  }
+
+  /**
+   * Publishes step results with a PATCH on already created test results.
+   * Azure DevOps ignores `iterationDetails` on the POST that creates a result,
+   * so steps are always sent as a second request (Results - Update).
+   */
+  private async _publishTestStepsIterations(runId: number, updates: TTestStepsUpdate[]): Promise<void> {
+    if (updates.length === 0) return;
+
+    try {
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      const payload: TestInterfaces.TestCaseResult[] = updates.map((update) => ({
+        id: update.resultId,
+        outcome: update.iterationDetails.outcome,
+        iterationDetails: [update.iterationDetails],
+      }));
+
+      this._logger?.debug(
+        `[testSteps] Publishing step results for test result(s) ${updates.map((u) => u.resultId).join(', ')}`
+      );
+      const updated = await this._testApi.updateTestResults(payload, this._projectName, runId);
+
+      if (!updated || updated.length !== payload.length) {
+        this._logger?.warn(
+          `[testSteps] Expected ${payload.length} updated test result(s), received ${updated?.length ?? 0}`
+        );
+      }
+
+      this._countPublishedSteps(payload);
+      this._logger?.info(chalk.gray(`Published step results for ${payload.length} test result(s)`));
+    } catch (error) {
+      this._logger?.error(`[testSteps] Failed to publish step results: ${toError(error).message}`);
+      this._logger?.debug(toError(error).stack ?? '');
+    }
+  }
+
+  private _countPublishedSteps(results: TestInterfaces.TestCaseResult[]): void {
+    for (const result of results) {
+      const steps = result.iterationDetails?.reduce((n, it) => n + (it.actionResults?.length ?? 0), 0) ?? 0;
+      if (steps === 0) continue;
+      this._testStepsStats.results++;
+      this._testStepsStats.steps += steps;
+    }
   }
 
   private _createTestCaseResult(
@@ -1724,7 +1795,7 @@ class AzureDevOpsReporter implements Reporter {
   ): TestInterfaces.TestCaseResult {
     const baseResult: TestInterfaces.TestCaseResult = existingTestCaseResult ? { ...existingTestCaseResult } : {};
 
-    const caseResult: TestInterfaces.TestCaseResult = {
+    return {
       ...baseResult,
       testPoint: { id: String(testPoint.id) },
       outcome: this._mapToAzureState(testCase, testResult),
@@ -1739,15 +1810,6 @@ class AzureDevOpsReporter implements Reporter {
         ?.map((error, idx) => `STACK #${idx + 1}:\n\n${stripAnsi(error.stack)}`)
         .join('\n\n\n')}`,
     };
-
-    if (this._publishTestStepResults) {
-      const iterationDetails = this._buildStepActionResults(testResult.steps);
-      if (iterationDetails) {
-        (caseResult as unknown as { iterationDetails: TestInterfaces.TestIterationDetailsModel[] }).iterationDetails = [iterationDetails];
-      }
-    }
-
-    return caseResult;
   }
 
   private _prepareLogAttachments(testResult: TestResult) {
@@ -1780,11 +1842,7 @@ class AzureDevOpsReporter implements Reporter {
     const caseIds = this._getCaseIds(test);
     if (!caseIds || !caseIds.length) return;
 
-    const testCase: ITestCaseExtended = this._createExtendedTestCase(
-      test,
-      `${shortID()} - ${test.title}`,
-      caseIds
-    );
+    const testCase: ITestCaseExtended = this._createExtendedTestCase(test, `${shortID()} - ${test.title}`, caseIds);
 
     this._testsAliasToBePublished.push(testCase.testAlias);
 
@@ -1835,6 +1893,16 @@ class AzureDevOpsReporter implements Reporter {
       )) as unknown as TestResultsToTestRun;
 
       if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
+
+      // Publish step results on the created test results (one per test point)
+      const iterationDetails = this._buildTestStepsIteration(testCase, testResult);
+      if (iterationDetails) {
+        const updates: TTestStepsUpdate[] = (testCaseResult.result.value ?? [])
+          .map((created) => Number(created.id))
+          .filter((resultId) => Number.isInteger(resultId))
+          .map((resultId) => ({ resultId, iterationDetails }));
+        await this._publishTestStepsIterations(runId!, updates);
+      }
 
       // Mark test cases as automated if enabled
       if (this._autoMarkTestCasesAsAutomatedEnabled) {
@@ -1907,6 +1975,9 @@ class AzureDevOpsReporter implements Reporter {
           TTestResultsToBePublished[]
         >();
         const testCaseResults: TestInterfaces.TestCaseResult[] = [];
+        // Step results waiting for the created result ids, keyed by test point id
+        const stepsByTestPoint = new Map<string, TestInterfaces.TestIterationDetailsModel>();
+        const isUpdatingExistingRun = this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun;
 
         const testsPointsByTestCase = await this._getTestPointsOfTestResults(testsPack, existingTestCaseResultsForRun);
 
@@ -1953,11 +2024,20 @@ class AzureDevOpsReporter implements Reporter {
             }
 
             testCaseIds.push(...testCase.testCaseIds);
-            testCaseResults.push(
-              ...testPoints.map((testPoint) =>
-                this._createTestCaseResult(testCase, testResult, testPoint, existingTestCaseResult)
-              )
+            const createdResults = testPoints.map((testPoint) =>
+              this._createTestCaseResult(testCase, testResult, testPoint, existingTestCaseResult)
             );
+            testCaseResults.push(...createdResults);
+
+            const iterationDetails = this._buildTestStepsIteration(testCase, testResult);
+            if (iterationDetails) {
+              if (isUpdatingExistingRun) {
+                // testRunADO already PATCHes existing results: steps ride the same request
+                createdResults.forEach((result) => (result.iterationDetails = [iterationDetails]));
+              } else {
+                testPoints.forEach((testPoint) => stepsByTestPoint.set(String(testPoint.id), iterationDetails));
+              }
+            }
 
             if (this._uploadAttachments && testResult.attachments.length > 0) {
               for (const testPoint of testPoints) {
@@ -2009,6 +2089,7 @@ class AzureDevOpsReporter implements Reporter {
             this._logger?.warn(`Failed to update test results for test cases [${testCaseIds.join(', ')}]`);
             throw new Error(`Failed to update test results for test cases [${testCaseIds.join(', ')}]`);
           }
+          this._countPublishedSteps(testCaseResults);
 
           testCaseResult = {
             statusCode: 204,
@@ -2044,7 +2125,11 @@ class AzureDevOpsReporter implements Reporter {
           }
         }
 
-        if ((this._uploadAttachments && withAttachmentsByTestPoint.size > 0) || this._uploadLogs) {
+        if (
+          (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) ||
+          this._uploadLogs ||
+          stepsByTestPoint.size > 0
+        ) {
           testResultsQuery = {
             fields: [''],
             results: testCaseResult.result.value?.map((r) => {
@@ -2052,6 +2137,22 @@ class AzureDevOpsReporter implements Reporter {
             }),
           };
           resultData = await this._testApi.getTestResultsByQuery(testResultsQuery, this._projectName);
+        }
+
+        if (stepsByTestPoint.size > 0) {
+          const updates: TTestStepsUpdate[] = [];
+          for (const [testPointId, iterationDetails] of stepsByTestPoint.entries()) {
+            const created = resultData.results?.find((result) => result.testPoint?.id === testPointId);
+            const resultId = Number(created?.id);
+            if (!created || !Number.isInteger(resultId)) {
+              this._logger?.warn(
+                `Test result for test point [${testPointId}] is missing, step results are not published!`
+              );
+              continue;
+            }
+            updates.push({ resultId, iterationDetails });
+          }
+          await this._publishTestStepsIterations(runId, updates);
         }
 
         if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
