@@ -23,6 +23,7 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [Test Case Summary](#test-case-summary)
   - [Auto-Mark as Automated](#auto-mark-as-automated)
 - [CI/CD Integration](#cicd-integration)
+- [Playwright Compatibility](#playwright-compatibility)
 - [Releases](#releases)
 
 ## Quick Start
@@ -522,6 +523,36 @@ Automatically update Azure DevOps test case work items to reflect their automati
 - script: echo $(playwright.AZURE_PW_TEST_RUN_ID)
   displayName: 'Print test run id'
 ```
+
+## Playwright Compatibility
+
+Some reporter features depend on data that only newer Playwright versions provide. The reporter reads the installed Playwright version on startup (from `@playwright/test/package.json` next to your project, or the reporter's own location) and checks it against this feature matrix:
+
+| Feature | Option | Playwright | Level | Needs | Below that version |
+|---|---|---|---|---|---|
+| `publishTestSteps` | `publishTestSteps` | >= 1.10.0 | required | TestResult.steps and the TestStep API | step publishing is switched off |
+| `publishTestSteps.params` | `publishTestSteps` | >= 1.63.0 | enrichment | TestStep.params and TestStep.subtitle (test.step options) | steps are published without iteration parameters and subtitles |
+| `testCaseIdZone.title.tags` | `testCaseIdZone: 'title' (default)` | >= 1.42.0 | enrichment | TestCase.tags, so test case ids can be declared with tag: ["@[123]"] | ids are read from test titles only |
+
+- **required**: the feature cannot work below that version.
+- **enrichment**: the feature works, part of its output is unavailable below that version.
+
+What happens on a mismatch is controlled by `compatibility`:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `compatibility` | `'lenient' \| 'strict'` | `'lenient'` | `lenient`: a required feature is switched off with a warning, an enrichment is reported once and the feature keeps running. `strict`: any mismatch is a configuration error, the reporter throws on startup and Playwright exits before the first test runs. |
+
+```typescript
+{
+  publishTestSteps: true,
+  compatibility: 'strict', // fail the run instead of silently publishing less
+}
+```
+
+When the Playwright version cannot be detected, the check is skipped in both modes and logged at debug level (`AZUREPWDEBUG=1`).
+
+The table above is generated from `src/compat.ts` with `yarn feature-matrix`; keep both in sync when adding a feature.
 
 ## Releases
 
