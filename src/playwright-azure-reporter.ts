@@ -16,6 +16,15 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs
 import * as path from 'path';
 import { isRegExp } from 'util/types';
 
+import {
+  CompatibilityIssue,
+  CompatibilityPolicy,
+  describeIssue,
+  detectPlaywrightVersion,
+  evaluateCompatibility,
+  formatStrictModeError,
+  PlaywrightVersionInfo,
+} from './compat';
 import Logger from './logger';
 import {
   buildIterationDetails,
@@ -109,6 +118,12 @@ export interface AzureReporterOptions {
   };
   publishRetryResults?: TPublishRetryResults;
   publishTestSteps?: boolean | TPublishTestStepsOptions;
+  /**
+   * What to do when the installed Playwright is older than an enabled feature requires
+   * (see the feature matrix in README). `lenient` (default) switches the feature off or degrades it
+   * with a log line; `strict` throws on startup so the run never starts.
+   */
+  compatibility?: CompatibilityPolicy;
 }
 
 interface TestResultsToTestRun {
@@ -241,6 +256,8 @@ class AzureDevOpsReporter implements Reporter {
   private _publishTestSteps = false;
   private _testStepsOptions: TestStepsMappingOptions = { ...DEFAULT_TEST_STEPS_OPTIONS };
   private _testStepsStats = { results: 0, steps: 0, unmapped: 0 };
+  private _compatibility: CompatibilityPolicy = 'lenient';
+  private _playwrightVersion: PlaywrightVersionInfo | undefined;
   private _testStepsAlignWithTestCase = true;
   private _workItemStepsCache = new Map<string, Promise<WorkItemStep[] | undefined>>();
   private _testStepsAlignmentWarned = false;
@@ -456,6 +473,60 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.warn(
         'This means you need to define your own testCaseIdMatcher, specifically for the "annotation" area'
       );
+    }
+
+    this._compatibility = options.compatibility === 'strict' ? 'strict' : 'lenient';
+    this._applyCompatibility(detectPlaywrightVersion());
+  }
+
+  /** Feature ids from the feature matrix that the current options turn on. */
+  private _requestedFeatures(): string[] {
+    const features: string[] = [];
+    if (this._publishTestSteps) features.push('publishTestSteps', 'publishTestSteps.params');
+    if (this._testCaseIdZone === 'title') features.push('testCaseIdZone.title.tags');
+    return features;
+  }
+
+  private _disableFeature(issue: CompatibilityIssue): void {
+    switch (issue.feature.id) {
+      case 'publishTestSteps':
+        this._publishTestSteps = false;
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Checks the enabled features against the installed Playwright (feature matrix, see src/compat.ts).
+   * Throws in strict mode: this runs from the constructor, so Playwright exits before any test runs.
+   */
+  private _applyCompatibility(playwright: PlaywrightVersionInfo | undefined): void {
+    this._playwrightVersion = playwright;
+    const requested = this._requestedFeatures();
+
+    if (!playwright) {
+      this._logger?.debug(
+        `[compat] Playwright version could not be detected, skipping the feature matrix check for: ${requested.join(', ') || 'none'}`
+      );
+      return;
+    }
+    this._logger?.debug(`[compat] Playwright ${playwright.version} from ${playwright.source}`);
+
+    const issues = evaluateCompatibility(playwright, requested);
+    if (issues.length === 0) return;
+
+    if (this._compatibility === 'strict') {
+      throw new Error(formatStrictModeError(issues));
+    }
+
+    for (const issue of issues) {
+      if (issue.feature.level === 'required') {
+        this._disableFeature(issue);
+        this._logger?.warn(`[compat] Playwright ${playwright.version}: ${describeIssue(issue)}. Feature disabled.`);
+      } else {
+        this._logger?.info(`[compat] Playwright ${playwright.version}: ${describeIssue(issue)}.`);
+      }
     }
   }
 
@@ -2517,4 +2588,6 @@ class AzureDevOpsReporter implements Reporter {
   }
 }
 
+export type { CompatibilityPolicy, FeatureRequirement } from './compat';
+export { FEATURE_MATRIX, formatFeatureMatrix } from './compat';
 export default AzureDevOpsReporter;

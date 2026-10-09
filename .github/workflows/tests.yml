@@ -7,11 +7,18 @@ on:
 
 jobs:
   test:
+    name: test (playwright ${{ matrix.playwright }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # "lockfile" runs the version pinned in yarn.lock; the others prove the
+        # feature matrix in src/compat.ts (README "Playwright Compatibility").
+        playwright: ['lockfile', '1.64.0']
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -21,6 +28,11 @@ jobs:
           node-version: '>=18'
       - name: Install dependencies
         run: yarn --ignore-engines
+      - name: Switch Playwright version
+        if: matrix.playwright != 'lockfile'
+        run: |
+          yarn add -D --ignore-engines "@playwright/test@${{ matrix.playwright }}"
+          node -e "console.log('Playwright', require('@playwright/test/package.json').version)"
       - name: Install Playwright
         run: npx playwright install chromium
       - name: Build project
@@ -79,7 +91,7 @@ jobs:
           fi
       
       - name: Comment PR with test results
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && matrix.playwright == 'lockfile'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

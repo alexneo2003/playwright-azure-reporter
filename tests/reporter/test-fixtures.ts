@@ -88,6 +88,11 @@ export async function writeFiles(testInfo: TestInfo, files: Files, initial: bool
   return baseDir;
 }
 
+// Playwright < 1.56 ships the json reporter as a file and PW_TEST_REPORTER needs its path;
+// newer versions bundle the built-in reporters and accept their names.
+const jsonReporterFile = path.join(__dirname, '../../node_modules/playwright/lib/reporters/json.js');
+const jsonReporter = fs.existsSync(jsonReporterFile) ? jsonReporterFile : 'json';
+
 export const cliEntrypoint = path.join(__dirname, '../../node_modules/@playwright/test/cli.js');
 
 async function runPlaywrightTest(
@@ -116,7 +121,7 @@ async function runPlaywrightTest(
     cwd,
     args,
     {
-      PW_TEST_REPORTER: path.join(__dirname, '../../node_modules/playwright/lib/reporters/json.js'),
+      PW_TEST_REPORTER: jsonReporter,
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
       ...env,
     },
