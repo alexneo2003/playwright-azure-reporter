@@ -563,22 +563,21 @@ Automatically update Azure DevOps test case work items to reflect their automati
 
 ## Playwright Compatibility
 
-Some reporter features depend on data that only newer Playwright versions provide. The reporter reads the installed Playwright version on startup (from `@playwright/test/package.json` next to your project, or the reporter's own location) and checks it against this feature matrix:
+Some reporter features need data that only newer Playwright versions provide. On startup the reporter reads the installed Playwright version (from `@playwright/test/package.json` next to your project, or from the reporter's own location) and checks the features you enabled against this matrix:
 
-| Feature | Option | Playwright | Level | Needs | Below that version |
-|---|---|---|---|---|---|
-| `publishTestSteps` | `publishTestSteps` | >= 1.10.0 | required | TestResult.steps and the TestStep API | step publishing is switched off |
-| `publishTestSteps.params` | `publishTestSteps` | >= 1.63.0 | enrichment | TestStep.params and TestStep.subtitle (test.step options) | steps are published without iteration parameters and subtitles |
-| `testCaseIdZone.title.tags` | `testCaseIdZone: 'title' (default)` | >= 1.42.0 | enrichment | TestCase.tags, so test case ids can be declared with tag: ["@[123]"] | ids are read from test titles only |
+| Feature | Playwright | Level | If Playwright is older |
+|:---|:---|:---|:---|
+| `publishTestSteps`<br>TestResult.steps and the TestStep API | >= 1.10.0 | required | step publishing is switched off |
+| `publishTestSteps.params`<br>TestStep.params and TestStep.subtitle (test.step options) | >= 1.63.0 | enrichment | steps are published without iteration parameters and subtitles |
+| `testCaseIdZone.title.tags`<br>TestCase.tags, so test case ids can be declared with tag: ["@[123]"] | >= 1.42.0 | enrichment | ids are read from test titles only |
 
 - **required**: the feature cannot work below that version.
-- **enrichment**: the feature works, part of its output is unavailable below that version.
+- **enrichment**: the feature works, but part of its output is unavailable below that version.
 
-What happens on a mismatch is controlled by `compatibility`:
+Set `compatibility` to choose what happens when the installed Playwright is older than an enabled feature needs:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `compatibility` | `'lenient' \| 'strict'` | `'lenient'` | `lenient`: a required feature is switched off with a warning, an enrichment is reported once and the feature keeps running. `strict`: any mismatch is a configuration error, the reporter throws on startup and Playwright exits before the first test runs. |
+- `'lenient'` (default): a required feature is switched off with a warning. A missing enrichment is reported once and the feature keeps running.
+- `'strict'`: any mismatch is a configuration error. The reporter throws on startup and Playwright exits before the first test runs.
 
 ```typescript
 {
@@ -589,7 +588,7 @@ What happens on a mismatch is controlled by `compatibility`:
 
 When the Playwright version cannot be detected, the check is skipped in both modes and logged at debug level (`AZUREPWDEBUG=1`).
 
-The table above is generated from `src/compat.ts` with `yarn feature-matrix`; keep both in sync when adding a feature.
+<!-- The table above is generated from src/compat.ts: run `yarn build && yarn feature-matrix` and paste the output when the matrix changes. A test fails when README and the matrix differ. -->
 
 ## Releases
 

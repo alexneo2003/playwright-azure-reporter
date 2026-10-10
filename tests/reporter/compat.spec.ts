@@ -16,8 +16,8 @@ import {
 import { expect, test } from './test-fixtures';
 
 const matrix: FeatureRequirement[] = [
-  { id: 'base', option: 'base', since: '1.10.0', level: 'required', provides: 'x', fallback: 'off' },
-  { id: 'base.extra', option: 'base', since: '1.63.0', level: 'enrichment', provides: 'y', fallback: 'less' },
+  { id: 'base', since: '1.10.0', level: 'required', provides: 'x', fallback: 'off' },
+  { id: 'base.extra', since: '1.63.0', level: 'enrichment', provides: 'y', fallback: 'less' },
 ];
 
 test.describe('compat: versions', () => {
@@ -105,7 +105,7 @@ test.describe('compat: evaluateCompatibility', () => {
 });
 
 test.describe('compat: feature matrix', () => {
-  test('every entry is well formed and sorted by option then version', () => {
+  test('every entry is well formed and sorted by id', () => {
     for (const feature of FEATURE_MATRIX) {
       expect(parseVersion(feature.since)).toBeDefined();
       expect(['required', 'enrichment']).toContain(feature.level);
@@ -115,23 +115,38 @@ test.describe('compat: feature matrix', () => {
     }
     const ids = FEATURE_MATRIX.map((f) => f.id);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual([...ids].sort());
   });
 
-  test('formatFeatureMatrix renders one markdown row per feature', () => {
-    const markdown = formatFeatureMatrix();
-    const rows = markdown.split('\n');
-    expect(rows[0]).toBe('| Feature | Option | Playwright | Level | Needs | Below that version |');
+  test('formatFeatureMatrix renders a four column table with one row per feature', () => {
+    const rows = formatFeatureMatrix().split('\n');
+    expect(rows[0]).toBe('| Feature | Playwright | Level | If Playwright is older |');
+    expect(rows[1]).toBe('|:---|:---|:---|:---|');
     expect(rows).toHaveLength(2 + FEATURE_MATRIX.length);
-    for (const feature of FEATURE_MATRIX) {
-      expect(markdown).toContain(`| \`${feature.id}\` |`);
-      expect(markdown).toContain(`>= ${feature.since}`);
-    }
+    FEATURE_MATRIX.forEach((feature, index) => {
+      expect(rows[2 + index]).toBe(
+        `| \`${feature.id}\`<br>${feature.provides} | >= ${feature.since} | ${feature.level} | ${feature.fallback} |`
+      );
+    });
+  });
+
+  test('formatFeatureMatrix keeps every cell on its row: pipes are escaped, newlines flattened', () => {
+    const tricky: FeatureRequirement[] = [
+      { id: 'x', since: '1.0.0', level: 'required', provides: 'a | b\nc', fallback: 'd\r\n  e | f' },
+    ];
+    const [, , row] = formatFeatureMatrix(tricky).split('\n');
+    expect(row).toBe('| `x`<br>a \\| b c | >= 1.0.0 | required | d e \\| f |');
+    // header + separator + exactly one data row
+    expect(formatFeatureMatrix(tricky).split('\n')).toHaveLength(3);
   });
 
   test('README carries the generated matrix', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const readme = require('fs').readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf8') as string;
-    expect(readme).toContain(formatFeatureMatrix());
+    expect(
+      readme,
+      'README "Playwright Compatibility" is out of date: run `yarn build && yarn feature-matrix` and paste the output'
+    ).toContain(formatFeatureMatrix());
   });
 });
 
