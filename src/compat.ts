@@ -18,8 +18,6 @@ export type FeatureLevel = 'required' | 'enrichment';
 export interface FeatureRequirement {
   /** Stable identifier, also used in log messages. */
   id: string;
-  /** Reporter option that turns the feature on. */
-  option: string;
   /** Lowest Playwright version that provides what the feature needs. */
   since: string;
   /**
@@ -34,13 +32,12 @@ export interface FeatureRequirement {
 }
 
 /**
- * The feature matrix. Keep entries sorted by option, then by `since`.
+ * The feature matrix. Keep entries sorted by `id`.
  * README.md "Playwright compatibility" is generated from this list with `yarn feature-matrix`.
  */
 export const FEATURE_MATRIX: readonly FeatureRequirement[] = [
   {
     id: 'publishTestSteps',
-    option: 'publishTestSteps',
     since: '1.10.0',
     level: 'required',
     provides: 'TestResult.steps and the TestStep API',
@@ -48,7 +45,6 @@ export const FEATURE_MATRIX: readonly FeatureRequirement[] = [
   },
   {
     id: 'publishTestSteps.params',
-    option: 'publishTestSteps',
     since: '1.63.0',
     level: 'enrichment',
     provides: 'TestStep.params and TestStep.subtitle (test.step options)',
@@ -56,7 +52,6 @@ export const FEATURE_MATRIX: readonly FeatureRequirement[] = [
   },
   {
     id: 'testCaseIdZone.title.tags',
-    option: "testCaseIdZone: 'title' (default)",
     since: '1.42.0',
     level: 'enrichment',
     provides: 'TestCase.tags, so test case ids can be declared with tag: ["@[123]"]',
@@ -159,11 +154,22 @@ export function formatStrictModeError(issues: CompatibilityIssue[]): string {
   );
 }
 
-/** Markdown table of the feature matrix, used for README.md. */
+/** Keeps a value on one table row: pipes would split the cell, newlines would end the row. */
+function escapeTableCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\s*\r?\n\s*/g, ' ');
+}
+
+/**
+ * Markdown table of the feature matrix, used for README.md.
+ *
+ * Four columns on purpose: GitHub scrolls tables sideways when they are wider than the README column.
+ * The feature id and what it needs share one cell (id on the first line) instead of getting a column each.
+ */
 export function formatFeatureMatrix(matrix: readonly FeatureRequirement[] = FEATURE_MATRIX): string {
-  const header = '| Feature | Option | Playwright | Level | Needs | Below that version |\n|---|---|---|---|---|---|';
-  const rows = matrix.map(
-    (f) => `| \`${f.id}\` | \`${f.option}\` | >= ${f.since} | ${f.level} | ${f.provides} | ${f.fallback} |`
-  );
+  const header = '| Feature | Playwright | Level | If Playwright is older |\n|:---|:---|:---|:---|';
+  const rows = matrix.map((f) => {
+    const feature = `\`${f.id}\`<br>${escapeTableCell(f.provides)}`;
+    return `| ${feature} | >= ${f.since} | ${f.level} | ${escapeTableCell(f.fallback)} |`;
+  });
   return [header, ...rows].join('\n');
 }
