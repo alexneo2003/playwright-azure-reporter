@@ -885,12 +885,19 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   /**
-   * Completion update for a run this reporter created. Existing runs are never given an `errorMessage`.
+   * Completion update for a run this reporter created. The summary of the reported errors goes into
+   * `errorMessage` (what the API returns) and into `comment` (what the run summary page shows, verified on
+   * a live organization: `errorMessage` is not displayed there). A comment from `testRunConfig.comment` is kept.
+   * Existing runs are never modified.
    */
   private _runCompletionModel(): TestInterfaces.RunUpdateModel {
     const model: TestInterfaces.RunUpdateModel = { state: 'Completed' };
     const summary = this._globalErrors?.summary();
-    if (summary && !this._isExistingTestRun) model.errorMessage = summary;
+    if (summary && !this._isExistingTestRun) {
+      model.errorMessage = summary;
+      const userComment = this._testRunConfig?.comment;
+      model.comment = userComment ? `${userComment}\n${summary}` : summary;
+    }
     return model;
   }
 

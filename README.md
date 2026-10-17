@@ -323,7 +323,7 @@ Playwright reports some failures outside of any test: a `globalSetup` that throw
 
 What is published, once, at the end of the run, and only when Playwright reported at least one such error:
 
-- `errorMessage` of the test run, for runs the reporter created: `Playwright reported 2 error(s) outside of tests. First: ...` (at most 1000 characters).
+- `errorMessage` and `comment` of the test run, for runs the reporter created: `Playwright reported 2 error(s) outside of tests. First: ...` (at most 1000 characters). The run summary page in Azure DevOps shows the comment; `errorMessage` is returned by the API but not displayed there. A comment from `testRunConfig.comment` stays in front of the summary.
 - A run attachment `playwright-global-errors.md` with the Playwright run status, the duration and, per error, the message, the project and worker index (Playwright 1.60 and newer), the location and a trimmed stack. Colour codes are removed, identical errors are counted, not repeated.
 
 Where the run comes from:
