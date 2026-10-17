@@ -88,6 +88,11 @@ export async function writeFiles(testInfo: TestInfo, files: Files, initial: bool
   return baseDir;
 }
 
+// Playwright < 1.56 ships the json reporter as a file and PW_TEST_REPORTER needs its path;
+// newer versions bundle the built-in reporters and accept their names.
+const jsonReporterFile = path.join(__dirname, '../../node_modules/playwright/lib/reporters/json.js');
+const jsonReporter = fs.existsSync(jsonReporterFile) ? jsonReporterFile : 'json';
+
 export const cliEntrypoint = path.join(__dirname, '../../node_modules/@playwright/test/cli.js');
 
 async function runPlaywrightTest(
@@ -116,7 +121,7 @@ async function runPlaywrightTest(
     cwd,
     args,
     {
-      PW_TEST_REPORTER: path.join(__dirname, '../../node_modules/playwright/lib/reporters/json.js'),
+      PW_TEST_REPORTER: jsonReporter,
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
       ...env,
     },
@@ -222,6 +227,12 @@ export function cleanEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     TEST_WORKER_INDEX: undefined,
     TEST_PARLLEL_INDEX: undefined,
     NODE_OPTIONS: undefined,
+    // Reporter state the unit tests leave behind: a reporter constructed in this process
+    // (for example with isDisabled: true) writes these into process.env, and an inline run
+    // that inherits them starts with a silent or misconfigured reporter.
+    AZURE_PW_DISABLED: undefined,
+    AZURE_PW_TEST_RUN_ID: undefined,
+    AZURE_PW_ROOT_SUITE_ID: undefined,
     ...env,
   };
 }

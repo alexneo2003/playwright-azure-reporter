@@ -33,7 +33,8 @@
     "dev": "yarn run lint && tsc",
     "dev:watch": "nodemon",
     "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md",
-    "release": "conventional-github-releaser -p angular"
+    "release": "conventional-github-releaser -p angular",
+    "feature-matrix": "node -e \"console.log(require('./dist/compat').formatFeatureMatrix())\""
   },
   "nodemonConfig": {
     "watch": [
