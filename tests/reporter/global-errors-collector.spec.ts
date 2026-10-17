@@ -144,6 +144,14 @@ test.describe('GlobalErrorCollector', () => {
     expect(report.match(/Error: teardown failed/g)).toHaveLength(2);
   });
 
+  test('report has no stray blank lines when an error has no details', () => {
+    const collector = new GlobalErrorCollector();
+    collector.add({ message: 'Testing stopped early after 1 maximum allowed failures.' });
+    const report = collector.report();
+    expect(report).toContain('## 1. Testing stopped early after 1 maximum allowed failures.\n\n```\n');
+    expect(report).not.toMatch(/\n\n\n/);
+  });
+
   test('report fences cannot be closed by backticks inside the error text', () => {
     const collector = new GlobalErrorCollector();
     collector.add({ message: 'text with ``` inside' });

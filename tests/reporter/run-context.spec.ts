@@ -24,16 +24,46 @@ test.describe('run context: shard', () => {
 
 test.describe('run context: tags', () => {
   test('normalizes config tags', () => {
-    expect(
-      normalizeConfigTags(['@smoke', ' nightly ', '@@double', 'Smoke', '', '@', 'a,b', 'a;b', 'x'.repeat(101)])
-    ).toEqual(['smoke', 'nightly', 'double']);
-    expect(normalizeConfigTags(['x'.repeat(100)])).toHaveLength(1);
+    expect(normalizeConfigTags(['@smoke', ' nightly ', '@@double', 'Smoke', '', '@']).names).toEqual([
+      'smoke',
+      'nightly',
+      'double',
+    ]);
+    expect(normalizeConfigTags(['x'.repeat(100)]).names).toHaveLength(1);
+  });
+
+  test('skips tags Azure DevOps rejects and reports them, the others are kept', () => {
+    const { names, skipped } = normalizeConfigTags([
+      '@smoke',
+      '@feature:login',
+      '@a b',
+      '@a,b',
+      '@a;b',
+      '@snake_case',
+      '@kebab-case',
+      '@x' + 'x'.repeat(100),
+      '@ok2',
+    ]);
+    expect(names).toEqual(['smoke', 'ok2']);
+    expect(skipped).toEqual([
+      '@feature:login',
+      '@a b',
+      '@a,b',
+      '@a;b',
+      '@snake_case',
+      '@kebab-case',
+      '@x' + 'x'.repeat(100),
+    ]);
+  });
+
+  test('accepts letters and digits of any alphabet', () => {
+    expect(normalizeConfigTags(['@Тест1', '@测试']).names).toEqual(['Тест1', '测试']);
   });
 
   test('ignores values that are not a list of strings', () => {
-    expect(normalizeConfigTags(undefined)).toEqual([]);
-    expect(normalizeConfigTags('@smoke')).toEqual([]);
-    expect(normalizeConfigTags([1, null, {}, '@ok'])).toEqual(['ok']);
+    expect(normalizeConfigTags(undefined)).toEqual({ names: [], skipped: [] });
+    expect(normalizeConfigTags('@smoke')).toEqual({ names: [], skipped: [] });
+    expect(normalizeConfigTags([1, null, {}, '@ok']).names).toEqual(['ok']);
   });
 
   test('merges after the user tags, case-insensitively without duplicates', () => {

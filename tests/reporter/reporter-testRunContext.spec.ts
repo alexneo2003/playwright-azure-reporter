@@ -209,6 +209,32 @@ test.describe('testRunContext', () => {
     expect(calls.creates[1].tags).toBeUndefined();
   });
 
+  test('only the tags Azure DevOps would reject are skipped, and the log names them', async ({
+    runInlineTest,
+    server,
+  }) => {
+    test.skip(!hasConfigTags, 'FullConfig.tags needs Playwright 1.57');
+    const calls = setupRoutes(server);
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          'testRunContext: true,',
+          "tag: ['@smoke', '@feature:login', '@nightly'],"
+        ),
+        'a.spec.js': spec,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(calls.creates).toHaveLength(1);
+    expect(names(calls.creates[0].tags)).toEqual(['smoke', 'nightly']);
+    expect(result.output).toContain('not used as run tags');
+    expect(result.output).toContain('@feature:login');
+  });
+
   test('a run that Azure DevOps rejects because of the tags is created again without them', async ({
     runInlineTest,
     server,

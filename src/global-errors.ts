@@ -164,14 +164,17 @@ export class GlobalErrorCollector {
         `## ${index}. ${firstLine(error.message).slice(0, 200)}${error.count > 1 ? ` (x${error.count})` : ''}`,
         ''
       );
-      if (error.project) lines.push(`- Project: ${error.project}`);
+      const details: string[] = [];
+      if (error.project) details.push(`- Project: ${error.project}`);
       if (error.workerIndex !== undefined) {
-        lines.push(
+        details.push(
           `- Worker: ${error.workerIndex}${error.parallelIndex !== undefined ? ` (parallel index ${error.parallelIndex})` : ''}`
         );
       }
-      if (error.location) lines.push(`- Location: ${error.location}`);
-      lines.push('', fence(error.message));
+      if (error.location) details.push(`- Location: ${error.location}`);
+      lines.push(...details);
+      if (details.length > 0) lines.push('');
+      lines.push(fence(error.message));
       if (error.stack) lines.push('', 'Stack:', '', fence(error.stack));
       if (error.snippet) lines.push('', 'Code:', '', fence(error.snippet));
     }

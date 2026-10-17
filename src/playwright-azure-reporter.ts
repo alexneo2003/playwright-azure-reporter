@@ -752,7 +752,13 @@ class AzureDevOpsReporter implements Reporter {
       }
       if (this._runContext.tags) {
         // FullConfig.tags exists since Playwright 1.57 and is missing from older typings.
-        this._contextTags = normalizeConfigTags((config as FullConfig & { tags?: unknown }).tags);
+        const { names, skipped } = normalizeConfigTags((config as FullConfig & { tags?: unknown }).tags);
+        this._contextTags = names;
+        if (skipped.length > 0) {
+          this._logger?.warn(
+            `Playwright config tags not used as run tags (Azure DevOps accepts only letters and digits): ${skipped.join(', ')}`
+          );
+        }
       }
     } catch (error) {
       this._logger?.debug(`Failed to read the run context from the Playwright config: ${toError(error).message}`);
