@@ -157,6 +157,8 @@ test.describe('publishGlobalErrors', () => {
     expect(calls.runUpdates[0].state).toBe('Completed');
     expect(calls.runUpdates[0].errorMessage).toContain('Playwright reported 1 error(s) outside of tests.');
     expect(calls.runUpdates[0].errorMessage).toContain('worker teardown exploded');
+    // the run summary page shows the comment, not errorMessage
+    expect(calls.runUpdates[0].comment).toBe(calls.runUpdates[0].errorMessage);
 
     expect(calls.attachments).toHaveLength(1);
     const [attachment] = calls.attachments;
@@ -208,6 +210,7 @@ test.describe('publishGlobalErrors', () => {
     expect(calls.resultsPosted).toBe(0);
     expect(calls.runUpdates).toHaveLength(1);
     expect(calls.runUpdates[0].errorMessage).toContain('global setup exploded');
+    expect(calls.runUpdates[0].comment).toBe(calls.runUpdates[0].errorMessage);
     expect(calls.attachments).toHaveLength(1);
     expect(calls.attachments[0].text).toContain('global setup exploded');
     expect(calls.attachments[0].text).toContain('global-setup.js');
@@ -262,6 +265,25 @@ test.describe('publishGlobalErrors', () => {
     expect(calls.runsCreated).toBe(0);
     expect(calls.attachments).toEqual([]);
     expect(calls.runUpdates).toEqual([]);
+  });
+
+  test('a comment from testRunConfig is kept in front of the summary', async ({ runInlineTest, server }) => {
+    const calls = setupRoutes(server);
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          "publishGlobalErrors: true, testRunConfig: { configurationIds: [1], comment: 'nightly build' },"
+        ),
+        'a.spec.js': workerTeardownSpec,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(calls.runUpdates).toHaveLength(1);
+    expect(calls.runUpdates[0].comment).toBe(`nightly build\n${calls.runUpdates[0].errorMessage}`);
   });
 
   test('existing run: attachment only, the run itself is never modified', async ({ runInlineTest, server }) => {
