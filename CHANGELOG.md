@@ -1,3 +1,23 @@
+## v1.21.0
+
+Released: 2026-10-17
+
+### Features
+- feat(reporter): add the feature matrix and a Playwright compatibility policy (fc2d4c9)
+- feat(reporter): align published steps with the test case work item (84ef0bb)
+- feat(reporter): publish test.step results with a PATCH in every publishing mode (cff5756)
+- feat(reporter): add pure mapping of Playwright steps to Azure DevOps step results (a3aa9b3)
+- feat(reporter): add publishTestStepResults option to publish test.step outcomes to Azure DevOps (928a45b)
+
+### Bug Fixes
+- fix(tests): keep reporter state out of the environment of inline runs (386f026)
+- fix(tests): correct file extension assertions for JPEG in reporter utils (016e1d7)
+
+### Other Changes
+- docs(readme): make the Playwright Compatibility section fit the README column (d8cc338)
+- docs(readme): describe publishTestSteps and the step matching rules (1f2f2ce)
+- chore(deps): drop dependency bump from PR, keep package.json and yarn.lock as on main (eb53d95)
+
 ## v1.20.2
 
 Released: 2026-08-07
