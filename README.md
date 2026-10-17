@@ -18,6 +18,8 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [Publishing Modes](#publishing-modes)
   - [Retry Results](#retry-results)
   - [Test Step Results](#test-step-results)
+  - [Errors Outside of Tests](#errors-outside-of-tests)
+  - [Run Context: Shard and Tags](#run-context-shard-and-tags)
   - [Attachments & Logs](#attachments--logs)
   - [Test Point Mapping](#test-point-mapping)
   - [Test Case ID Matching](#test-case-id-matching)
@@ -303,6 +305,56 @@ A `Test steps summary` line is printed at the end of the run. Steps that could n
 
 > **Note:** `[N]` in a step title and `[N]` in a test title are matched independently: `testCaseIdMatcher` only looks at test titles, `testStepIdMatcher` only at step titles.
 
+### Errors Outside of Tests
+
+Playwright reports some failures outside of any test: a `globalSetup` that throws, a worker-scoped fixture that fails in teardown (the tests stay `Passed`, the run fails), `--max-failures` stopping the run, a crashed worker. The CI job is red, but the Azure DevOps run says nothing about it. With `publishGlobalErrors` the reporter collects these errors (`Reporter.onError`) and puts them on the test run.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `publishGlobalErrors` | `boolean \| object` | `false` | `true` or `{ enabled: true }` turns the feature on |
+| `publishGlobalErrors.maxErrors` | `number` | `20` | How many distinct errors are listed in the attachment; the rest is only counted |
+
+```typescript
+{
+  publishGlobalErrors: true,
+  // or: publishGlobalErrors: { enabled: true, maxErrors: 10 },
+}
+```
+
+What is published, once, at the end of the run, and only when Playwright reported at least one such error:
+
+- `errorMessage` and `comment` of the test run, for runs the reporter created: `Playwright reported 2 error(s) outside of tests. First: ...` (at most 1000 characters). The run summary page in Azure DevOps shows the comment; `errorMessage` is returned by the API but not displayed there. A comment from `testRunConfig.comment` stays in front of the summary.
+- A run attachment `playwright-global-errors.md` with the Playwright run status, the duration and, per error, the message, the project and worker index (Playwright 1.60 and newer), the location and a trimmed stack. Colour codes are removed, identical errors are counted, not repeated.
+
+Where the run comes from:
+
+- `testResult` mode: the run exists from the start, so a failing `globalSetup` leaves an empty run that now carries the error.
+- `testRun` mode: when no result was published (for example `globalSetup` failed) the run is created only to carry the errors. Without this option nothing is created in that case, as before.
+- `isExistingTestRun` and `testRunADO`: only the attachment is added; the fields of the run are never modified.
+
+The attachment is uploaded independently of `uploadAttachments`. It contains the error text as Playwright reports it, which may include paths and code snippets of your project, so the option is off by default. A failure while publishing is logged and never fails the run. The token needs the same scope as for results (Test Management: Read & write).
+
+### Run Context: Shard and Tags
+
+With `--shard=1/4` ... `--shard=4/4` four processes create four test runs with an identical title. `testRunContext` makes them distinguishable and carries the tags of your Playwright config over to the Azure DevOps run.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `testRunContext` | `boolean \| object` | `false` | `true` or `{ enabled: true }` turns on both parts below |
+| `testRunContext.shardInTitle` | `boolean` | `true` | Add the shard to the run title: `Playwright Test Run (shard 2/4)`. Nothing is added without sharding |
+| `testRunContext.tags` | `boolean` | `true` | Add the `tag` values of the Playwright config as tags of the run (Playwright 1.57 and newer) |
+
+```typescript
+{
+  testRunContext: true,
+  // or: testRunContext: { enabled: true, shardInTitle: true, tags: false },
+}
+```
+
+Tags are merged with `testRunConfig.tags`, yours first. A leading `@` is removed (`'@smoke'` becomes `smoke`). Azure DevOps accepts only letters and digits in run tags, so a tag such as `@feature:login`, `@a b` or `@snake_case` is skipped with a warning that names it; the other tags are still used. Empty and duplicate values (case-insensitive) are dropped too. A run keeps at most 5 tags, tags that do not fit are not added and logged. If Azure DevOps rejects the new run anyway, the reporter creates it again without the tags from the Playwright config, so a tag can never prevent reporting.
+
+> **Note:** Azure DevOps accepts tags only on runs that are associated with a build or a release (`Test Tag is only supported for Automated runs, make sure we have build or release associated`). Without one, the create request is rejected, and the same happens to tags you set in `testRunConfig.tags`, with or without `testRunContext`. Associate the run with a build through `testRunConfig`, for example `testRunConfig: { build: { id: '<build id>' } }`, or leave the tags out. The tags from the Playwright config can be dropped on their own with `testRunContext: { enabled: true, tags: false }`.
+
 ### Attachments & Logs
 
 | Option | Type | Default | Description |
@@ -310,6 +362,15 @@ A `Test steps summary` line is printed at the end of the run. Steps that could n
 | `uploadAttachments` | `boolean` | `false` | Upload attachments (screenshots/video) after each test |
 | `attachmentsType` | `(string\|RegExp)[]` | `['screenshot']` | Filter which attachments to upload by type or name pattern |
 | `uploadLogs` | `boolean` | `false` | Upload stdout/stderr logs (independent of `uploadAttachments`) |
+
+`attachmentsType` matches the **name** of an attachment. Besides `'screenshot'`, `'video'` and `'trace'`, add `'error-context'` to upload the Markdown file Playwright attaches to failing tests (the page snapshot and the error, written for AI assistants and handy when reading a failure in Azure DevOps). It is uploaded as `error_context_<id>.md`. On Playwright 1.64 it is attached to every failing test, on older versions only when a page snapshot exists. It is not part of the default, so nothing more is uploaded unless you ask for it:
+
+```typescript
+{
+  uploadAttachments: true,
+  attachmentsType: ['screenshot', 'error-context'],
+}
+```
 
 ### Test Point Mapping
 
@@ -567,9 +628,11 @@ Some reporter features need data that only newer Playwright versions provide. On
 
 | Feature | Playwright | Level | If Playwright is older |
 |:---|:---|:---|:---|
+| `publishGlobalErrors.worker`<br>the project and worker index of worker errors in Reporter.onError | >= 1.60.0 | enrichment | errors are reported without project and worker index |
 | `publishTestSteps`<br>TestResult.steps and the TestStep API | >= 1.10.0 | required | step publishing is switched off |
 | `publishTestSteps.params`<br>TestStep.params and TestStep.subtitle (test.step options) | >= 1.63.0 | enrichment | steps are published without iteration parameters and subtitles |
 | `testCaseIdZone.title.tags`<br>TestCase.tags, so test case ids can be declared with tag: ["@[123]"] | >= 1.42.0 | enrichment | ids are read from test titles only |
+| `testRunContext.tags`<br>FullConfig.tags, the tags of the Playwright config | >= 1.57.0 | enrichment | run tags are not taken from the Playwright config |
 
 - **required**: the feature cannot work below that version.
 - **enrichment**: the feature works, but part of its output is unavailable below that version.

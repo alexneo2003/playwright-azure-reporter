@@ -37,6 +37,13 @@ export interface FeatureRequirement {
  */
 export const FEATURE_MATRIX: readonly FeatureRequirement[] = [
   {
+    id: 'publishGlobalErrors.worker',
+    since: '1.60.0',
+    level: 'enrichment',
+    provides: 'the project and worker index of worker errors in Reporter.onError',
+    fallback: 'errors are reported without project and worker index',
+  },
+  {
     id: 'publishTestSteps',
     since: '1.10.0',
     level: 'required',
@@ -56,6 +63,13 @@ export const FEATURE_MATRIX: readonly FeatureRequirement[] = [
     level: 'enrichment',
     provides: 'TestCase.tags, so test case ids can be declared with tag: ["@[123]"]',
     fallback: 'ids are read from test titles only',
+  },
+  {
+    id: 'testRunContext.tags',
+    since: '1.57.0',
+    level: 'enrichment',
+    provides: 'FullConfig.tags, the tags of the Playwright config',
+    fallback: 'run tags are not taken from the Playwright config',
   },
 ];
 

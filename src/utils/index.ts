@@ -7,6 +7,7 @@ export const getMimeTypeFromFilename = (filename: string): string => {
 
 const EXTENSION_ALIASES: Record<string, string> = {
   jpg: 'jpeg',
+  markdown: 'md',
 };
 
 export const getExtensionFromContentType = (contentType: string): string => {

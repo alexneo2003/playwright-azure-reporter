@@ -28,6 +28,7 @@ test.describe('Reporter utils', () => {
     expect(getExtensionFromFilename('test.xml')).toBe('xml');
     expect(getExtensionFromFilename('test.json')).toBe('json');
     expect(getExtensionFromFilename('test.pdf')).toBe('pdf');
+    expect(getExtensionFromFilename('error-context.md')).toBe('md');
     expect(getExtensionFromFilename('')).toBe('bin');
   });
 
@@ -37,6 +38,7 @@ test.describe('Reporter utils', () => {
     expect(getExtensionFromContentType('image/gif')).toBe('gif');
     expect(getExtensionFromContentType('text/plain')).toBe('txt');
     expect(getExtensionFromContentType('text/html')).toBe('html');
+    expect(getExtensionFromContentType('text/markdown')).toBe('md');
     expect(getExtensionFromContentType('application/xml')).toBe('xml');
     expect(getExtensionFromContentType('application/json')).toBe('json');
     expect(getExtensionFromContentType('application/pdf')).toBe('pdf');
