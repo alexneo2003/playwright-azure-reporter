@@ -351,7 +351,9 @@ With `--shard=1/4` ... `--shard=4/4` four processes create four test runs with a
 }
 ```
 
-Tags are merged with `testRunConfig.tags`, yours first. A leading `@` is removed (`'@smoke'` becomes `smoke`); empty and duplicate values (case-insensitive), values with `,` or `;` and values longer than 100 characters are skipped. A run keeps at most 5 tags, tags that do not fit are not added and logged. If Azure DevOps rejects the new run, the reporter creates it again without the tags from the Playwright config, so a tag can never prevent reporting.
+Tags are merged with `testRunConfig.tags`, yours first. A leading `@` is removed (`'@smoke'` becomes `smoke`). Azure DevOps accepts only letters and digits in run tags, so a tag such as `@feature:login`, `@a b` or `@snake_case` is skipped with a warning that names it; the other tags are still used. Empty and duplicate values (case-insensitive) are dropped too. A run keeps at most 5 tags, tags that do not fit are not added and logged. If Azure DevOps rejects the new run anyway, the reporter creates it again without the tags from the Playwright config, so a tag can never prevent reporting.
+
+> **Note:** Azure DevOps accepts tags only on runs that are associated with a build or a release (`Test Tag is only supported for Automated runs, make sure we have build or release associated`). Without one, the create request is rejected, and the same happens to tags you set in `testRunConfig.tags`, with or without `testRunContext`. Associate the run with a build through `testRunConfig`, for example `testRunConfig: { build: { id: '<build id>' } }`, or leave the tags out. The tags from the Playwright config can be dropped on their own with `testRunContext: { enabled: true, tags: false }`.
 
 ### Attachments & Logs
 

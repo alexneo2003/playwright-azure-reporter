@@ -27,22 +27,32 @@ export function formatShardSuffix(shard: unknown): string {
 }
 
 /**
- * Turns Playwright config tags (`@smoke`) into run tag names: trimmed, without the leading `@`,
- * without empty or duplicate (case-insensitive) values and without values Azure DevOps may reject
- * (`,` and `;` separate tags, more than 100 characters).
+ * Azure DevOps accepts only letters and digits in run tags ("Only Alphanumeric characters are allowed to be
+ * used for tags."). Verified on a live organization: `feature:login` and `a b` are rejected.
  */
-export function normalizeConfigTags(tags: unknown): string[] {
-  if (!Array.isArray(tags)) return [];
+const RUN_TAG_PATTERN = /^[\p{L}\p{N}]+$/u;
+
+/**
+ * Turns Playwright config tags (`@smoke`) into run tag names: trimmed, without the leading `@`, without empty
+ * and duplicate (case-insensitive) values. Values Azure DevOps would reject (anything but letters and digits,
+ * more than 100 characters) are returned in `skipped`, so one bad tag does not cost the others.
+ */
+export function normalizeConfigTags(tags: unknown): { names: string[]; skipped: string[] } {
+  const result: { names: string[]; skipped: string[] } = { names: [], skipped: [] };
+  if (!Array.isArray(tags)) return result;
   const seen = new Set<string>();
-  const result: string[] = [];
   for (const tag of tags) {
     if (typeof tag !== 'string') continue;
     const name = tag.trim().replace(/^@+/, '').trim();
-    if (!name || name.length > MAX_TAG_LENGTH || /[,;]/.test(name)) continue;
+    if (!name) continue;
+    if (name.length > MAX_TAG_LENGTH || !RUN_TAG_PATTERN.test(name)) {
+      result.skipped.push(tag.trim());
+      continue;
+    }
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push(name);
+    result.names.push(name);
   }
   return result;
 }
