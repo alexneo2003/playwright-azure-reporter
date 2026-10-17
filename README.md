@@ -19,6 +19,7 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [Retry Results](#retry-results)
   - [Test Step Results](#test-step-results)
   - [Errors Outside of Tests](#errors-outside-of-tests)
+  - [Run Context: Shard and Tags](#run-context-shard-and-tags)
   - [Attachments & Logs](#attachments--logs)
   - [Test Point Mapping](#test-point-mapping)
   - [Test Case ID Matching](#test-case-id-matching)
@@ -333,6 +334,25 @@ Where the run comes from:
 
 The attachment is uploaded independently of `uploadAttachments`. It contains the error text as Playwright reports it, which may include paths and code snippets of your project, so the option is off by default. A failure while publishing is logged and never fails the run. The token needs the same scope as for results (Test Management: Read & write).
 
+### Run Context: Shard and Tags
+
+With `--shard=1/4` ... `--shard=4/4` four processes create four test runs with an identical title. `testRunContext` makes them distinguishable and carries the tags of your Playwright config over to the Azure DevOps run.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `testRunContext` | `boolean \| object` | `false` | `true` or `{ enabled: true }` turns on both parts below |
+| `testRunContext.shardInTitle` | `boolean` | `true` | Add the shard to the run title: `Playwright Test Run (shard 2/4)`. Nothing is added without sharding |
+| `testRunContext.tags` | `boolean` | `true` | Add the `tag` values of the Playwright config as tags of the run (Playwright 1.57 and newer) |
+
+```typescript
+{
+  testRunContext: true,
+  // or: testRunContext: { enabled: true, shardInTitle: true, tags: false },
+}
+```
+
+Tags are merged with `testRunConfig.tags`, yours first. A leading `@` is removed (`'@smoke'` becomes `smoke`); empty and duplicate values (case-insensitive), values with `,` or `;` and values longer than 100 characters are skipped. A run keeps at most 5 tags, tags that do not fit are not added and logged. If Azure DevOps rejects the new run, the reporter creates it again without the tags from the Playwright config, so a tag can never prevent reporting.
+
 ### Attachments & Logs
 
 | Option | Type | Default | Description |
@@ -601,6 +621,7 @@ Some reporter features need data that only newer Playwright versions provide. On
 | `publishTestSteps`<br>TestResult.steps and the TestStep API | >= 1.10.0 | required | step publishing is switched off |
 | `publishTestSteps.params`<br>TestStep.params and TestStep.subtitle (test.step options) | >= 1.63.0 | enrichment | steps are published without iteration parameters and subtitles |
 | `testCaseIdZone.title.tags`<br>TestCase.tags, so test case ids can be declared with tag: ["@[123]"] | >= 1.42.0 | enrichment | ids are read from test titles only |
+| `testRunContext.tags`<br>FullConfig.tags, the tags of the Playwright config | >= 1.57.0 | enrichment | run tags are not taken from the Playwright config |
 
 - **required**: the feature cannot work below that version.
 - **enrichment**: the feature works, but part of its output is unavailable below that version.

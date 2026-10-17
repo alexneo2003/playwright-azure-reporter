@@ -64,6 +64,13 @@ export const FEATURE_MATRIX: readonly FeatureRequirement[] = [
     provides: 'TestCase.tags, so test case ids can be declared with tag: ["@[123]"]',
     fallback: 'ids are read from test titles only',
   },
+  {
+    id: 'testRunContext.tags',
+    since: '1.57.0',
+    level: 'enrichment',
+    provides: 'FullConfig.tags, the tags of the Playwright config',
+    fallback: 'run tags are not taken from the Playwright config',
+  },
 ];
 
 export interface PlaywrightVersionInfo {
