@@ -50,7 +50,7 @@ enum EAzureTestStatuses {
   interrupted = 'Aborted',
 }
 // eslint-disable-next-line
-const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
+const attachmentTypesArray = ['screenshot', 'video', 'trace', 'error-context'] as const;
 
 type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;

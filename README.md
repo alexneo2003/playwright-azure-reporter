@@ -361,6 +361,15 @@ Tags are merged with `testRunConfig.tags`, yours first. A leading `@` is removed
 | `attachmentsType` | `(string\|RegExp)[]` | `['screenshot']` | Filter which attachments to upload by type or name pattern |
 | `uploadLogs` | `boolean` | `false` | Upload stdout/stderr logs (independent of `uploadAttachments`) |
 
+`attachmentsType` matches the **name** of an attachment. Besides `'screenshot'`, `'video'` and `'trace'`, add `'error-context'` to upload the Markdown file Playwright attaches to failing tests (the page snapshot and the error, written for AI assistants and handy when reading a failure in Azure DevOps). It is uploaded as `error_context_<id>.md`. On Playwright 1.64 it is attached to every failing test, on older versions only when a page snapshot exists. It is not part of the default, so nothing more is uploaded unless you ask for it:
+
+```typescript
+{
+  uploadAttachments: true,
+  attachmentsType: ['screenshot', 'error-context'],
+}
+```
+
 ### Test Point Mapping
 
 #### `testPointMapper`
