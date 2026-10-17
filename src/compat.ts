@@ -37,6 +37,13 @@ export interface FeatureRequirement {
  */
 export const FEATURE_MATRIX: readonly FeatureRequirement[] = [
   {
+    id: 'publishGlobalErrors.worker',
+    since: '1.60.0',
+    level: 'enrichment',
+    provides: 'the project and worker index of worker errors in Reporter.onError',
+    fallback: 'errors are reported without project and worker index',
+  },
+  {
     id: 'publishTestSteps',
     since: '1.10.0',
     level: 'required',

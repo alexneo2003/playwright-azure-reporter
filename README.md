@@ -18,6 +18,7 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [Publishing Modes](#publishing-modes)
   - [Retry Results](#retry-results)
   - [Test Step Results](#test-step-results)
+  - [Errors Outside of Tests](#errors-outside-of-tests)
   - [Attachments & Logs](#attachments--logs)
   - [Test Point Mapping](#test-point-mapping)
   - [Test Case ID Matching](#test-case-id-matching)
@@ -303,6 +304,35 @@ A `Test steps summary` line is printed at the end of the run. Steps that could n
 
 > **Note:** `[N]` in a step title and `[N]` in a test title are matched independently: `testCaseIdMatcher` only looks at test titles, `testStepIdMatcher` only at step titles.
 
+### Errors Outside of Tests
+
+Playwright reports some failures outside of any test: a `globalSetup` that throws, a worker-scoped fixture that fails in teardown (the tests stay `Passed`, the run fails), `--max-failures` stopping the run, a crashed worker. The CI job is red, but the Azure DevOps run says nothing about it. With `publishGlobalErrors` the reporter collects these errors (`Reporter.onError`) and puts them on the test run.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `publishGlobalErrors` | `boolean \| object` | `false` | `true` or `{ enabled: true }` turns the feature on |
+| `publishGlobalErrors.maxErrors` | `number` | `20` | How many distinct errors are listed in the attachment; the rest is only counted |
+
+```typescript
+{
+  publishGlobalErrors: true,
+  // or: publishGlobalErrors: { enabled: true, maxErrors: 10 },
+}
+```
+
+What is published, once, at the end of the run, and only when Playwright reported at least one such error:
+
+- `errorMessage` of the test run, for runs the reporter created: `Playwright reported 2 error(s) outside of tests. First: ...` (at most 1000 characters).
+- A run attachment `playwright-global-errors.md` with the Playwright run status, the duration and, per error, the message, the project and worker index (Playwright 1.60 and newer), the location and a trimmed stack. Colour codes are removed, identical errors are counted, not repeated.
+
+Where the run comes from:
+
+- `testResult` mode: the run exists from the start, so a failing `globalSetup` leaves an empty run that now carries the error.
+- `testRun` mode: when no result was published (for example `globalSetup` failed) the run is created only to carry the errors. Without this option nothing is created in that case, as before.
+- `isExistingTestRun` and `testRunADO`: only the attachment is added; the fields of the run are never modified.
+
+The attachment is uploaded independently of `uploadAttachments`. It contains the error text as Playwright reports it, which may include paths and code snippets of your project, so the option is off by default. A failure while publishing is logged and never fails the run. The token needs the same scope as for results (Test Management: Read & write).
+
 ### Attachments & Logs
 
 | Option | Type | Default | Description |
@@ -567,6 +597,7 @@ Some reporter features need data that only newer Playwright versions provide. On
 
 | Feature | Playwright | Level | If Playwright is older |
 |:---|:---|:---|:---|
+| `publishGlobalErrors.worker`<br>the project and worker index of worker errors in Reporter.onError | >= 1.60.0 | enrichment | errors are reported without project and worker index |
 | `publishTestSteps`<br>TestResult.steps and the TestStep API | >= 1.10.0 | required | step publishing is switched off |
 | `publishTestSteps.params`<br>TestStep.params and TestStep.subtitle (test.step options) | >= 1.63.0 | enrichment | steps are published without iteration parameters and subtitles |
 | `testCaseIdZone.title.tags`<br>TestCase.tags, so test case ids can be declared with tag: ["@[123]"] | >= 1.42.0 | enrichment | ids are read from test titles only |
