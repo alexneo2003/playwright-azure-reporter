@@ -203,6 +203,8 @@ Control how and when test results are sent to Azure DevOps with `publishTestResu
 
 > **Note:** In `testRun` mode, if the same test case ID appears in multiple tests, only the last result is kept.
 
+> **Note:** A run with no tests (no test matched the filter, or `globalSetup` failed) creates no test run in Azure DevOps, unless `publishGlobalErrors` has errors to put on one.
+
 #### Existing Test Runs
 
 To publish results to an existing test run instead of creating a new one:
@@ -328,7 +330,7 @@ What is published, once, at the end of the run, and only when Playwright reporte
 
 Where the run comes from:
 
-- `testResult` mode: the run exists from the start, so a failing `globalSetup` leaves an empty run that now carries the error.
+- `testResult` mode: a failing `globalSetup` leaves no tests, so the run is created at the end only to carry the errors. Without this option nothing is created in that case.
 - `testRun` mode: when no result was published (for example `globalSetup` failed) the run is created only to carry the errors. Without this option nothing is created in that case, as before.
 - `isExistingTestRun` and `testRunADO`: only the attachment is added; the fields of the run are never modified.
 
