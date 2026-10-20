@@ -1,6 +1,6 @@
 import { DefaultAzureCredential } from '@azure/identity';
 import type { WorkerInfo } from '@playwright/test';
-import { FullConfig, FullResult, Reporter, TestCase, TestError, TestResult } from '@playwright/test/reporter';
+import { FullConfig, FullResult, Reporter, Suite, TestCase, TestError, TestResult } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
@@ -240,7 +240,7 @@ class AzureDevOpsReporter implements Reporter {
   private _credential?: DefaultAzureCredential;
   private _tokenExpiresOn?: Date;
   private _runIdPromise: Promise<number | void>;
-  private _resolveRunId: (value: number) => void = () => {};
+  private _resolveRunId: (value: number | void) => void = () => {};
   private _rejectRunId: (reason: unknown) => void = () => {};
   private _publishResultsPromise: Promise<void>;
   private _resolvePublishResults: () => void = () => {};
@@ -284,6 +284,8 @@ class AzureDevOpsReporter implements Reporter {
   private _runContext = { shardInTitle: false, tags: false };
   private _contextTags: string[] = [];
   private _currentRunId: number | undefined;
+  /** `testResult` mode with no tests: the run is created at the end, and only if there are errors to put on it. */
+  private _isRunDeferred = false;
   private _fullResult: FullResult | undefined;
   private _testStepsOptions: TestStepsMappingOptions = { ...DEFAULT_TEST_STEPS_OPTIONS };
   private _testStepsStats = { results: 0, steps: 0, unmapped: 0 };
@@ -685,7 +687,7 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
-  async onBegin(config?: FullConfig): Promise<void> {
+  async onBegin(config?: FullConfig, suite?: Suite): Promise<void> {
     if (this._isDisabled) return;
 
     this._applyRunContext(config);
@@ -713,7 +715,12 @@ class AzureDevOpsReporter implements Reporter {
       }
       this._testApi = await this._connection.getTestApi();
 
-      if (this._publishTestResultsMode === 'testResult') {
+      // Playwright begins an empty suite when no test matched the filter or globalSetup threw.
+      if (this._publishTestResultsMode === 'testResult' && suite?.allTests().length === 0) {
+        this._isRunDeferred = true;
+        this._resolveRunId();
+        this._logger?.info('No tests to run. Test run is not created.');
+      } else if (this._publishTestResultsMode === 'testResult') {
         const run = await this._createRun(this._testRunTitle);
         if (run?.id) {
           this._resolveRunId(run.id);
@@ -840,7 +847,7 @@ class AzureDevOpsReporter implements Reporter {
     try {
       let runId = this._currentRunId;
       let completeRun = false;
-      if (!runId && !this._isExistingTestRun && this._publishTestResultsMode === 'testRun') {
+      if (!runId && !this._isExistingTestRun && (this._publishTestResultsMode === 'testRun' || this._isRunDeferred)) {
         // Nothing was published (for example globalSetup failed), the run is created only to carry the errors.
         const run = await this._createRun(this._testRunTitle);
         runId = run?.id;
