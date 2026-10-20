@@ -54,6 +54,7 @@ type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' |
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
 type TPublishTestResults = 'testResult' | 'testRun' | 'testRunADO';
 type TPublishRetryResults = 'all' | 'last';
+type TTestFailOutcome = 'outcome' | 'actual';
 type TTestCaseIdZone = 'title' | 'annotation';
 type TPublishTestStepsOptions = {
   enabled?: boolean;
@@ -117,6 +118,12 @@ export interface AzureReporterOptions {
     automatedTestType?: (testCase: TestCase) => string;
   };
   publishRetryResults?: TPublishRetryResults;
+  /**
+   * How a test marked `test.fail()` is published. `outcome` (default) publishes Playwright's outcome,
+   * so a test that fails as declared is Passed. `actual` publishes what happened: Failed when it fails,
+   * and Failed with "Expected to fail, but passed." when it passes.
+   */
+  testFailOutcome?: TTestFailOutcome;
   publishTestSteps?: boolean | TPublishTestStepsOptions;
   /**
    * What to do when the installed Playwright is older than an enabled feature requires
@@ -253,6 +260,7 @@ class AzureDevOpsReporter implements Reporter {
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _publishRetryResults: TPublishRetryResults = 'all';
+  private _testFailOutcome: TTestFailOutcome = 'outcome';
   private _publishTestSteps = false;
   private _testStepsOptions: TestStepsMappingOptions = { ...DEFAULT_TEST_STEPS_OPTIONS };
   private _testStepsStats = { results: 0, steps: 0, unmapped: 0 };
@@ -332,6 +340,7 @@ class AzureDevOpsReporter implements Reporter {
     this._autoMarkTestType = options.autoMarkTestCasesAsAutomated?.automatedTestType;
 
     this._publishRetryResults = options.publishRetryResults || 'all';
+    this._testFailOutcome = options.testFailOutcome === 'actual' ? 'actual' : 'outcome';
     this._initPublishTestSteps(options.publishTestSteps);
 
     this._validateOptions(options);
@@ -1797,11 +1806,22 @@ class AzureDevOpsReporter implements Reporter {
       } else {
         return EAzureTestStatuses['other'];
       }
+    } else if (this._isPublishedAsActualFailure(test, testResult)) {
+      return EAzureTestStatuses['failed'];
     } else if (test.outcome() === 'expected') {
       return EAzureTestStatuses['passed'];
     } else {
       return EAzureTestStatuses[status];
     }
+  }
+
+  /** `testFailOutcome: 'actual'`: a `test.fail()` test that failed or passed is published as Failed. */
+  private _isPublishedAsActualFailure(test: TestCase, testResult: TestResult): boolean {
+    return (
+      this._testFailOutcome === 'actual' &&
+      test.expectedStatus === 'failed' &&
+      (testResult.status === 'failed' || testResult.status === 'passed')
+    );
   }
 
   /**
@@ -2033,6 +2053,7 @@ class AzureDevOpsReporter implements Reporter {
     existingTestCaseResult?: TestInterfaces.TestCaseResult
   ): TestInterfaces.TestCaseResult {
     const baseResult: TestInterfaces.TestCaseResult = existingTestCaseResult ? { ...existingTestCaseResult } : {};
+    const unexpectedPass = testResult.status === 'passed' && this._isPublishedAsActualFailure(testCase, testResult);
 
     return {
       ...baseResult,
@@ -2040,11 +2061,13 @@ class AzureDevOpsReporter implements Reporter {
       outcome: this._mapToAzureState(testCase, testResult),
       state: 'Completed',
       durationInMs: testResult.duration,
-      errorMessage: testResult.error
-        ? `${testCase.title}:\n\n${testResult.errors
-            ?.map((error, idx) => `ERROR #${idx + 1}:\n${stripAnsi(error.message)}`)
-            .join('\n\n')}`
-        : undefined,
+      errorMessage: unexpectedPass
+        ? `${testCase.title}:\n\nExpected to fail, but passed.`
+        : testResult.error
+          ? `${testCase.title}:\n\n${testResult.errors
+              ?.map((error, idx) => `ERROR #${idx + 1}:\n${stripAnsi(error.message)}`)
+              .join('\n\n')}`
+          : undefined,
       stackTrace: `${testResult.errors
         ?.map((error, idx) => `STACK #${idx + 1}:\n\n${stripAnsi(error.stack)}`)
         .join('\n\n\n')}`,
