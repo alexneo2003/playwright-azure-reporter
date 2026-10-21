@@ -58,7 +58,7 @@ function setupRoutes(server: any, publishedResults: any[]) {
   });
 }
 
-function config(port: number, testFailOutcome?: string): string {
+function config(port: number, testFailOutcome?: string, extraOptions = ''): string {
   return `
     module.exports = {
       reporter: [
@@ -70,11 +70,21 @@ function config(port: number, testFailOutcome?: string): string {
           token: 'token',
           logging: true,
           ${testFailOutcome ? `testFailOutcome: '${testFailOutcome}',` : ''}
+          ${extraOptions}
         }]
       ]
     };
   `;
 }
+
+const TIMES_OUT = `
+  import { test } from '@playwright/test';
+  test('[3] known bug that hangs', async ({}) => {
+    test.fail();
+    test.setTimeout(500);
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  });
+`;
 
 const FAILS_AS_DECLARED = `
   import { test, expect } from '@playwright/test';
@@ -168,5 +178,78 @@ test.describe('testFailOutcome', () => {
     expect(publishedResults.length).toBe(1);
     expect(publishedResults[0].outcome).toBe('Passed');
     expect(publishedResults[0].errorMessage).toBeUndefined();
+  });
+
+  test("'outcome' (default): a test.fail() test that passes is published as Passed with no error", async ({
+    runInlineTest,
+    server,
+  }) => {
+    const publishedResults: any[] = [];
+    setupRoutes(server, publishedResults);
+
+    const result = await runInlineTest(
+      { 'playwright.config.ts': config(server.PORT), 'a.spec.js': PASSES_UNEXPECTEDLY },
+      { reporter: '' }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(publishedResults.length).toBe(1);
+    expect(publishedResults[0].outcome).toBe('Passed');
+    expect(publishedResults[0].errorMessage).toBeUndefined();
+  });
+
+  for (const mode of ['outcome', 'actual']) {
+    test(`'${mode}': a test.fail() test that times out is published as Timeout`, async ({ runInlineTest, server }) => {
+      const publishedResults: any[] = [];
+      setupRoutes(server, publishedResults);
+
+      const result = await runInlineTest(
+        { 'playwright.config.ts': config(server.PORT, mode), 'a.spec.js': TIMES_OUT },
+        { reporter: '' }
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(publishedResults.length).toBe(1);
+      expect(publishedResults[0].outcome).toBe('Timeout');
+    });
+  }
+
+  test("'actual' in testRun mode: a test.fail() test that passes is published as Failed with 'Expected to fail, but passed.'", async ({
+    runInlineTest,
+    server,
+  }) => {
+    const publishedResults: any[] = [];
+    setupRoutes(server, publishedResults);
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': config(server.PORT, 'actual', "publishTestResultsMode: 'testRun',"),
+        'a.spec.js': PASSES_UNEXPECTEDLY,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(publishedResults.length).toBe(1);
+    expect(publishedResults[0].outcome).toBe('Failed');
+    expect(publishedResults[0].errorMessage).toBe('[3] fixed bug:\n\nExpected to fail, but passed.');
+  });
+
+  test('an unknown testFailOutcome value logs a warning and behaves as the default', async ({
+    runInlineTest,
+    server,
+  }) => {
+    const publishedResults: any[] = [];
+    setupRoutes(server, publishedResults);
+
+    const result = await runInlineTest(
+      { 'playwright.config.ts': config(server.PORT, 'ACTUAL'), 'a.spec.js': FAILS_AS_DECLARED },
+      { reporter: '' }
+    );
+
+    expect(result.output).toContain(`'testFailOutcome' value "ACTUAL" is not 'outcome' or 'actual'. Using 'outcome'.`);
+    expect(result.exitCode).toBe(0);
+    expect(publishedResults.length).toBe(1);
+    expect(publishedResults[0].outcome).toBe('Passed');
   });
 });

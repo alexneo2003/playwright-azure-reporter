@@ -383,6 +383,11 @@ class AzureDevOpsReporter implements Reporter {
       this._setIsDisable(true);
       return;
     }
+    if (options.testFailOutcome !== undefined && !['outcome', 'actual'].includes(options.testFailOutcome)) {
+      this._logger?.warn(
+        `'testFailOutcome' value "${options.testFailOutcome}" is not 'outcome' or 'actual'. Using 'outcome'.`
+      );
+    }
     if (!options?.orgUrl) {
       this._logger?.warn("'orgUrl' is not set. Reporting is disabled.");
       this._setIsDisable(true);
@@ -2053,7 +2058,6 @@ class AzureDevOpsReporter implements Reporter {
     existingTestCaseResult?: TestInterfaces.TestCaseResult
   ): TestInterfaces.TestCaseResult {
     const baseResult: TestInterfaces.TestCaseResult = existingTestCaseResult ? { ...existingTestCaseResult } : {};
-    const unexpectedPass = testResult.status === 'passed' && this._isPublishedAsActualFailure(testCase, testResult);
 
     return {
       ...baseResult,
@@ -2061,17 +2065,22 @@ class AzureDevOpsReporter implements Reporter {
       outcome: this._mapToAzureState(testCase, testResult),
       state: 'Completed',
       durationInMs: testResult.duration,
-      errorMessage: unexpectedPass
-        ? `${testCase.title}:\n\nExpected to fail, but passed.`
-        : testResult.error
-          ? `${testCase.title}:\n\n${testResult.errors
-              ?.map((error, idx) => `ERROR #${idx + 1}:\n${stripAnsi(error.message)}`)
-              .join('\n\n')}`
-          : undefined,
+      errorMessage: this._resultErrorMessage(testCase, testResult),
       stackTrace: `${testResult.errors
         ?.map((error, idx) => `STACK #${idx + 1}:\n\n${stripAnsi(error.stack)}`)
         .join('\n\n\n')}`,
     };
+  }
+
+  private _resultErrorMessage(testCase: TestCase, testResult: TestResult): string | undefined {
+    if (testResult.status === 'passed' && this._isPublishedAsActualFailure(testCase, testResult)) {
+      // Playwright reports an unexpected pass with no error, so the result would carry no reason for Failed.
+      return `${testCase.title}:\n\nExpected to fail, but passed.`;
+    }
+    if (!testResult.error) return undefined;
+    return `${testCase.title}:\n\n${testResult.errors
+      ?.map((error, idx) => `ERROR #${idx + 1}:\n${stripAnsi(error.message)}`)
+      .join('\n\n')}`;
   }
 
   private _prepareLogAttachments(testResult: TestResult) {
