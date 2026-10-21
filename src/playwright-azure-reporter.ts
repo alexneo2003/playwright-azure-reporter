@@ -1,5 +1,6 @@
 import { DefaultAzureCredential } from '@azure/identity';
-import { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
+import type { WorkerInfo } from '@playwright/test';
+import { FullConfig, FullResult, Reporter, TestCase, TestError, TestResult } from '@playwright/test/reporter';
 import * as azdev from 'azure-devops-node-api';
 import { WebApi } from 'azure-devops-node-api';
 import { ICoreApi } from 'azure-devops-node-api/CoreApi';
@@ -25,7 +26,9 @@ import {
   formatStrictModeError,
   PlaywrightVersionInfo,
 } from './compat';
+import { DEFAULT_MAX_GLOBAL_ERRORS, GlobalErrorCollector } from './global-errors';
 import Logger from './logger';
+import { formatShardSuffix, mergeRunTags, normalizeConfigTags } from './run-context';
 import {
   buildIterationDetails,
   collectSteps,
@@ -47,7 +50,7 @@ enum EAzureTestStatuses {
   interrupted = 'Aborted',
 }
 // eslint-disable-next-line
-const attachmentTypesArray = ['screenshot', 'video', 'trace'] as const;
+const attachmentTypesArray = ['screenshot', 'video', 'trace', 'error-context'] as const;
 
 type TAttachmentType = Array<(typeof attachmentTypesArray)[number] | RegExp>;
 type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' | 'plan' | 'pointIds'> | undefined;
@@ -69,6 +72,18 @@ type TPublishTestStepsOptions = {
    * Requires the "Work Items (Read)" token scope. Default: true.
    */
   alignWithTestCase?: boolean;
+};
+type TPublishGlobalErrorsOptions = {
+  enabled?: boolean;
+  /** How many distinct errors are listed in the attachment, the rest is only counted. Default: 20. */
+  maxErrors?: number;
+};
+type TTestRunContextOptions = {
+  enabled?: boolean;
+  /** Add the shard to the title of the run: `Playwright Test Run (shard 2/4)`. Default: true. */
+  shardInTitle?: boolean;
+  /** Add the tags of the Playwright config to the tags of the run. Default: true. */
+  tags?: boolean;
 };
 type TTestStepsUpdate = { resultId: number; iterationDetails: TestInterfaces.TestIterationDetailsModel };
 
@@ -118,6 +133,17 @@ export interface AzureReporterOptions {
   };
   publishRetryResults?: TPublishRetryResults;
   publishTestSteps?: boolean | TPublishTestStepsOptions;
+  /**
+   * Publish the errors Playwright reports outside of tests (failing globalSetup, worker fixture teardown,
+   * `--max-failures`, crashed workers) to the test run: `errorMessage` on runs the reporter created and a
+   * `playwright-global-errors.md` run attachment. Default: off.
+   */
+  publishGlobalErrors?: boolean | TPublishGlobalErrorsOptions;
+  /**
+   * Tell runs apart: put the shard (`--shard=2/4`) into the title of the run and the tags of the Playwright
+   * config (`tag`, Playwright 1.57+) into the tags of the run. Default: off.
+   */
+  testRunContext?: boolean | TTestRunContextOptions;
   /**
    * What to do when the installed Playwright is older than an enabled feature requires
    * (see the feature matrix in README). `lenient` (default) switches the feature off or degrades it
@@ -254,6 +280,11 @@ class AzureDevOpsReporter implements Reporter {
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _publishRetryResults: TPublishRetryResults = 'all';
   private _publishTestSteps = false;
+  private _globalErrors: GlobalErrorCollector | undefined;
+  private _runContext = { shardInTitle: false, tags: false };
+  private _contextTags: string[] = [];
+  private _currentRunId: number | undefined;
+  private _fullResult: FullResult | undefined;
   private _testStepsOptions: TestStepsMappingOptions = { ...DEFAULT_TEST_STEPS_OPTIONS };
   private _testStepsStats = { results: 0, steps: 0, unmapped: 0 };
   private _compatibility: CompatibilityPolicy = 'lenient';
@@ -333,6 +364,8 @@ class AzureDevOpsReporter implements Reporter {
 
     this._publishRetryResults = options.publishRetryResults || 'all';
     this._initPublishTestSteps(options.publishTestSteps);
+    this._initPublishGlobalErrors(options.publishGlobalErrors);
+    this._initTestRunContext(options.testRunContext);
 
     this._validateOptions(options);
   }
@@ -358,6 +391,20 @@ class AzureDevOpsReporter implements Reporter {
     if (option.alignWithTestCase === false) {
       this._testStepsAlignWithTestCase = false;
     }
+  }
+
+  private _initTestRunContext(option: AzureReporterOptions['testRunContext']): void {
+    if (!option) return;
+    if (typeof option === 'object' && !option.enabled) return;
+    const sub = typeof option === 'object' ? option : {};
+    this._runContext = { shardInTitle: sub.shardInTitle !== false, tags: sub.tags !== false };
+  }
+
+  private _initPublishGlobalErrors(option: AzureReporterOptions['publishGlobalErrors']): void {
+    if (!option) return;
+    if (typeof option === 'object' && !option.enabled) return;
+    const maxErrors = typeof option === 'object' ? option.maxErrors : undefined;
+    this._globalErrors = new GlobalErrorCollector(maxErrors ?? DEFAULT_MAX_GLOBAL_ERRORS);
   }
 
   _validateOptions(options: AzureReporterOptions): void {
@@ -483,6 +530,8 @@ class AzureDevOpsReporter implements Reporter {
   private _requestedFeatures(): string[] {
     const features: string[] = [];
     if (this._publishTestSteps) features.push('publishTestSteps', 'publishTestSteps.params');
+    if (this._globalErrors) features.push('publishGlobalErrors.worker');
+    if (this._runContext.tags) features.push('testRunContext.tags');
     if (this._testCaseIdZone === 'title') features.push('testCaseIdZone.title.tags');
     return features;
   }
@@ -636,8 +685,10 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
-  async onBegin(): Promise<void> {
+  async onBegin(config?: FullConfig): Promise<void> {
     if (this._isDisabled) return;
+
+    this._applyRunContext(config);
 
     try {
       // Initialize authentication handler and connection
@@ -692,6 +743,28 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  /** Must run before the run is created: the title and the tags are part of the create request. */
+  private _applyRunContext(config: FullConfig | undefined): void {
+    if (!config || (!this._runContext.shardInTitle && !this._runContext.tags)) return;
+    try {
+      if (this._runContext.shardInTitle) {
+        this._testRunTitle += formatShardSuffix(config.shard);
+      }
+      if (this._runContext.tags) {
+        // FullConfig.tags exists since Playwright 1.57 and is missing from older typings.
+        const { names, skipped } = normalizeConfigTags((config as FullConfig & { tags?: unknown }).tags);
+        this._contextTags = names;
+        if (skipped.length > 0) {
+          this._logger?.warn(
+            `Playwright config tags not used as run tags (Azure DevOps accepts only letters and digits): ${skipped.join(', ')}`
+          );
+        }
+      }
+    } catch (error) {
+      this._logger?.debug(`Failed to read the run context from the Playwright config: ${toError(error).message}`);
+    }
+  }
+
   async onTestEnd(test: TestCase, testResult: TestResult): Promise<void> {
     if (this._isDisabled) return;
     try {
@@ -736,14 +809,96 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
-  async onEnd(): Promise<void> {
+  /** Never throws: Playwright counts an exception in a reporter hook as a reporter error and fails the run. */
+  onError(error: TestError, workerInfo?: WorkerInfo): void {
+    try {
+      this._globalErrors?.add(error, workerInfo);
+    } catch {
+      // the collector does not throw; this is only a safety net
+    }
+  }
+
+  async onEnd(result?: FullResult): Promise<void> {
     if (this._isDisabled) return;
+    this._fullResult = result;
 
     try {
       await this._performOnEnd();
     } catch (error) {
       this._logger?.error(`Error in onEnd: ${toError(error).message}`);
     }
+    await this._publishGlobalErrors();
+  }
+
+  /**
+   * Publishes the errors Playwright reported outside of tests. Runs after the regular end-of-run work, which
+   * has already put the summary into `errorMessage` when it completed a run created by this reporter.
+   */
+  private async _publishGlobalErrors(): Promise<void> {
+    const collector = this._globalErrors;
+    if (!collector || collector.total === 0 || this._isDisabled) return;
+    try {
+      let runId = this._currentRunId;
+      let completeRun = false;
+      if (!runId && !this._isExistingTestRun && this._publishTestResultsMode === 'testRun') {
+        // Nothing was published (for example globalSetup failed), the run is created only to carry the errors.
+        const run = await this._createRun(this._testRunTitle);
+        runId = run?.id;
+        if (!runId) return;
+        this._setAzurePWTestRunId(runId);
+        this._resolveRunId(runId);
+        completeRun = true;
+      }
+      if (!runId) return;
+
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      const content = collector.report({
+        status: this._fullResult?.status,
+        durationMs: this._fullResult?.duration,
+        runTitle: this._testRunTitle,
+      });
+      await this._publishGlobalErrorsAttachment(runId, content);
+      if (completeRun) {
+        await this._testApi.updateTestRun(this._runCompletionModel(), this._projectName, runId);
+        this._logger?.info(`Run ${runId} - Completed`, true);
+      }
+    } catch (error) {
+      this._logger?.error(`Failed to publish errors reported outside of tests: ${toError(error).message}`);
+    }
+  }
+
+  private async _publishGlobalErrorsAttachment(runId: number, content: string): Promise<void> {
+    const attachmentRequestModel: TestInterfaces.TestAttachmentRequestModel = {
+      attachmentType: 'GeneralAttachment',
+      fileName: 'playwright-global-errors.md',
+      stream: Buffer.from(content, 'utf8').toString('base64'),
+      comment: 'Generated by Playwright Azure Reporter',
+    };
+    const response = await this._testApi.createTestRunAttachment(attachmentRequestModel, this._projectName, runId);
+    if (!response?.id) {
+      this._logger?.warn('Failed to upload errors reported outside of tests as run attachment');
+    } else {
+      this._logger?.info(
+        `${this._globalErrors!.total} error(s) reported outside of tests attached to run ${runId} as ${attachmentRequestModel.fileName}`
+      );
+    }
+  }
+
+  /**
+   * Completion update for a run this reporter created. The summary of the reported errors goes into
+   * `errorMessage` (what the API returns) and into `comment` (what the run summary page shows, verified on
+   * a live organization: `errorMessage` is not displayed there). A comment from `testRunConfig.comment` is kept.
+   * Existing runs are never modified.
+   */
+  private _runCompletionModel(): TestInterfaces.RunUpdateModel {
+    const model: TestInterfaces.RunUpdateModel = { state: 'Completed' };
+    const summary = this._globalErrors?.summary();
+    if (summary && !this._isExistingTestRun) {
+      model.errorMessage = summary;
+      const userComment = this._testRunConfig?.comment;
+      model.comment = userComment ? `${userComment}\n${summary}` : summary;
+    }
+    return model;
   }
 
   private async _performOnEnd(): Promise<void> {
@@ -843,7 +998,11 @@ class AzureDevOpsReporter implements Reporter {
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
       // In testResult mode runId can be undefined if no results were published; guard before updating
       if (runId && !this._isExistingTestRun) {
-        const runUpdatedResponse = await this._testApi.updateTestRun({ state: 'Completed' }, this._projectName, runId);
+        const runUpdatedResponse = await this._testApi.updateTestRun(
+          this._runCompletionModel(),
+          this._projectName,
+          runId
+        );
         // Force logging only in testRun mode; in testResult mode allow normal logging behavior
         this._logger?.info(`Run ${runId} - ${runUpdatedResponse.state}`, shouldForceLogs);
       } else {
@@ -1095,7 +1254,27 @@ class AzureDevOpsReporter implements Reporter {
               }),
         };
         if (!this._testApi) this._testApi = await this._connection.getTestApi();
-        const adTestRun = await this._testApi.createTestRun(runModel, this._projectName);
+
+        let adTestRun: TestInterfaces.TestRun | undefined;
+        const merged = mergeRunTags(runModel.tags, this._contextTags);
+        if (merged.added.length > 0) {
+          if (merged.dropped.length > 0) {
+            this._logger?.warn(`Run tags limit reached, not added: ${merged.dropped.join(', ')}`);
+          }
+          try {
+            adTestRun = await this._testApi.createTestRun({ ...runModel, tags: merged.tags }, this._projectName);
+          } catch (error) {
+            // a tag Azure DevOps does not accept must never prevent reporting
+            this._logger?.warn(
+              `Creating the test run with the tags [${merged.added.join(', ')}] failed (${toError(error).message}). Retrying without them.`
+            );
+          }
+        } else if (merged.dropped.length > 0) {
+          this._logger?.warn(`Run tags limit reached, not added: ${merged.dropped.join(', ')}`);
+        }
+        if (!adTestRun?.id) {
+          adTestRun = await this._testApi.createTestRun(runModel, this._projectName);
+        }
         if (adTestRun?.id) return adTestRun;
         else throw new Error('Failed to create test run');
       }
@@ -2543,6 +2722,7 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   private _setAzurePWTestRunId(runId: number): void {
+    this._currentRunId = runId;
     process.env.AZURE_PW_TEST_RUN_ID = String(runId);
     console.log(`##vso[task.setvariable variable=AZURE_PW_TEST_RUN_ID;isOutput=true]${String(runId)}`);
   }
