@@ -57,6 +57,7 @@ type TTestRunConfig = Omit<TestInterfaces.RunCreateModel, 'name' | 'automated' |
 type TTestResultsToBePublished = { testCase: ITestCaseExtended; testResult: TestResult };
 type TPublishTestResults = 'testResult' | 'testRun' | 'testRunADO';
 type TPublishRetryResults = 'all' | 'last';
+type TTestFailOutcome = 'outcome' | 'actual';
 type TTestCaseIdZone = 'title' | 'annotation';
 type TPublishTestStepsOptions = {
   enabled?: boolean;
@@ -132,6 +133,12 @@ export interface AzureReporterOptions {
     automatedTestType?: (testCase: TestCase) => string;
   };
   publishRetryResults?: TPublishRetryResults;
+  /**
+   * How a test marked `test.fail()` is published. `outcome` (default) publishes Playwright's outcome,
+   * so a test that fails as declared is Passed. `actual` publishes what happened: Failed when it fails,
+   * and Failed with "Expected to fail, but passed." when it passes.
+   */
+  testFailOutcome?: TTestFailOutcome;
   publishTestSteps?: boolean | TPublishTestStepsOptions;
   /**
    * Publish the errors Playwright reports outside of tests (failing globalSetup, worker fixture teardown,
@@ -279,6 +286,7 @@ class AzureDevOpsReporter implements Reporter {
   private _workItemApi!: WorkItemTrackingApi.IWorkItemTrackingApi;
   private _autoMarkStats = { marked: 0, updated: 0, skipped: 0, failed: 0 };
   private _publishRetryResults: TPublishRetryResults = 'all';
+  private _testFailOutcome: TTestFailOutcome = 'outcome';
   private _publishTestSteps = false;
   private _globalErrors: GlobalErrorCollector | undefined;
   private _runContext = { shardInTitle: false, tags: false };
@@ -363,6 +371,7 @@ class AzureDevOpsReporter implements Reporter {
     this._autoMarkTestType = options.autoMarkTestCasesAsAutomated?.automatedTestType;
 
     this._publishRetryResults = options.publishRetryResults || 'all';
+    this._testFailOutcome = options.testFailOutcome === 'actual' ? 'actual' : 'outcome';
     this._initPublishTestSteps(options.publishTestSteps);
     this._initPublishGlobalErrors(options.publishGlobalErrors);
     this._initTestRunContext(options.testRunContext);
@@ -420,6 +429,11 @@ class AzureDevOpsReporter implements Reporter {
     if (options?.isDisabled) {
       this._setIsDisable(true);
       return;
+    }
+    if (options.testFailOutcome !== undefined && !['outcome', 'actual'].includes(options.testFailOutcome)) {
+      this._logger?.warn(
+        `'testFailOutcome' value "${options.testFailOutcome}" is not 'outcome' or 'actual'. Using 'outcome'.`
+      );
     }
     if (!options?.orgUrl) {
       this._logger?.warn("'orgUrl' is not set. Reporting is disabled.");
@@ -1976,11 +1990,22 @@ class AzureDevOpsReporter implements Reporter {
       } else {
         return EAzureTestStatuses['other'];
       }
+    } else if (this._isPublishedAsActualFailure(test, testResult)) {
+      return EAzureTestStatuses['failed'];
     } else if (test.outcome() === 'expected') {
       return EAzureTestStatuses['passed'];
     } else {
       return EAzureTestStatuses[status];
     }
+  }
+
+  /** `testFailOutcome: 'actual'`: a `test.fail()` test that failed or passed is published as Failed. */
+  private _isPublishedAsActualFailure(test: TestCase, testResult: TestResult): boolean {
+    return (
+      this._testFailOutcome === 'actual' &&
+      test.expectedStatus === 'failed' &&
+      (testResult.status === 'failed' || testResult.status === 'passed')
+    );
   }
 
   /**
@@ -2219,15 +2244,22 @@ class AzureDevOpsReporter implements Reporter {
       outcome: this._mapToAzureState(testCase, testResult),
       state: 'Completed',
       durationInMs: testResult.duration,
-      errorMessage: testResult.error
-        ? `${testCase.title}:\n\n${testResult.errors
-            ?.map((error, idx) => `ERROR #${idx + 1}:\n${stripAnsi(error.message)}`)
-            .join('\n\n')}`
-        : undefined,
+      errorMessage: this._resultErrorMessage(testCase, testResult),
       stackTrace: `${testResult.errors
         ?.map((error, idx) => `STACK #${idx + 1}:\n\n${stripAnsi(error.stack)}`)
         .join('\n\n\n')}`,
     };
+  }
+
+  private _resultErrorMessage(testCase: TestCase, testResult: TestResult): string | undefined {
+    if (testResult.status === 'passed' && this._isPublishedAsActualFailure(testCase, testResult)) {
+      // Playwright reports an unexpected pass with no error, so the result would carry no reason for Failed.
+      return `${testCase.title}:\n\nExpected to fail, but passed.`;
+    }
+    if (!testResult.error) return undefined;
+    return `${testCase.title}:\n\n${testResult.errors
+      ?.map((error, idx) => `ERROR #${idx + 1}:\n${stripAnsi(error.message)}`)
+      .join('\n\n')}`;
   }
 
   private _prepareLogAttachments(testResult: TestResult) {
