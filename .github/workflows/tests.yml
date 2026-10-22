@@ -90,8 +90,29 @@ jobs:
             echo "error_details=Test output file not found" >> $GITHUB_OUTPUT
           fi
       
+      - name: Write test results to the job summary
+        if: always() && matrix.playwright == 'lockfile'
+        run: |
+          {
+            echo "## 🧪 Test Results"
+            echo
+            echo "**Status:** ${{ steps.test-summary.outputs.status }}"
+            echo
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Total Tests | ${{ steps.test-summary.outputs.total_tests }} |"
+            echo "| ✅ Passed | ${{ steps.test-summary.outputs.passed_tests }} |"
+            echo "| ❌ Failed | ${{ steps.test-summary.outputs.failed_tests }} |"
+            echo "| ⏭️ Skipped | ${{ steps.test-summary.outputs.skipped_tests }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Comment PR with test results
-        if: always() && github.event_name == 'pull_request' && matrix.playwright == 'lockfile'
+        # The token of a PR from a fork is read-only, so it cannot comment (403). The same
+        # results are written to the job summary above, which works for forks too.
+        if: >-
+          always() && github.event_name == 'pull_request' && matrix.playwright == 'lockfile' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -161,3 +182,11 @@ jobs:
                 body: commentBody
               });
             }
+
+      # `yarn test:reporter | tee` exits with tee's status, so the "Run tests" step never fails
+      # by itself. Fail the job here, after the summary and the comment, when the tests failed.
+      - name: Fail the job if the tests failed
+        if: always() && steps.test.outcome != 'skipped' && steps.test.outputs.exit_code != '0'
+        run: |
+          echo "Tests failed (exit code '${{ steps.test.outputs.exit_code }}')"
+          exit 1
