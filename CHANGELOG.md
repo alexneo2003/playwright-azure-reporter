@@ -1,3 +1,24 @@
+## v1.22.0
+
+Released: 2026-10-22
+
+### Features
+- feat(reporter): add testFailOutcome option to publish test.fail() by its actual result (6f413f8)
+- feat(reporter): support error-context attachments (03e100d)
+- feat(reporter): put shard and Playwright config tags into the test run (d437deb)
+- feat(reporter): publish errors reported outside of tests to the test run (c475294)
+- feat(reporter): add a collector for errors reported outside of tests (8502cec)
+
+### Bug Fixes
+- fix(reporter): decide 'last' retries from test.expectedStatus (a51335a)
+- fix(reporter): create no test run for an empty suite in testResult mode (77bd516)
+- fix(reporter): address review on testFailOutcome (451a3d1)
+- fix(reporter): show the reported errors in the run comment (e70aca4)
+- fix(reporter): skip only the config tags Azure DevOps rejects (3807689)
+
+### Other Changes
+- ci(tests): fail the job on test failures, and don't depend on the PR comment (b946ce3)
+
 ## v1.21.0
 
 Released: 2026-10-17
