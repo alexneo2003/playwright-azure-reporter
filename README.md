@@ -236,6 +236,25 @@ Control how retry attempts are published with `publishRetryResults`:
 }
 ```
 
+### Expected Failures (`test.fail`)
+
+Control how a test marked with `test.fail()` is published with `testFailOutcome`:
+
+| Mode | Test fails as declared | Test passes |
+|------|------------------------|-------------|
+| `'outcome'` (default) | `Passed`: Playwright's outcome is `expected` | `Passed`, with no error, although Playwright fails the run |
+| `'actual'` | `Failed`, with the test's errors | `Failed`, with "Expected to fail, but passed." |
+
+Use `'actual'` when `test.fail()` marks a known bug: the test case stays `Failed` in Azure DevOps until the bug is fixed, and a test that starts passing shows up as a failure to act on. In the default mode that test is published as `Passed`, so the fix goes unnoticed in Azure DevOps.
+
+A `test.fail()` test that times out or is interrupted is published as `Timeout` or `Aborted` in both modes: it neither failed as declared nor passed.
+
+```typescript
+{
+  testFailOutcome: 'actual',
+}
+```
+
 ### Test Step Results
 
 Publish the outcome of every `test.step()` as a step result of the Azure DevOps test case result, so the **Steps** view of a result shows which steps passed, failed or were never reached.
