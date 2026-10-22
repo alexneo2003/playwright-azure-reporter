@@ -335,4 +335,118 @@ test.describe('publishRetryResults', () => {
       expect(result.flaky).toBe(1);
     });
   });
+
+  test.describe('test.fail() with retries', () => {
+    const FAILS_AS_DECLARED = `
+      import { test, expect } from '@playwright/test';
+      test('[3] known bug', async () => {
+        test.fail();
+        expect(1).toBe(0);
+      });
+    `;
+    const PASSES_UNEXPECTEDLY = `
+      import { test, expect } from '@playwright/test';
+      test('[3] fixed bug', async () => {
+        test.fail();
+        expect(1).toBe(1);
+      });
+    `;
+
+    async function runWithRetries(runInlineTest: any, server: any, reporterOptions: string, spec: string) {
+      setupDefaultRoutes(server);
+      const publishedResults: any[] = [];
+      server.setRoute('/SampleSample/_apis/test/Runs/150/Results', async (req: any, res: any) => {
+        if (req.method === 'POST') publishedResults.push(...(await getRequestBody(req)));
+        setHeaders(res, headers);
+        server.serveFile(req, res, TEST_RUN_RESULTS_3_VALID_RESPONSE_PATH);
+      });
+      const result = await runInlineTest(
+        {
+          'playwright.config.ts': `
+          module.exports = {
+            retries: 2,
+            reporter: [
+              ['line'],
+              ['${reporterPath}', {
+                orgUrl: 'http://localhost:${server.PORT}',
+                projectName: 'SampleSample',
+                planId: 4,
+                token: 'token',
+                logging: true,
+                ${reporterOptions}
+              }]
+            ]
+          };
+        `,
+          'a.spec.js': spec,
+        },
+        { reporter: '' }
+      );
+      return { result, publishedResults };
+    }
+
+    for (const mode of ['testResult', 'testRun']) {
+      test(`'last' in ${mode} mode publishes a test.fail() test that fails as declared`, async ({
+        runInlineTest,
+        server,
+      }) => {
+        const { result, publishedResults } = await runWithRetries(
+          runInlineTest,
+          server,
+          `publishTestResultsMode: '${mode}', publishRetryResults: 'last',`,
+          FAILS_AS_DECLARED
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(publishedResults.length).toBe(1);
+        expect(publishedResults[0].outcome).toBe('Passed');
+      });
+
+      test(`'last' in ${mode} mode publishes only the last attempt of a test.fail() test that passes`, async ({
+        runInlineTest,
+        server,
+      }) => {
+        const { result, publishedResults } = await runWithRetries(
+          runInlineTest,
+          server,
+          `publishTestResultsMode: '${mode}', publishRetryResults: 'last',`,
+          PASSES_UNEXPECTEDLY
+        );
+
+        expect(result.exitCode).toBe(1);
+        expect(result.output).toContain('fixed bug - passed');
+        expect(publishedResults.length).toBe(1);
+        expect(publishedResults[0].outcome).toBe('Passed');
+      });
+    }
+
+    test("'last' with testFailOutcome 'actual' publishes a declared failure as Failed", async ({
+      runInlineTest,
+      server,
+    }) => {
+      const { result, publishedResults } = await runWithRetries(
+        runInlineTest,
+        server,
+        "publishRetryResults: 'last', testFailOutcome: 'actual',",
+        FAILS_AS_DECLARED
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(publishedResults.length).toBe(1);
+      expect(publishedResults[0].outcome).toBe('Failed');
+    });
+
+    test("'all' still publishes every attempt of a test.fail() test that passes", async ({ runInlineTest, server }) => {
+      const { result, publishedResults } = await runWithRetries(
+        runInlineTest,
+        server,
+        "publishRetryResults: 'all',",
+        PASSES_UNEXPECTEDLY
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(publishedResults.length).toBe(3);
+      expect(publishedResults.map((r) => r.outcome)).toEqual(['Passed', 'Passed', 'Passed']);
+    });
+  });
 });

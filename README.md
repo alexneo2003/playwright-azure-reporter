@@ -229,7 +229,7 @@ Control how retry attempts are published with `publishRetryResults`:
 | Mode | Description |
 |------|-------------|
 | `'all'` | Every retry attempt is published as a separate test result (default) |
-| `'last'` | Only the final attempt is published. Intermediate failures are skipped |
+| `'last'` | Only the final attempt is published. Attempts that Playwright retries are skipped, including the passing attempts of a `test.fail()` test |
 
 ```typescript
 {

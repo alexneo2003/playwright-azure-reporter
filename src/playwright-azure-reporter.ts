@@ -791,8 +791,9 @@ class AzureDevOpsReporter implements Reporter {
     try {
       // 'last' mode: skip intermediate retries
       if (this._publishRetryResults === 'last') {
-        const isRetriableStatus = ['failed', 'timedOut', 'interrupted'].includes(testResult.status);
-        if (isRetriableStatus && testResult.retry < test.retries) {
+        // Playwright retries an attempt whose status differs from the expected one; for test.fail() that is a pass.
+        const willBeRetried = testResult.status !== 'skipped' && testResult.status !== test.expectedStatus;
+        if (willBeRetried && testResult.retry < test.retries) {
           this._logger?.debug(
             `[publishRetryResults=last] Skipping intermediate retry ${testResult.retry}/${test.retries} for: ${test.title}`
           );
