@@ -32,8 +32,6 @@
     "prepublishOnly": "tsc",
     "dev": "yarn run lint && tsc",
     "dev:watch": "nodemon",
-    "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md",
-    "release": "conventional-github-releaser -p angular",
     "feature-matrix": "node -e \"console.log(require('./dist/compat').formatFeatureMatrix())\""
   },
   "nodemonConfig": {
@@ -85,8 +83,6 @@
     "@typescript-eslint/eslint-plugin": "^8.59.4",
     "@typescript-eslint/eslint-plugin-tslint": "^7.0.2",
     "@typescript-eslint/parser": "^8.59.4",
-    "conventional-changelog-cli": "^5.0.0",
-    "conventional-github-releaser": "^3.1.5",
     "eslint": "^10.4.0",
     "eslint-config-standard": "^17.0.0",
     "eslint-plugin-import": "^2.27.5",
@@ -98,5 +94,9 @@
     "husky": "^9.1.7",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
+  },
+  "resolutions": {
+    "minimatch": "^11.0.1",
+    "uuid": "^11.1.1"
   }
 }
