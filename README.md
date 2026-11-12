@@ -222,6 +222,10 @@ To publish results to an existing test run instead of creating a new one:
 
 > **Note:** When using `isExistingTestRun`, the test run is not completed automatically. You must complete it manually.
 
+#### Sharded Runs
+
+Every shard of `--shard=1/4` ... `--shard=4/4` is a separate Playwright process, so a reporter loaded in each shard creates one test run per shard. To publish a sharded run as a single test run, let the shards write Playwright blob reports and run this reporter once with `npx playwright merge-reports`. No test is executed again, the recorded results of all shards are replayed to the reporter. See [Sharded Runs](docs/sharded-runs.md) for the configuration and examples for Azure Pipelines and GitHub Actions.
+
 ### Retry Results
 
 Control how retry attempts are published with `publishRetryResults`:
