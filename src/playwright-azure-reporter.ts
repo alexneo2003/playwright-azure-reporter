@@ -29,6 +29,7 @@ import {
 import { DEFAULT_MAX_GLOBAL_ERRORS, GlobalErrorCollector } from './global-errors';
 import Logger from './logger';
 import { formatShardSuffix, mergeRunTags, normalizeConfigTags } from './run-context';
+import { diagnoseMissingTestPoints } from './test-point-diagnostics';
 import {
   buildIterationDetails,
   collectSteps,
@@ -56,6 +57,8 @@ enum EAzureTestStatuses {
   timedOut = 'Timeout',
   interrupted = 'Aborted',
 }
+/** Tests per run that get an explanation of their missing test points (one extra request each). */
+const MAX_DIAGNOSED_TESTS = 50;
 // eslint-disable-next-line
 const attachmentTypesArray = ['screenshot', 'video', 'trace', 'error-context'] as const;
 
@@ -312,8 +315,9 @@ class AzureDevOpsReporter implements Reporter {
   private _testStepsAlignmentWarned = false;
   private _testCasesWithoutSteps = new Set<string>();
   private _testPointMapperErrors = new WeakMap<TTestResultsToBePublished, string>();
+  private _diagnosedMissingPoints = 0;
   private _unmatched: {
-    noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
+    noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[]; reasons?: string[] }>;
   } = {
     noTestPoints: [],
   };
@@ -1514,6 +1518,62 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
+  /**
+   * Why a test got no test point. Runs only on that failure path: one extra points query without the
+   * configuration filter for the test, at most for `MAX_DIAGNOSED_TESTS` tests per run.
+   * Not used in testRunADO mode, where points are matched against the results of the existing run.
+   */
+  private async _explainMissingTestPoints(testsResult: TTestResultsToBePublished): Promise<string[] | undefined> {
+    if (this._publishTestResultsMode === 'testRunADO') return undefined;
+    if (this._diagnosedMissingPoints >= MAX_DIAGNOSED_TESTS) return undefined;
+    this._diagnosedMissingPoints++;
+    if (this._diagnosedMissingPoints === MAX_DIAGNOSED_TESTS) {
+      this._logger?.info(
+        `Explained missing test points for ${MAX_DIAGNOSED_TESTS} tests, the rest only get the summary line.`
+      );
+    }
+    try {
+      const { testCaseIds } = testsResult.testCase;
+      const mapperError = this._testPointMapperErrors.get(testsResult);
+      let points: TestInterfaces.TestPoint[] = [];
+      if (mapperError === undefined) {
+        if (!this._testApi) this._testApi = await this._connection.getTestApi();
+        const response = await this._testApi.getPointsByQuery(
+          { pointsFilter: { testcaseIds: testCaseIds.map((id) => parseInt(id, 10)) } },
+          this._projectName
+        );
+        points = response?.points ?? [];
+      }
+      return diagnoseMissingTestPoints({
+        testCaseIds,
+        planId: this._planId,
+        configurationIds: this._testRunConfig?.configurationIds,
+        rootSuite: this._rootSuiteId
+          ? {
+              id: this._rootSuiteId,
+              pointIds: new Set(this._expectedTestPointsByRootSuite.map((point) => String(point.id))),
+            }
+          : undefined,
+        points,
+        mapperError,
+      }).map((diagnosis) => diagnosis.message);
+    } catch (error) {
+      this._logger?.debug(`Could not explain the missing test points: ${toError(error).message}`);
+      return undefined;
+    }
+  }
+
+  private _missingTestPointsWarning(testCase: ITestCaseExtended, reasons: string[] | undefined): string {
+    const configurations = this._testRunConfig?.configurationIds;
+    const head = `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
+      configurations ? `for configurations [${configurations.join(', ')}]` : ''
+    }`;
+    if (reasons?.length) {
+      return `${head}\nTest "${testCase.title}":\n${reasons.map((reason) => `  - ${reason}`).join('\n')}`;
+    }
+    return `${head}\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`;
+  }
+
   private async _getTestPointsOfTestResults(
     testsResults: TTestResultsToBePublished[],
     existingTestCaseResults: TestInterfaces.TestCaseResult[]
@@ -2341,6 +2401,7 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.debug(`[publishCaseResult] Mapped test points: ${JSON.stringify(mappedTestPoints, null, 2)}`);
 
       if (!mappedTestPoints || mappedTestPoints.length == 0) {
+        const reasons = await this._explainMissingTestPoints(toBePublished);
         // Track for summary if enabled
         if (this._testCaseSummaryEnabled) {
           this._unmatched.noTestPoints.push({
@@ -2348,19 +2409,14 @@ class AzureDevOpsReporter implements Reporter {
             file: test.location?.file || 'unknown',
             line: test.location?.line || 0,
             testCaseIds: caseIds,
+            reasons,
           });
         }
 
         // Ensure we don't hang in onEnd wait loop
         this._removePublished(testCase.testAlias);
 
-        this._logger?.warn(
-          `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
-            this._testRunConfig?.configurationIds
-              ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
-              : ''
-          }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`
-        );
+        this._logger?.warn(this._missingTestPointsWarning(testCase, reasons));
 
         return;
       }
@@ -2544,6 +2600,7 @@ class AzureDevOpsReporter implements Reporter {
               }
             }
           } else {
+            const reasons = await this._explainMissingTestPoints(key);
             // Track for summary if enabled
             if (this._testCaseSummaryEnabled) {
               this._unmatched.noTestPoints.push({
@@ -2551,16 +2608,11 @@ class AzureDevOpsReporter implements Reporter {
                 file: testCase.location?.file || 'unknown',
                 line: testCase.location?.line || 0,
                 testCaseIds: testCase.testCaseIds,
+                reasons,
               });
             }
 
-            this._logger?.warn(
-              `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
-                this._testRunConfig?.configurationIds
-                  ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
-                  : ''
-              }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`
-            );
+            this._logger?.warn(this._missingTestPointsWarning(testCase, reasons));
           }
         }
 
@@ -2718,6 +2770,7 @@ class AzureDevOpsReporter implements Reporter {
       summary += `- **${test.title}**\n`;
       summary += `  - File: ${test.file}:${test.line}\n`;
       summary += `  - Test Case IDs: [${test.testCaseIds.join(', ')}]\n`;
+      for (const reason of test.reasons ?? []) summary += `  - Reason: ${reason}\n`;
     });
     summary += `\n`;
 
