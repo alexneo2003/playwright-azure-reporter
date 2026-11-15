@@ -311,6 +311,7 @@ class AzureDevOpsReporter implements Reporter {
   private _workItemStepsCache = new Map<string, Promise<WorkItemStep[] | undefined>>();
   private _testStepsAlignmentWarned = false;
   private _testCasesWithoutSteps = new Set<string>();
+  private _testPointMapperErrors = new WeakMap<TTestResultsToBePublished, string>();
   private _unmatched: {
     noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
   } = {
@@ -1493,6 +1494,26 @@ class AzureDevOpsReporter implements Reporter {
     };
   }
 
+  /**
+   * Calls `testPointMapper` for one test. An exception thrown by the mapper only skips that test: before, it
+   * reached the catch of the points lookup and disabled reporting for the whole run.
+   */
+  private async _mapTestPoints(
+    testsResult: TTestResultsToBePublished,
+    testPoints: TestInterfaces.TestPoint[]
+  ): Promise<TestInterfaces.TestPoint[] | undefined> {
+    try {
+      return await this._testPointMapper(testsResult.testCase, testPoints);
+    } catch (error) {
+      const message = toError(error).message;
+      this._testPointMapperErrors.set(testsResult, message);
+      this._logger?.warn(
+        `testPointMapper threw for test "${testsResult.testCase.title}": ${message}. The result is not published.`
+      );
+      return [];
+    }
+  }
+
   private async _getTestPointsOfTestResults(
     testsResults: TTestResultsToBePublished[],
     existingTestCaseResults: TestInterfaces.TestCaseResult[]
@@ -1507,7 +1528,7 @@ class AzureDevOpsReporter implements Reporter {
         );
 
         if (currentTestPoints && currentTestPoints.length > 0) {
-          const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
+          const mappedTestPoints = await this._mapTestPoints(testsResult, currentTestPoints);
           if (mappedTestPoints && mappedTestPoints.length > 0) {
             result.set(testsResult, mappedTestPoints);
           } else {
@@ -1558,7 +1579,7 @@ class AzureDevOpsReporter implements Reporter {
           }
 
           if (currentTestPoints && currentTestPoints.length > 0) {
-            const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
+            const mappedTestPoints = await this._mapTestPoints(testsResult, currentTestPoints);
 
             if (mappedTestPoints && mappedTestPoints.length > 0) {
               result.set(testsResult, mappedTestPoints);

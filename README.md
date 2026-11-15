@@ -417,7 +417,7 @@ import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
       case 'webkit':
         return testPoints.filter((tp) => tp.configuration.id === '5');
       default:
-        throw new Error('invalid test configuration!');
+        return []; // no point: the result of this test is not published
     }
   },
   testRunConfig: {
@@ -429,6 +429,8 @@ import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
 ```
 
 > **Important:** Define `testRunConfig.configurationIds` and/or `testPointMapper`, otherwise results are published for all configurations.
+
+> **Note:** If `testPointMapper` throws for a test, the reporter logs the error and skips that test only. The other results are still published.
 
 #### `rootSuiteId`
 
