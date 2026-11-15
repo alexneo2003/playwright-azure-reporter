@@ -37,7 +37,14 @@ import {
   TestStepsMappingOptions,
   WorkItemStep,
 } from './test-steps';
-import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID, stripAnsi } from './utils';
+import {
+  createGuid,
+  getExtensionFromContentType,
+  getExtensionFromFilename,
+  parsePlanId,
+  shortID,
+  stripAnsi,
+} from './utils';
 
 // https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
 enum EAzureTestStatuses {
@@ -97,7 +104,8 @@ export interface AzureReporterOptions {
   token?: string;
   authType?: 'pat' | 'accessToken' | 'managedIdentity' | undefined;
   applicationIdURI?: string | undefined;
-  planId: number;
+  /** Test plan id. A numeric string is accepted too, so `planId: process.env.AZURE_PLAN_ID` works as is. */
+  planId: number | string;
   orgUrl: string;
   projectName: string;
   publishTestResultsMode?: TPublishTestResults;
@@ -501,9 +509,9 @@ class AzureDevOpsReporter implements Reporter {
 
     this._orgUrl = options.orgUrl;
     this._projectName = options.projectName;
-    const parsedPlanId = parseInt(options.planId.toString(), 10);
-    if (isNaN(parsedPlanId)) {
-      this._logger?.warn(`'planId' value "${options.planId}" is not a valid integer. Reporting is disabled.`);
+    const parsedPlanId = parsePlanId(options.planId);
+    if (parsedPlanId === undefined) {
+      this._logger?.warn(`'planId' value "${options.planId}" is not a positive integer. Reporting is disabled.`);
       this._setIsDisable(true);
       return;
     }

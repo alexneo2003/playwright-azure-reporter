@@ -30,3 +30,16 @@ export function shortID(): string {
 export function stripAnsi(str: string | undefined): string | undefined {
   return str?.replace(/\[[0-9;]*m/g, '');
 }
+
+/**
+ * Parses a test plan id given as a number or as a string (for example from an environment variable).
+ * Only positive integers are accepted, with surrounding whitespace allowed: `'12abc'` is rejected.
+ */
+export function parsePlanId(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
