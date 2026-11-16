@@ -149,3 +149,24 @@ To create a beta release for a specific pull request:
 The PR beta release will include all changes from the PR's source branch and create a unique version identifier.
 
 **Note:** Beta releases are for testing purposes and may contain experimental features. For production use, always use the latest stable release.
+## npm Authentication: Trusted Publishing
+
+The release workflows publish with npm [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC). No npm token is stored in the repository: npm accepts a publish from the workflow files registered for the package, and generates provenance for it.
+
+Each workflow that publishes is registered as its own trusted publisher on npmjs.com → package → Settings → Trusted publishing:
+
+| Field | Value |
+|-------|-------|
+| Organization or user | `alexneo2003` |
+| Repository | `playwright-azure-reporter` |
+| Workflow filename | `publish.yml`, `beta-release.yml`, `pr-beta-release.yml` (one publisher for each) |
+| Environment name | empty |
+| Allowed actions | `npm publish` |
+
+Things to know:
+
+- A new trusted publisher must complete its first successful publish within 2 days, otherwise it expires and has to be created again. Register a workflow shortly before you run it.
+- npm does not check the configuration when it is saved. A wrong filename shows up only as an `ENEEDAUTH` error in the publish step.
+- The publish jobs need `permissions: id-token: write`, Node 22.14 or newer and npm 11.5.1 or newer. The workflows use Node 24 and check the npm version before publishing.
+- `repository.url` in `package.json` must stay the URL of this repository.
+- The `NPM_TOKEN` secret is no longer used and can be deleted.

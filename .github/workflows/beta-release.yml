@@ -41,6 +41,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      # npm trusted publishing: the registry accepts the OIDC token of this workflow, no npm token is stored
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -77,7 +79,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: '>=18'
+          # trusted publishing needs Node >= 22.14 and npm >= 11.5.1
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           scope: '@alex_neo'
 
@@ -163,10 +166,19 @@ jobs:
       - name: Build for publishing
         run: yarn build
 
+      - name: Check npm supports trusted publishing
+        run: |
+          NPM_VERSION=$(npm --version)
+          echo "npm $NPM_VERSION, node $(node --version)"
+          if [ "$(printf '%s\n' "11.5.1" "$NPM_VERSION" | sort -V | head -1)" != "11.5.1" ]; then
+            echo "::error::npm $NPM_VERSION is older than 11.5.1 and cannot publish with OIDC"
+            exit 1
+          fi
+
+      # Authenticated with OIDC (trusted publisher configured for this workflow file on npmjs.com).
+      # Provenance is generated automatically.
       - name: Publish to npm
-        run: yarn publish --access public --tag ${{ steps.config.outputs.publish-tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag ${{ steps.config.outputs.publish-tag }}
 
       - name: Create GitHub Release
         if: steps.config.outputs.create-github-release == 'true'
