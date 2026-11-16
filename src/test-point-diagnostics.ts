@@ -23,7 +23,8 @@ export interface DiagnosticPoint {
 
 export interface MissingPointInput {
   testCaseIds: string[];
-  planId: number;
+  /** The plan, or the selected plans when results are published to several plans. */
+  planId: number | number[];
   /** `testRunConfig.configurationIds`, when set. */
   configurationIds?: number[];
   /** `rootSuiteId` and the ids of the points under it, when set. */
@@ -58,24 +59,28 @@ export function diagnoseMissingTestPoints(input: MissingPointInput): MissingPoin
     return [{ reason: 'mapper-threw', message: `testPointMapper threw: ${input.mapperError}` }];
   }
 
-  const plan = String(input.planId);
+  const plans = (Array.isArray(input.planId) ? input.planId : [input.planId]).map(String);
+  const planIds = plans.join(', ');
+  // `plan 4`, or for several plans `plans 4, 7` and `one of plans 4, 7`
+  const inPlans = plans.length === 1 ? `plan ${planIds}` : `plans ${planIds}`;
+  const ofPlan = plans.length === 1 ? `plan ${planIds}` : `one of plans ${planIds}`;
   return unique(input.testCaseIds).map((testCaseId): MissingPointDiagnosis => {
     const own = input.points.filter((point) => String(point.testCase?.id) === testCaseId);
     if (own.length === 0) {
       return {
         testCaseId,
         reason: 'no-points',
-        message: `test case ${testCaseId} has no test point in any test plan of the project. Check the id and that the test case is added to a suite of plan ${plan}.`,
+        message: `test case ${testCaseId} has no test point in any test plan of the project. Check the id and that the test case is added to a suite of ${ofPlan}.`,
       };
     }
 
-    const inPlan = own.filter((point) => String(point.testPlan?.id) === plan);
+    const inPlan = own.filter((point) => plans.includes(String(point.testPlan?.id)));
     if (inPlan.length === 0) {
-      const plans = unique(own.map((point) => String(point.testPlan?.id)).filter((id) => id !== 'undefined'));
+      const otherPlans = unique(own.map((point) => String(point.testPlan?.id)).filter((id) => id !== 'undefined'));
       return {
         testCaseId,
         reason: 'other-plans',
-        message: `test case ${testCaseId} has test points only in other plans: ${plans.join(', ')} (planId is ${plan}). Add it to a suite of plan ${plan} or change planId.`,
+        message: `test case ${testCaseId} has test points only in other plans: ${otherPlans.join(', ')} (planId is ${planIds}). Add it to a suite of ${ofPlan} or change planId.`,
       };
     }
 
@@ -86,7 +91,7 @@ export function diagnoseMissingTestPoints(input: MissingPointInput): MissingPoin
         return {
           testCaseId,
           reason: 'outside-root-suite',
-          message: `test case ${testCaseId} has test points in plan ${plan}, but none under rootSuiteId ${input.rootSuite.id}.`,
+          message: `test case ${testCaseId} has test points in ${inPlans}, but none under rootSuiteId ${input.rootSuite.id}.`,
         };
       }
     }
@@ -98,7 +103,7 @@ export function diagnoseMissingTestPoints(input: MissingPointInput): MissingPoin
         return {
           testCaseId,
           reason: 'other-configurations',
-          message: `test case ${testCaseId} has test points in plan ${plan} only for configurations: ${describeConfigurations(candidates)}; testRunConfig.configurationIds is [${input.configurationIds.join(', ')}]. Assign one of these configurations to the test case in plan ${plan} or change configurationIds.`,
+          message: `test case ${testCaseId} has test points in ${inPlans} only for configurations: ${describeConfigurations(candidates)}; testRunConfig.configurationIds is [${input.configurationIds.join(', ')}]. Assign one of these configurations to the test case in ${inPlans} or change configurationIds.`,
         };
       }
       candidates = matching;
@@ -107,7 +112,7 @@ export function diagnoseMissingTestPoints(input: MissingPointInput): MissingPoin
     return {
       testCaseId,
       reason: 'mapper-returned-none',
-      message: `test case ${testCaseId} has test points in plan ${plan} (configurations: ${describeConfigurations(candidates)}), but testPointMapper returned none of them.`,
+      message: `test case ${testCaseId} has test points in ${inPlans} (configurations: ${describeConfigurations(candidates)}), but testPointMapper returned none of them.`,
     };
   });
 }
