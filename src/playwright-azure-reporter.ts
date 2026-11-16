@@ -525,9 +525,8 @@ class AzureDevOpsReporter implements Reporter {
     this._authType = options.authType || 'pat';
     this._applicationIdURI = options.applicationIdURI;
     this._environment = options?.environment || undefined;
-    this._testRunTitle =
-      `${this._environment ? `[${this._environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
-      `${this._environment ? `[${this._environment}]:` : ''}Test plan ${this._planId}`;
+    const environmentPrefix = this._environment ? `[${this._environment}]: ` : '';
+    this._testRunTitle = `${environmentPrefix}${options?.testRunTitle || 'Playwright Test Run'}`;
     this._uploadAttachments = options?.uploadAttachments || false;
     // Authentication handler and connection will be initialized in onBegin() for managedIdentity support
     this._testRunConfig = options?.testRunConfig || undefined;

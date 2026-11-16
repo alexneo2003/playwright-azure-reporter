@@ -1,6 +1,6 @@
 {
   "id": 150,
-  "name": " Playwright Test Run",
+  "name": "Playwright Test Run",
   "url": "http://localhost:3000/SampleSample/_apis/test/Runs/150",
   "isAutomated": true,
   "owner": {
