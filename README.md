@@ -27,6 +27,7 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [Auto-Mark as Automated](#auto-mark-as-automated)
 - [CI/CD Integration](#cicd-integration)
 - [Playwright Compatibility](#playwright-compatibility)
+- [Troubleshooting](#troubleshooting)
 - [Releases](#releases)
 
 ## Quick Start
@@ -61,6 +62,8 @@ export default defineConfig({
 ```
 
 Each test must reference an existing Azure DevOps test case ID. See [Defining Test Case IDs](#defining-test-case-ids) for all supported formats.
+
+`planId` also accepts a numeric string, so `planId: process.env.AZURE_PLAN_ID` works without `Number()`. Something not published? See [Troubleshooting](docs/troubleshooting.md).
 
 ## Defining Test Case IDs
 
@@ -169,6 +172,25 @@ The reporter supports three authentication methods:
   applicationIdURI: '499b84ac-1321-427f-aa17-267ca6975798/.default'
 }
 ```
+
+#### `System.AccessToken` in Azure Pipelines
+
+The job access token of a pipeline works with `authType: 'accessToken'`: the reporter sends it as a Bearer token. Map it into the environment explicitly, pipelines do not pass it to scripts by default:
+
+```yaml
+- script: npx playwright test
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+```
+
+```typescript
+{
+  authType: 'accessToken',
+  token: process.env.SYSTEM_ACCESSTOKEN,
+}
+```
+
+The token acts as the pipeline's build service identity, so that identity needs the permissions a PAT would need (see [Required Token Scopes](#required-token-scopes)): create test runs and publish results, read the test plan, and, for `autoMarkTestCasesAsAutomated`, edit work items. If publishing fails with 401 or 403, check these permissions for the build service account of the project.
 
 **When to use each:**
 
@@ -417,7 +439,7 @@ import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
       case 'webkit':
         return testPoints.filter((tp) => tp.configuration.id === '5');
       default:
-        throw new Error('invalid test configuration!');
+        return []; // no point: the result of this test is not published
     }
   },
   testRunConfig: {
@@ -429,6 +451,8 @@ import { TestPoint } from 'azure-devops-node-api/interfaces/TestInterfaces';
 ```
 
 > **Important:** Define `testRunConfig.configurationIds` and/or `testPointMapper`, otherwise results are published for all configurations.
+
+> **Note:** If `testPointMapper` throws for a test, the reporter logs the error and skips that test only. The other results are still published.
 
 #### `rootSuiteId`
 
@@ -677,6 +701,10 @@ Set `compatibility` to choose what happens when the installed Playwright is olde
 When the Playwright version cannot be detected, the check is skipped in both modes and logged at debug level (`AZUREPWDEBUG=1`).
 
 <!-- The table above is generated from src/compat.ts: run `yarn build && yarn feature-matrix` and paste the output when the matrix changes. A test fails when README and the matrix differ. -->
+
+## Troubleshooting
+
+The most common problems, with what the log says and how to fix them, are collected in [Troubleshooting](docs/troubleshooting.md): no test points found, reporting disabled or 401, "User identity not found", attachments not uploaded, results missing from the pipeline Tests tab.
 
 ## Releases
 

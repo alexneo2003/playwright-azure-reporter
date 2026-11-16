@@ -158,9 +158,7 @@ test.describe('Publish results - testRun', () => {
     expect(result.output).toContain('azure:pw:log [33] foobar - failed');
     expect(result.output).toContain('azure:pw:log Start publishing test results for 1 test(s)');
     expect(result.output).toContain('No test points found for test case [33] associated with test plan 4');
-    expect(result.output).toContain(
-      'Check, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.'
-    );
+    expect(result.output).toContain('test case 33 has no test point in any test plan of the project');
     expect(result.output).toContain('azure:pw:log Test results published for 0 test(s)');
     expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);
@@ -497,9 +495,7 @@ test.describe('Publish results - testRun', () => {
     expect(result.output).toContain(
       'No test points found for test case [3] associated with test plan 44 for configurations [1, 2, 3]'
     );
-    expect(result.output).toContain(
-      'Check, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.'
-    );
+    expect(result.output).toContain('test case 3 has test points only in other plans: 4 (planId is 44)');
     expect(result.output).toContain('azure:pw:log Test results published for 0 test(s)');
     expect(result.output).toMatch(/azure:pw:log Run (\d.*) - Completed/);
     expect(result.exitCode).toBe(1);

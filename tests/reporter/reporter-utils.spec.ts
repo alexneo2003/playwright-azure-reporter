@@ -1,10 +1,34 @@
 import { TestCase, TestResult } from '@playwright/test/reporter';
 
 import AzureDevOpsReporter from '../../dist/playwright-azure-reporter';
-import { getExtensionFromContentType, getExtensionFromFilename, getMimeTypeFromFilename } from '../../src/utils';
+import {
+  getExtensionFromContentType,
+  getExtensionFromFilename,
+  getMimeTypeFromFilename,
+  parsePlanId,
+} from '../../src/utils';
 import { expect, test } from './test-fixtures';
 
 test.describe('Reporter utils', () => {
+  test('parsePlanId accepts positive integers as numbers or strings', async () => {
+    expect(parsePlanId(4)).toBe(4);
+    expect(parsePlanId('4')).toBe(4);
+    expect(parsePlanId(' 42 ')).toBe(42);
+    for (const invalid of ['12abc', '', '  ', '-1', '0', 0, -3, 1.5, '1.5', '1e3', NaN, undefined, null, {}, []]) {
+      expect(parsePlanId(invalid), `value ${JSON.stringify(invalid)}`).toBeUndefined();
+    }
+  });
+
+  test('planId from an environment variable needs no Number()', async () => {
+    const options = { orgUrl: 'https://dev.azure.com/org', projectName: 'p', token: 't' };
+    const fromString: any = new AzureDevOpsReporter({ ...options, planId: ' 7 ' });
+    expect(fromString._planId).toBe(7);
+    expect(fromString._isDisabled).toBe(false);
+
+    const invalid: any = new AzureDevOpsReporter({ ...options, planId: '12abc' });
+    expect(invalid._isDisabled).toBe(true);
+  });
+
   test('getMimeTypeFromFilename', async () => {
     expect(getMimeTypeFromFilename('test.png')).toBe('image/png');
     expect(getMimeTypeFromFilename('test.jpg')).toBe('image/jpeg');
@@ -302,20 +326,14 @@ test.describe('Reporter _mapToAzureState', () => {
   });
 
   test('maps skipped test with fixme annotation to Paused', async () => {
-    const testCase = buildTestCase(
-      () => 'skipped',
-      [{ type: 'fixme', description: '' }]
-    );
+    const testCase = buildTestCase(() => 'skipped', [{ type: 'fixme', description: '' }]);
     const testResult = buildTestResult('skipped');
 
     expect(mapToAzureState(testCase, testResult)).toBe('Paused');
   });
 
   test('maps skipped test with skip annotation to NotApplicable', async () => {
-    const testCase = buildTestCase(
-      () => 'skipped',
-      [{ type: 'skip', description: '' }]
-    );
+    const testCase = buildTestCase(() => 'skipped', [{ type: 'skip', description: '' }]);
     const testResult = buildTestResult('skipped');
 
     expect(mapToAzureState(testCase, testResult)).toBe('NotApplicable');

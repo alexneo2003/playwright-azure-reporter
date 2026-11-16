@@ -29,6 +29,7 @@ import {
 import { DEFAULT_MAX_GLOBAL_ERRORS, GlobalErrorCollector } from './global-errors';
 import Logger from './logger';
 import { formatShardSuffix, mergeRunTags, normalizeConfigTags } from './run-context';
+import { diagnoseMissingTestPoints } from './test-point-diagnostics';
 import {
   buildIterationDetails,
   collectSteps,
@@ -37,7 +38,14 @@ import {
   TestStepsMappingOptions,
   WorkItemStep,
 } from './test-steps';
-import { createGuid, getExtensionFromContentType, getExtensionFromFilename, shortID, stripAnsi } from './utils';
+import {
+  createGuid,
+  getExtensionFromContentType,
+  getExtensionFromFilename,
+  parsePlanId,
+  shortID,
+  stripAnsi,
+} from './utils';
 
 // https://learn.microsoft.com/en-us/azure/devops/report/analytics/entity-reference-test-plans?view=azure-devops#testoutcome-enumerated-type-members
 enum EAzureTestStatuses {
@@ -49,6 +57,8 @@ enum EAzureTestStatuses {
   timedOut = 'Timeout',
   interrupted = 'Aborted',
 }
+/** Tests per run that get an explanation of their missing test points (one extra request each). */
+const MAX_DIAGNOSED_TESTS = 50;
 // eslint-disable-next-line
 const attachmentTypesArray = ['screenshot', 'video', 'trace', 'error-context'] as const;
 
@@ -97,7 +107,8 @@ export interface AzureReporterOptions {
   token?: string;
   authType?: 'pat' | 'accessToken' | 'managedIdentity' | undefined;
   applicationIdURI?: string | undefined;
-  planId: number;
+  /** Test plan id. A numeric string is accepted too, so `planId: process.env.AZURE_PLAN_ID` works as is. */
+  planId: number | string;
   orgUrl: string;
   projectName: string;
   publishTestResultsMode?: TPublishTestResults;
@@ -303,8 +314,10 @@ class AzureDevOpsReporter implements Reporter {
   private _workItemStepsCache = new Map<string, Promise<WorkItemStep[] | undefined>>();
   private _testStepsAlignmentWarned = false;
   private _testCasesWithoutSteps = new Set<string>();
+  private _testPointMapperErrors = new WeakMap<TTestResultsToBePublished, string>();
+  private _diagnosedMissingPoints = 0;
   private _unmatched: {
-    noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[] }>;
+    noTestPoints: Array<{ title: string; file: string; line: number; testCaseIds: string[]; reasons?: string[] }>;
   } = {
     noTestPoints: [],
   };
@@ -501,9 +514,9 @@ class AzureDevOpsReporter implements Reporter {
 
     this._orgUrl = options.orgUrl;
     this._projectName = options.projectName;
-    const parsedPlanId = parseInt(options.planId.toString(), 10);
-    if (isNaN(parsedPlanId)) {
-      this._logger?.warn(`'planId' value "${options.planId}" is not a valid integer. Reporting is disabled.`);
+    const parsedPlanId = parsePlanId(options.planId);
+    if (parsedPlanId === undefined) {
+      this._logger?.warn(`'planId' value "${options.planId}" is not a positive integer. Reporting is disabled.`);
       this._setIsDisable(true);
       return;
     }
@@ -512,9 +525,8 @@ class AzureDevOpsReporter implements Reporter {
     this._authType = options.authType || 'pat';
     this._applicationIdURI = options.applicationIdURI;
     this._environment = options?.environment || undefined;
-    this._testRunTitle =
-      `${this._environment ? `[${this._environment}]:` : ''} ${options?.testRunTitle || 'Playwright Test Run'}` ||
-      `${this._environment ? `[${this._environment}]:` : ''}Test plan ${this._planId}`;
+    const environmentPrefix = this._environment ? `[${this._environment}]: ` : '';
+    this._testRunTitle = `${environmentPrefix}${options?.testRunTitle || 'Playwright Test Run'}`;
     this._uploadAttachments = options?.uploadAttachments || false;
     // Authentication handler and connection will be initialized in onBegin() for managedIdentity support
     this._testRunConfig = options?.testRunConfig || undefined;
@@ -1485,6 +1497,82 @@ class AzureDevOpsReporter implements Reporter {
     };
   }
 
+  /**
+   * Calls `testPointMapper` for one test. An exception thrown by the mapper only skips that test: before, it
+   * reached the catch of the points lookup and disabled reporting for the whole run.
+   */
+  private async _mapTestPoints(
+    testsResult: TTestResultsToBePublished,
+    testPoints: TestInterfaces.TestPoint[]
+  ): Promise<TestInterfaces.TestPoint[] | undefined> {
+    try {
+      return await this._testPointMapper(testsResult.testCase, testPoints);
+    } catch (error) {
+      const message = toError(error).message;
+      this._testPointMapperErrors.set(testsResult, message);
+      this._logger?.warn(
+        `testPointMapper threw for test "${testsResult.testCase.title}": ${message}. The result is not published.`
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Why a test got no test point. Runs only on that failure path: one extra points query without the
+   * configuration filter for the test, at most for `MAX_DIAGNOSED_TESTS` tests per run.
+   * Not used in testRunADO mode, where points are matched against the results of the existing run.
+   */
+  private async _explainMissingTestPoints(testsResult: TTestResultsToBePublished): Promise<string[] | undefined> {
+    if (this._publishTestResultsMode === 'testRunADO') return undefined;
+    if (this._diagnosedMissingPoints >= MAX_DIAGNOSED_TESTS) return undefined;
+    this._diagnosedMissingPoints++;
+    if (this._diagnosedMissingPoints === MAX_DIAGNOSED_TESTS) {
+      this._logger?.info(
+        `Explained missing test points for ${MAX_DIAGNOSED_TESTS} tests, the rest only get the summary line.`
+      );
+    }
+    try {
+      const { testCaseIds } = testsResult.testCase;
+      const mapperError = this._testPointMapperErrors.get(testsResult);
+      let points: TestInterfaces.TestPoint[] = [];
+      if (mapperError === undefined) {
+        if (!this._testApi) this._testApi = await this._connection.getTestApi();
+        const response = await this._testApi.getPointsByQuery(
+          { pointsFilter: { testcaseIds: testCaseIds.map((id) => parseInt(id, 10)) } },
+          this._projectName
+        );
+        points = response?.points ?? [];
+      }
+      return diagnoseMissingTestPoints({
+        testCaseIds,
+        planId: this._planId,
+        configurationIds: this._testRunConfig?.configurationIds,
+        rootSuite: this._rootSuiteId
+          ? {
+              id: this._rootSuiteId,
+              pointIds: new Set(this._expectedTestPointsByRootSuite.map((point) => String(point.id))),
+            }
+          : undefined,
+        points,
+        mapperError,
+      }).map((diagnosis) => diagnosis.message);
+    } catch (error) {
+      this._logger?.debug(`Could not explain the missing test points: ${toError(error).message}`);
+      return undefined;
+    }
+  }
+
+  private _missingTestPointsWarning(testCase: ITestCaseExtended, reasons: string[] | undefined): string {
+    const configurations = this._testRunConfig?.configurationIds;
+    const head = `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
+      configurations ? `for configurations [${configurations.join(', ')}]` : ''
+    }`;
+    if (reasons?.length) {
+      return `${head}\nTest "${testCase.title}":\n${reasons.map((reason) => `  - ${reason}`).join('\n')}`;
+    }
+    return `${head}\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`;
+  }
+
   private async _getTestPointsOfTestResults(
     testsResults: TTestResultsToBePublished[],
     existingTestCaseResults: TestInterfaces.TestCaseResult[]
@@ -1499,7 +1587,7 @@ class AzureDevOpsReporter implements Reporter {
         );
 
         if (currentTestPoints && currentTestPoints.length > 0) {
-          const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
+          const mappedTestPoints = await this._mapTestPoints(testsResult, currentTestPoints);
           if (mappedTestPoints && mappedTestPoints.length > 0) {
             result.set(testsResult, mappedTestPoints);
           } else {
@@ -1550,7 +1638,7 @@ class AzureDevOpsReporter implements Reporter {
           }
 
           if (currentTestPoints && currentTestPoints.length > 0) {
-            const mappedTestPoints = await this._testPointMapper(testsResult.testCase, currentTestPoints);
+            const mappedTestPoints = await this._mapTestPoints(testsResult, currentTestPoints);
 
             if (mappedTestPoints && mappedTestPoints.length > 0) {
               result.set(testsResult, mappedTestPoints);
@@ -2312,6 +2400,7 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.debug(`[publishCaseResult] Mapped test points: ${JSON.stringify(mappedTestPoints, null, 2)}`);
 
       if (!mappedTestPoints || mappedTestPoints.length == 0) {
+        const reasons = await this._explainMissingTestPoints(toBePublished);
         // Track for summary if enabled
         if (this._testCaseSummaryEnabled) {
           this._unmatched.noTestPoints.push({
@@ -2319,19 +2408,14 @@ class AzureDevOpsReporter implements Reporter {
             file: test.location?.file || 'unknown',
             line: test.location?.line || 0,
             testCaseIds: caseIds,
+            reasons,
           });
         }
 
         // Ensure we don't hang in onEnd wait loop
         this._removePublished(testCase.testAlias);
 
-        this._logger?.warn(
-          `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
-            this._testRunConfig?.configurationIds
-              ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
-              : ''
-          }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`
-        );
+        this._logger?.warn(this._missingTestPointsWarning(testCase, reasons));
 
         return;
       }
@@ -2515,6 +2599,7 @@ class AzureDevOpsReporter implements Reporter {
               }
             }
           } else {
+            const reasons = await this._explainMissingTestPoints(key);
             // Track for summary if enabled
             if (this._testCaseSummaryEnabled) {
               this._unmatched.noTestPoints.push({
@@ -2522,16 +2607,11 @@ class AzureDevOpsReporter implements Reporter {
                 file: testCase.location?.file || 'unknown',
                 line: testCase.location?.line || 0,
                 testCaseIds: testCase.testCaseIds,
+                reasons,
               });
             }
 
-            this._logger?.warn(
-              `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
-                this._testRunConfig?.configurationIds
-                  ? `for configurations [${this._testRunConfig?.configurationIds?.join(', ')}]`
-                  : ''
-              }\nCheck, maybe testPlanId or assigned configurations per test case, what you specified, is incorrect.\n Also check testPointMapper function.`
-            );
+            this._logger?.warn(this._missingTestPointsWarning(testCase, reasons));
           }
         }
 
@@ -2689,6 +2769,7 @@ class AzureDevOpsReporter implements Reporter {
       summary += `- **${test.title}**\n`;
       summary += `  - File: ${test.file}:${test.line}\n`;
       summary += `  - Test Case IDs: [${test.testCaseIds.join(', ')}]\n`;
+      for (const reason of test.reasons ?? []) summary += `  - Reason: ${reason}\n`;
     });
     summary += `\n`;
 

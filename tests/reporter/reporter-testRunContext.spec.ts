@@ -102,8 +102,23 @@ test.describe('testRunContext', () => {
 
     expect(result.exitCode).toBe(0);
     expect(calls.creates).toHaveLength(1);
-    expect(calls.creates[0].name).toBe(' Playwright Test Run');
+    expect(calls.creates[0].name).toBe('Playwright Test Run');
     expect(calls.creates[0].tags).toBeUndefined();
+  });
+
+  test('without an environment the run name has no leading space', async ({ runInlineTest, server }) => {
+    const calls = setupRoutes(server);
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': reporterConfig(server.PORT, "testRunTitle: 'Nightly',"),
+        'a.spec.js': spec,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(calls.creates[0].name).toBe('Nightly');
   });
 
   test('shard goes into the title of the run', async ({ runInlineTest, server }) => {
@@ -115,7 +130,7 @@ test.describe('testRunContext', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(calls.creates[0].name).toBe(' Playwright Test Run (shard 1/2)');
+    expect(calls.creates[0].name).toBe('Playwright Test Run (shard 1/2)');
     expect(calls.creates[0].tags).toBeUndefined();
   });
 
@@ -145,7 +160,7 @@ test.describe('testRunContext', () => {
       { reporter: '', shard: '1/2' }
     );
 
-    expect(calls.creates[0].name).toBe(' Playwright Test Run');
+    expect(calls.creates[0].name).toBe('Playwright Test Run');
   });
 
   test('testRun mode: the title of the run created at the end carries the shard too', async ({
@@ -164,7 +179,7 @@ test.describe('testRunContext', () => {
 
     expect(result.exitCode).toBe(0);
     expect(calls.creates).toHaveLength(1);
-    expect(calls.creates[0].name).toBe(' Playwright Test Run (shard 1/2)');
+    expect(calls.creates[0].name).toBe('Playwright Test Run (shard 1/2)');
   });
 
   test('config tags become run tags and are merged after testRunConfig.tags', async ({ runInlineTest, server }) => {
