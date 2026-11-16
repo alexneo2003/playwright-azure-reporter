@@ -4,6 +4,8 @@ Publish the results of a sharded Playwright run (`--shard=1/4` ... `--shard=4/4`
 
 Back to the [README](../README.md).
 
+> **Recommended:** if you use shards, run this reporter **once, in the `merge-reports` job**, and not in every shard. A reporter in every shard creates a test run per shard, and with [several test plans](multiple-test-plans.md) a test run per shard **and** per plan.
+
 ## How it works
 
 Every shard is a separate Playwright process. If each of them loads this reporter, each creates its own test run. To get **one** test run for the whole suite, let the shards write Playwright blob reports and run the reporter once, on the merged result.
@@ -104,8 +106,38 @@ jobs:
           AZURE_TOKEN: ${{ secrets.AZURE_TOKEN }}
 ```
 
-## Things to know
+## Several test plans
 
+With a list of plans or a function in `planId` the reporter creates one test run for every selected plan that has test points of the executed tests (see [Multiple Test Plans](multiple-test-plans.md)). Every shard is a separate process and selects and creates its runs on its own:
+
+| Setup                               | Test runs for 4 shards and 3 plans                                          |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| Reporter in every shard             | up to 12, a plan gets a run from every shard that executed one of its tests |
+| Reporter in the `merge-reports` job | 3, one per plan                                                             |
+
+There is no way to let the shards share the runs: `isExistingTestRun` works with a single plan only. Use the merge job. Its config takes `planId` exactly as a normal config does:
+
+```typescript
+// merge.config.ts
+export default {
+  reporter: [
+    [
+      '@alex_neo/playwright-azure-reporter',
+      {
+        orgUrl: 'https://dev.azure.com/your-organization-name',
+        projectName: 'your-project',
+        planId: ({ plans }) =>
+          plans.filter((plan) => plan.state === 'Active' && plan.name.startsWith('Release ')).map((plan) => plan.id),
+        token: process.env.AZURE_TOKEN,
+      },
+    ],
+  ],
+};
+```
+
+A `planId` function is called once in the merge job, so all results of the run go to the same set of plans. In separate shards it is called in every shard, and the shards can disagree when a plan changes while they run.
+
+## Things to know
 
 - Run the merge job even when a shard failed (`succeededOrFailed()` / `!cancelled()`), otherwise failures never reach Azure DevOps. A shard that crashed before it wrote its blob report is missing from the run.
 - Nothing is published while the shards run. Results appear when the merge job runs.
