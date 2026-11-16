@@ -32,7 +32,7 @@ Test "[123] Login works":
 | `but testPointMapper returned none of them` | Your `testPointMapper` filtered every point out | Check the mapping, for example the `browserName` or `configuration.id` it compares |
 | `testPointMapper threw: ...` | Your `testPointMapper` threw for this test. Only this test is skipped | Return `[]` for tests you do not want to publish instead of throwing |
 
-To see the points of a test case in the Azure DevOps UI, open **Test Plans**, the plan, the suite, and the **Execute** tab: every row is a test point and shows its configuration. Configurations are assigned to a test case in a suite with **Assign configuration**.
+To see the points of a test case in the Azure DevOps UI, open **Test Plans**, the plan, the suite, and the **Execute** tab: every row is a test point and shows its configuration. Configurations are assigned per test case in the suite, from the menu of the test case row (**Assign configuration**).
 
 The reason is explained for the first 50 tests of a run without a point (it costs one extra request each). After that the warning keeps the short form. In `testRunADO` mode the warning keeps the short form, because points are matched against the results of the existing run.
 
