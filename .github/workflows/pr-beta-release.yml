@@ -5,6 +5,14 @@ on:
     types: [opened, synchronize]
   issue_comment:
     types: [created]
+  # The release itself runs from this event. npm trusted publishing refused the OIDC token of a run started by
+  # issue_comment (E404 on the token exchange, with every claim matching the trusted publisher), so a
+  # `/beta-release` comment only starts this workflow again through workflow_dispatch.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Number of the pull request to release'
+        required: true
 
 jobs:
   check-conditions:
@@ -86,9 +94,58 @@ jobs:
             echo "Comment does not contain beta release trigger"
           fi
 
-  pr-beta-release:
+  dispatch-release:
     needs: check-conditions
     if: needs.check-conditions.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Start the release for the pull request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.check-conditions.outputs.pr-number }}
+        run: |
+          gh workflow run pr-beta-release.yml \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.event.repository.default_branch }}" \
+            -f pr_number="$PR_NUMBER"
+          echo "Started PR Beta Release for PR #$PR_NUMBER"
+
+  resolve-pr:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr-number: ${{ steps.pr.outputs.pr-number }}
+      pr-head-ref: ${{ steps.pr.outputs.pr-head-ref }}
+      pr-head-sha: ${{ steps.pr.outputs.pr-head-sha }}
+    steps:
+      - name: Read the pull request
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::pr_number must be a number, got: $PR_NUMBER"
+            exit 1
+          fi
+          PR_DATA=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER")
+          if [[ "$(echo "$PR_DATA" | jq -r .state)" != "open" ]]; then
+            echo "::error::PR #$PR_NUMBER is not open"
+            exit 1
+          fi
+          echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr-head-ref=$(echo "$PR_DATA" | jq -r .head.ref)" >> $GITHUB_OUTPUT
+          echo "pr-head-sha=$(echo "$PR_DATA" | jq -r .head.sha)" >> $GITHUB_OUTPUT
+
+  pr-beta-release:
+    needs: resolve-pr
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -100,7 +157,7 @@ jobs:
       - name: Checkout PR source branch
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ needs.check-conditions.outputs.pr-head-sha }}
+          ref: ${{ needs.resolve-pr.outputs.pr-head-sha }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -140,7 +197,7 @@ jobs:
           echo "PR beta enabled: ${{ steps.config.outputs.pr-beta-enabled }}"
 
           # Comment on PR about disabled feature
-          gh pr comment ${{ needs.check-conditions.outputs.pr-number }} --body "❌ **PR Beta Release Disabled**
+          gh pr comment ${{ needs.resolve-pr.outputs.pr-number }} --body "❌ **PR Beta Release Disabled**
 
           PR beta releases are currently disabled in the configuration. To enable:
 
@@ -190,8 +247,8 @@ jobs:
           echo "Current version: $CURRENT_VERSION"
 
           VERSION_STRATEGY="${{ steps.config.outputs.version-strategy }}"
-          PR_NUMBER="${{ needs.check-conditions.outputs.pr-number }}"
-          PR_HEAD_REF="${{ needs.check-conditions.outputs.pr-head-ref }}"
+          PR_NUMBER="${{ needs.resolve-pr.outputs.pr-number }}"
+          PR_HEAD_REF="${{ needs.resolve-pr.outputs.pr-head-ref }}"
 
           echo "Version strategy: $VERSION_STRATEGY"
           echo "PR number: $PR_NUMBER"
@@ -223,7 +280,7 @@ jobs:
 
           # Create PR-specific beta version with branch name and commit sha
           SAFE_BRANCH_NAME=$(echo "$PR_HEAD_REF" | sed 's/[^a-zA-Z0-9.-]/-/g' | sed 's/--*/-/g')
-          SHORT_SHA=$(echo "${{ needs.check-conditions.outputs.pr-head-sha }}" | cut -c1-7)
+          SHORT_SHA=$(echo "${{ needs.resolve-pr.outputs.pr-head-sha }}" | cut -c1-7)
           NEW_VERSION="$NEW_BASE_VERSION-pr$PR_NUMBER.$SAFE_BRANCH_NAME.$SHORT_SHA"
 
           echo "New version: $NEW_VERSION"
@@ -271,9 +328,9 @@ jobs:
             --title "PR Beta Release v${{ steps.version.outputs.new-version }}" \
             --notes "🧪 **PR Beta Release v${{ steps.version.outputs.new-version }}**
 
-          This is a beta release for testing changes in PR #${{ needs.check-conditions.outputs.pr-number }}.
+          This is a beta release for testing changes in PR #${{ needs.resolve-pr.outputs.pr-number }}.
 
-          **Source Branch:** \`${{ needs.check-conditions.outputs.pr-head-ref }}\`
+          **Source Branch:** \`${{ needs.resolve-pr.outputs.pr-head-ref }}\`
           **Base Version:** \`${{ steps.version.outputs.base-version }}\`
 
           **Installation:**
@@ -293,7 +350,7 @@ jobs:
 
       - name: Comment on PR with release info
         run: |
-          gh pr comment ${{ needs.check-conditions.outputs.pr-number }} --body "🎉 **Beta Release Published!**
+          gh pr comment ${{ needs.resolve-pr.outputs.pr-number }} --body "🎉 **Beta Release Published!**
 
           **Version:** \`v${{ steps.version.outputs.new-version }}\`
           **npm Tag:** \`${{ steps.config.outputs.publish-tag }}\`
@@ -314,8 +371,8 @@ jobs:
 
           This beta release contains the changes from this PR and can be used to test the functionality before merging.
 
-          **Branch:** \`${{ needs.check-conditions.outputs.pr-head-ref }}\`
-          **Commit:** \`${{ needs.check-conditions.outputs.pr-head-sha }}\`
+          **Branch:** \`${{ needs.resolve-pr.outputs.pr-head-ref }}\`
+          **Commit:** \`${{ needs.resolve-pr.outputs.pr-head-sha }}\`
 
           ---
           *To trigger another beta release after pushing new changes, comment \`/beta-release\` again.*"

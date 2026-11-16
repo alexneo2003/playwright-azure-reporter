@@ -148,6 +148,8 @@ To create a beta release for a specific pull request:
 
 The PR beta release will include all changes from the PR's source branch and create a unique version identifier.
 
+The comment starts a second run of the same workflow through `workflow_dispatch`, and that run builds and publishes. npm trusted publishing does not accept a run started by a comment. The release can also be started by hand: Actions → PR Beta Release → Run workflow, with the number of the pull request.
+
 **Note:** Beta releases are for testing purposes and may contain experimental features. For production use, always use the latest stable release.
 ## npm Authentication: Trusted Publishing
 
