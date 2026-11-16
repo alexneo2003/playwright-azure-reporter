@@ -247,8 +247,22 @@ jobs:
 
       # Authenticated with OIDC (trusted publisher configured for this workflow file on npmjs.com).
       # Provenance is generated automatically.
+      # Temporary diagnostics: npm rejects the OIDC token of this workflow, while beta-release.yml publishes fine.
+      # Prints the claims npm compares with the trusted publisher configuration. The token itself is not printed.
+      - name: Show OIDC claims
+        run: |
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r '.value')
+          echo "::add-mask::$TOKEN"
+          TOKEN="$TOKEN" node -e '
+            const claims = JSON.parse(Buffer.from(process.env.TOKEN.split(".")[1], "base64url").toString());
+            const keys = ["sub", "aud", "repository", "repository_visibility", "ref", "event_name", "workflow",
+              "workflow_ref", "job_workflow_ref", "environment", "runner_environment"];
+            for (const key of keys) console.log(key + ": " + JSON.stringify(claims[key]));
+          '
+
       - name: Publish to npm
-        run: npm publish --access public --tag ${{ steps.config.outputs.publish-tag }}
+        run: npm publish --access public --tag ${{ steps.config.outputs.publish-tag }} --loglevel verbose
 
       - name: Create GitHub Release
         if: steps.config.outputs.create-github-release == 'true'
