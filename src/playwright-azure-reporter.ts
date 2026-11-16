@@ -39,10 +39,13 @@ import {
   WorkItemStep,
 } from './test-steps';
 import {
+  chunk,
   createGuid,
   getExtensionFromContentType,
   getExtensionFromFilename,
   parsePlanId,
+  POINTS_QUERY_MAX_TEST_CASE_IDS,
+  POINTS_QUERY_PAGE_SIZE,
   shortID,
   stripAnsi,
 } from './utils';
@@ -1537,11 +1540,7 @@ class AzureDevOpsReporter implements Reporter {
       let points: TestInterfaces.TestPoint[] = [];
       if (mapperError === undefined) {
         if (!this._testApi) this._testApi = await this._connection.getTestApi();
-        const response = await this._testApi.getPointsByQuery(
-          { pointsFilter: { testcaseIds: testCaseIds.map((id) => parseInt(id, 10)) } },
-          this._projectName
-        );
-        points = response?.points ?? [];
+        points = (await this._queryTestPoints({ testcaseIds: testCaseIds.map((id) => parseInt(id, 10)) })) ?? [];
       }
       return diagnoseMissingTestPoints({
         testCaseIds,
@@ -1615,24 +1614,17 @@ class AzureDevOpsReporter implements Reporter {
         this._logger?.debug(`Filtering test points by configurations: ${this._configurationNames.join(', ')}`);
       }
 
-      const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: pointsFilter,
-      };
-
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
-        pointsQuery,
-        this._projectName
-      );
-      if (pointsQueryResult.points) {
+      const queriedPoints = await this._queryTestPoints(pointsFilter);
+      if (queriedPoints) {
         for (const testsResult of testsResults) {
-          let currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);
+          let currentTestPoints = this._filterTestTestPoints(queriedPoints, testsResult);
 
           // in case of testRunADO
           if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
             currentTestPoints = this._filterTestTestPointsByRunResults(
               existingTestCaseResults,
-              pointsQueryResult.points || [],
+              queriedPoints,
               testsResult
             );
           }
@@ -1654,6 +1646,52 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.error(toError(error).stack ?? '');
     }
     return result;
+  }
+
+  /**
+   * Azure DevOps answers a points query with at most 1000 test points and gives no sign that there are more
+   * (verified on a live organization). The query knows nothing about the plan, so the points of the same
+   * test cases in every other plan of the project count too. A full page is therefore followed by `$skip`
+   * requests until a page comes back short. The first request is left exactly as it always was.
+   */
+  private async _queryTestPoints(
+    pointsFilter: TestInterfaces.PointsFilter
+  ): Promise<TestInterfaces.TestPoint[] | void> {
+    let testcaseIds = pointsFilter.testcaseIds ?? [];
+    if (testcaseIds.length > POINTS_QUERY_MAX_TEST_CASE_IDS) {
+      // more ids in one query are rejected with 400
+      testcaseIds = [...new Set(testcaseIds)];
+    }
+    const filters =
+      testcaseIds.length > POINTS_QUERY_MAX_TEST_CASE_IDS
+        ? chunk(testcaseIds, POINTS_QUERY_MAX_TEST_CASE_IDS).map((ids) => ({ ...pointsFilter, testcaseIds: ids }))
+        : [testcaseIds === pointsFilter.testcaseIds ? pointsFilter : { ...pointsFilter, testcaseIds }];
+
+    let points: TestInterfaces.TestPoint[] | undefined;
+    for (const filter of filters) {
+      const pointsQuery: TestInterfaces.TestPointsQuery = { pointsFilter: filter };
+      const firstPage = (await this._testApi.getPointsByQuery(pointsQuery, this._projectName)).points;
+      if (!firstPage) continue;
+      points = (points ?? []).concat(firstPage);
+
+      let pageSize = firstPage.length;
+      let skip = 0;
+      while (pageSize >= POINTS_QUERY_PAGE_SIZE) {
+        skip += POINTS_QUERY_PAGE_SIZE;
+        this._logger?.debug(`Test points query returned a full page, fetching the next one (skip: ${skip})`);
+        try {
+          const nextPage = (await this._testApi.getPointsByQuery(pointsQuery, this._projectName, skip)).points ?? [];
+          points = points.concat(nextPage);
+          pageSize = nextPage.length;
+        } catch (error) {
+          this._logger?.warn(
+            `Failed to fetch test points after the first ${skip}: ${toError(error).message}. Some test points may be missing.`
+          );
+          break;
+        }
+      }
+    }
+    return points;
   }
 
   private _addReportingOverride = (api: Test.ITestApi): Test.ITestApi => {

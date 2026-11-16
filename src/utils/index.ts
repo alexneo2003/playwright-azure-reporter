@@ -43,3 +43,14 @@ export function parsePlanId(value: unknown): number | undefined {
   const parsed = Number(trimmed);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
+
+/** Azure DevOps returns at most this many test points for one points query and rejects a bigger `$top`. */
+export const POINTS_QUERY_PAGE_SIZE = 1000;
+/** Azure DevOps rejects a points query with more test case ids. */
+export const POINTS_QUERY_MAX_TEST_CASE_IDS = 200;
+
+export function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}

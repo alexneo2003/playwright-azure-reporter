@@ -2,6 +2,7 @@ import { TestCase, TestResult } from '@playwright/test/reporter';
 
 import AzureDevOpsReporter from '../../dist/playwright-azure-reporter';
 import {
+  chunk,
   getExtensionFromContentType,
   getExtensionFromFilename,
   getMimeTypeFromFilename,
@@ -345,4 +346,9 @@ test.describe('Reporter _mapToAzureState', () => {
 
     expect(mapToAzureState(testCase, testResult)).toBe('Blocked');
   });
+});
+
+test('chunk splits a list into parts of the given size', () => {
+  expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
+  expect(chunk([], 2)).toEqual([]);
 });
