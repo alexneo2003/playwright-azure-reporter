@@ -141,14 +141,10 @@ jobs:
           # Update package.json version
           npm version "$NEW_VERSION" --no-git-tag-version
 
-      - name: Update changelog
-        run: |
-          # Generate changelog for the new beta version
-          npx conventional-changelog -p angular -i CHANGELOG.md -s --first-release
-
       - name: Commit version changes
         run: |
-          git add package.json CHANGELOG.md
+          # CHANGELOG.md is written by the stable release only, from the commits since the last stable tag
+          git add package.json
           git commit -m "chore: release v${{ steps.version.outputs.new-version }}"
           git tag "v${{ steps.version.outputs.new-version }}"
 
