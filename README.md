@@ -211,7 +211,7 @@ For more examples, see [Authentication Examples](tests/examples/authType-example
 | Work Items | Read | Aligning published steps with the test case (only if `publishTestSteps` is enabled with `alignWithTestCase`, the default) |
 | Project and Team | Read | Accessing project information |
 
-Alternatively, use a token with **Full access** scope.
+Alternatively, use a token with **Full access** scope. [`pipelineAssociation`](#associate-runs-with-the-pipeline-build) needs no additional scope.
 
 > **Note:** If your token lacks Work Items write permissions but `autoMarkTestCasesAsAutomated` is enabled, the reporter will log errors for automation updates but continue publishing test results normally.
 
@@ -697,7 +697,7 @@ Automatically update Azure DevOps test case work items to reflect their automati
 
 ### Associate Runs with the Pipeline Build
 
-By default the test run the reporter creates is not linked to the pipeline that produced it. `pipelineAssociation` links it to the build, the pipeline job and, in a classic release, the release, so the run belongs to the build like the run of the `PublishTestResults` task does.
+By default the test run the reporter creates is not linked to the pipeline that produced it, so the build has no **Tests** tab for it. `pipelineAssociation` links the run to the build, the pipeline job and, in a classic release, the release: the results then show up in the **Tests** tab of the build (or of the release stage), like those of the `PublishTestResults` task.
 
 ```typescript
 {
@@ -725,16 +725,19 @@ The values come from the predefined pipeline variables, nothing has to be passed
 - **Outside Azure Pipelines** (`TF_BUILD` is not `True`) the option does nothing, so the same config works locally.
 - **Your values win.** `build`, `buildReference`, `pipelineReference`, `releaseUri` or `releaseEnvironmentUri` set in `testRunConfig` are never overwritten; the reporter fills only what is missing.
 - **Every run the reporter creates** is associated: in `testResult` and `testRun` mode, the run of every plan with [several test plans](#multiple-test-plans), and the run created only for [errors outside of tests](#errors-outside-of-tests). A run given with `isExistingTestRun` is never modified.
-- **It never prevents reporting.** If Azure DevOps rejects the run with the association, for example because the pipeline runs in another project than `projectName`, the reporter logs the error and creates the run without it. Run tags are dropped together with the association, because Azure DevOps accepts them only for a run with a build or a release.
-- **Run tags work.** With the association, the tags of `testRunContext` and `testRunConfig.tags` are accepted (see [Run Context](#run-context-shard-and-tags)).
+- **Another project:** Azure DevOps does not associate a run with a build of another project (`Build <id> cannot be found.`). When the pipeline runs in another project than `projectName` the reporter says so in the log and creates the runs without the association.
+- **It never prevents reporting.** If Azure DevOps rejects the run anyway, the reporter logs the error and retries: first without the tags of the Playwright config, then without the tags of `testRunConfig` (the association is kept), and last without the association.
+- **Run tags work.** With the association, the tags of `testRunContext` and `testRunConfig.tags` are accepted, also non-Latin ones, at most 5 per run (see [Run Context](#run-context-shard-and-tags)). They are shown in the Tags column of the build's Tests tab.
+- **Re-running a failed job** creates a new run with the next attempt number; both runs are listed in the Tests tab.
+- **Permissions:** no token scope beyond those for publishing results is needed. `System.AccessToken` works too (`authType: 'accessToken'`, `token: process.env.SYSTEM_ACCESSTOKEN`, mapped into the step with `env`), as long as the results go to the project of the pipeline.
 - **Two runs for one job:** if the pipeline also publishes a JUnit file with `PublishTestResults`, that task creates a second run. Remove the JUnit publishing once the association is on.
 
 ```yaml
 - script: npx playwright test
   displayName: 'Run Playwright tests'
   env:
-    AZURE_TOKEN: $(AZURE_TOKEN)
-# no PublishTestResults step for the same tests: the reporter's run is already associated with this build
+    AZURE_TOKEN: $(AZURE_TOKEN) # or SYSTEM_ACCESSTOKEN: $(System.AccessToken) with authType: 'accessToken'
+# no PublishTestResults step for the same tests: the reporter's run is already in the Tests tab of this build
 ```
 
 ## Playwright Compatibility

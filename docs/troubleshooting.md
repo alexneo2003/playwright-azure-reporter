@@ -60,7 +60,8 @@ This comes from `testRunConfig.owner`, for example an `owner.displayName` copied
 The reporter creates its own test run, and by default it is not linked to the pipeline. Turn on `pipelineAssociation` to associate the run with the build, the pipeline job and a classic release, see [Associate Runs with the Pipeline Build](../README.md#associate-runs-with-the-pipeline-build).
 
 - The log says `Test runs are associated with build …` when the association is used. No such line: the reporter does not see the pipeline variables (`TF_BUILD`, `BUILD_BUILDID`), for example because the tests run in a container that does not get them.
-- `Creating the test run associated with build … failed (…). Retrying without the pipeline association.`: Azure DevOps rejected the association, the line shows its error. A pipeline in another project than `projectName` is the usual case.
+- `The pipeline runs in project …, results are published to project …`: Azure DevOps does not associate a run with a build of another project, so the runs are created without it. Publish to the project of the pipeline to get the results into its Tests tab.
+- `Creating the test run associated with build … failed (…). Retrying …`: Azure DevOps rejected the run, the line shows its error. `Number of tags 6 for this run are more than supported limit 5` means too many `testRunConfig.tags`: the run is then created without them, still associated.
 - If you also publish a JUnit file with the `PublishTestResults` task, that creates a second, separate run. Remove it once the association is on.
 
 ## planId from an environment variable
