@@ -57,9 +57,11 @@ This comes from `testRunConfig.owner`, for example an `owner.displayName` copied
 
 ## Results are in Test Plans but not in the pipeline Tests tab
 
-The reporter creates its own test run and does not associate it with the pipeline build yet, so the build's **Tests** tab does not show it. This is tracked in [#163](https://github.com/alexneo2003/playwright-azure-reporter/issues/163).
+The reporter creates its own test run, and by default it is not linked to the pipeline. Turn on `pipelineAssociation` to associate the run with the build, the pipeline job and a classic release, see [Associate Runs with the Pipeline Build](../README.md#associate-runs-with-the-pipeline-build).
 
-If you also publish a JUnit file with the `PublishTestResults` task, that creates a second, separate run.
+- The log says `Test runs are associated with build …` when the association is used. No such line: the reporter does not see the pipeline variables (`TF_BUILD`, `BUILD_BUILDID`), for example because the tests run in a container that does not get them.
+- `Creating the test run associated with build … failed (…). Retrying without the pipeline association.`: Azure DevOps rejected the association, the line shows its error. A pipeline in another project than `projectName` is the usual case.
+- If you also publish a JUnit file with the `PublishTestResults` task, that creates a second, separate run. Remove it once the association is on.
 
 ## planId from an environment variable
 

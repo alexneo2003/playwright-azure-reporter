@@ -27,6 +27,7 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [Test Case Summary](#test-case-summary)
   - [Auto-Mark as Automated](#auto-mark-as-automated)
 - [CI/CD Integration](#cicd-integration)
+  - [Associate Runs with the Pipeline Build](#associate-runs-with-the-pipeline-build)
 - [Playwright Compatibility](#playwright-compatibility)
 - [Troubleshooting](#troubleshooting)
 - [Releases](#releases)
@@ -422,7 +423,7 @@ With `--shard=1/4` ... `--shard=4/4` four processes create four test runs with a
 
 Tags are merged with `testRunConfig.tags`, yours first. A leading `@` is removed (`'@smoke'` becomes `smoke`). Azure DevOps accepts only letters and digits in run tags, so a tag such as `@feature:login`, `@a b` or `@snake_case` is skipped with a warning that names it; the other tags are still used. Empty and duplicate values (case-insensitive) are dropped too. A run keeps at most 5 tags, tags that do not fit are not added and logged. If Azure DevOps rejects the new run anyway, the reporter creates it again without the tags from the Playwright config, so a tag can never prevent reporting.
 
-> **Note:** Azure DevOps accepts tags only on runs that are associated with a build or a release (`Test Tag is only supported for Automated runs, make sure we have build or release associated`). Without one, the create request is rejected, and the same happens to tags you set in `testRunConfig.tags`, with or without `testRunContext`. Associate the run with a build through `testRunConfig`, for example `testRunConfig: { build: { id: '<build id>' } }`, or leave the tags out. The tags from the Playwright config can be dropped on their own with `testRunContext: { enabled: true, tags: false }`.
+> **Note:** Azure DevOps accepts tags only on runs that are associated with a build or a release (`Test Tag is only supported for Automated runs, make sure we have build or release associated`). Without one, the create request is rejected, and the same happens to tags you set in `testRunConfig.tags`, with or without `testRunContext`. In Azure Pipelines, turn on [`pipelineAssociation`](#associate-runs-with-the-pipeline-build); elsewhere associate the run with a build through `testRunConfig`, for example `testRunConfig: { build: { id: '<build id>' } }`, or leave the tags out. The tags from the Playwright config can be dropped on their own with `testRunContext: { enabled: true, tags: false }`.
 
 ### Attachments & Logs
 
@@ -692,6 +693,48 @@ Automatically update Azure DevOps test case work items to reflect their automati
 # Access the test run ID from subsequent steps (since v1.10.0)
 - script: echo $(playwright.AZURE_PW_TEST_RUN_ID)
   displayName: 'Print test run id'
+```
+
+### Associate Runs with the Pipeline Build
+
+By default the test run the reporter creates is not linked to the pipeline that produced it. `pipelineAssociation` links it to the build, the pipeline job and, in a classic release, the release, so the run belongs to the build like the run of the `PublishTestResults` task does.
+
+```typescript
+{
+  pipelineAssociation: true,
+  // or pick the parts: pipelineAssociation: { enabled: true, build: true, job: true, release: true },
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `pipelineAssociation` | `boolean \| object` | `false` | `true` or `{ enabled: true }` turns on all parts below |
+| `pipelineAssociation.build` | `boolean` | `true` | The build and the pipeline definition (`build`, `pipelineReference`) |
+| `pipelineAssociation.job` | `boolean` | `true` | Stage, phase and job with their attempts. Needs `build` |
+| `pipelineAssociation.release` | `boolean` | `true` | Release and stage of a classic release (`releaseUri`, `releaseEnvironmentUri`) |
+
+The values come from the predefined pipeline variables, nothing has to be passed to the reporter:
+
+| Field of the run | Variable |
+|---|---|
+| `build.id`, `pipelineReference.pipelineId` | `Build.BuildId` |
+| `pipelineReference.pipelineDefinitionId` | `System.DefinitionId` |
+| stage, phase and job | `System.StageName`, `System.PhaseName`, `System.JobName` and their `…Attempt` |
+| `releaseUri`, `releaseEnvironmentUri` | `Release.ReleaseUri`, `Release.EnvironmentUri` |
+
+- **Outside Azure Pipelines** (`TF_BUILD` is not `True`) the option does nothing, so the same config works locally.
+- **Your values win.** `build`, `buildReference`, `pipelineReference`, `releaseUri` or `releaseEnvironmentUri` set in `testRunConfig` are never overwritten; the reporter fills only what is missing.
+- **Every run the reporter creates** is associated: in `testResult` and `testRun` mode, the run of every plan with [several test plans](#multiple-test-plans), and the run created only for [errors outside of tests](#errors-outside-of-tests). A run given with `isExistingTestRun` is never modified.
+- **It never prevents reporting.** If Azure DevOps rejects the run with the association, for example because the pipeline runs in another project than `projectName`, the reporter logs the error and creates the run without it. Run tags are dropped together with the association, because Azure DevOps accepts them only for a run with a build or a release.
+- **Run tags work.** With the association, the tags of `testRunContext` and `testRunConfig.tags` are accepted (see [Run Context](#run-context-shard-and-tags)).
+- **Two runs for one job:** if the pipeline also publishes a JUnit file with `PublishTestResults`, that task creates a second run. Remove the JUnit publishing once the association is on.
+
+```yaml
+- script: npx playwright test
+  displayName: 'Run Playwright tests'
+  env:
+    AZURE_TOKEN: $(AZURE_TOKEN)
+# no PublishTestResults step for the same tests: the reporter's run is already associated with this build
 ```
 
 ## Playwright Compatibility
