@@ -29,6 +29,16 @@ import {
 import { DEFAULT_MAX_GLOBAL_ERRORS, GlobalErrorCollector } from './global-errors';
 import Logger from './logger';
 import {
+  buildPipelineAssociation,
+  describePipelineAssociation,
+  isCrossProject,
+  mergePipelineAssociation,
+  parsePipelineAssociation,
+  PipelineAssociation,
+  readPipelineContext,
+  TPipelineAssociationOption,
+} from './pipeline-context';
+import {
   AzureTestPlanInfo,
   isInactivePlan,
   MANY_PLANS_THRESHOLD,
@@ -37,7 +47,7 @@ import {
   TPlanIdOption,
   TPlanIdSelector,
 } from './plan-selection';
-import { formatShardSuffix, mergeRunTags, normalizeConfigTags } from './run-context';
+import { formatShardSuffix, MAX_RUN_TAGS, mergeRunTags, normalizeConfigTags } from './run-context';
 import { diagnoseMissingTestPoints } from './test-point-diagnostics';
 import {
   buildIterationDetails,
@@ -181,6 +191,13 @@ export interface AzureReporterOptions {
    * config (`tag`, Playwright 1.57+) into the tags of the run. Default: off.
    */
   testRunContext?: boolean | TTestRunContextOptions;
+  /**
+   * Associate every test run the reporter creates with the Azure Pipelines build (and the pipeline job, and a
+   * classic release) it runs in, from the predefined pipeline variables. Values set in `testRunConfig` win.
+   * Does nothing outside Azure Pipelines. A run Azure DevOps rejects with the association is created without it.
+   * Default: off.
+   */
+  pipelineAssociation?: TPipelineAssociationOption;
   /**
    * What to do when the installed Playwright is older than an enabled feature requires
    * (see the feature matrix in README). `lenient` (default) switches the feature off or degrades it
@@ -330,6 +347,8 @@ class AzureDevOpsReporter implements Reporter {
   private _globalErrors: GlobalErrorCollector | undefined;
   private _runContext = { shardInTitle: false, tags: false };
   private _contextTags: string[] = [];
+  /** Fields that associate created runs with the pipeline; undefined when the option is off or there is no pipeline. */
+  private _pipelineAssociation: PipelineAssociation | undefined;
   private _currentRunId: number | undefined;
   /** `testResult` mode with no tests: the run is created at the end, and only if there are errors to put on it. */
   private _isRunDeferred = false;
@@ -429,6 +448,34 @@ class AzureDevOpsReporter implements Reporter {
     this._initTestRunContext(options.testRunContext);
 
     this._validateOptions(options);
+    if (!this._isDisabled) this._initPipelineAssociation(options.pipelineAssociation, process.env);
+  }
+
+  private _initPipelineAssociation(option: unknown, env: NodeJS.ProcessEnv): void {
+    const options = parsePipelineAssociation(option);
+    if (!options) return;
+    const context = readPipelineContext(env);
+    if (!context) {
+      this._logger?.debug(
+        "'pipelineAssociation' is on, but the run is not in Azure Pipelines: nothing to associate with."
+      );
+      return;
+    }
+    const association = buildPipelineAssociation(context, options);
+    if (Object.keys(association).length === 0) {
+      this._logger?.debug("'pipelineAssociation': the enabled parts have no pipeline values to associate with.");
+      return;
+    }
+    if (isCrossProject(context, this._projectName)) {
+      // verified on a live organization: Azure DevOps answers "Build <id> cannot be found." for a build of another project
+      this._logger?.info(
+        `The pipeline runs in project ${context.teamProject}, results are published to project ${this._projectName}. ` +
+          'Azure DevOps does not associate a run with a build of another project, so the runs are not associated.'
+      );
+      return;
+    }
+    this._pipelineAssociation = association;
+    this._logger?.info(`Test runs are associated with ${describePipelineAssociation(association)}`);
   }
 
   private _initPublishTestSteps(option: AzureReporterOptions['publishTestSteps']): void {
@@ -1397,25 +1444,25 @@ class AzureDevOpsReporter implements Reporter {
         };
         if (!this._testApi) this._testApi = await this._connection.getTestApi();
 
+        const attempts = this._runCreateAttempts(runModel);
         let adTestRun: TestInterfaces.TestRun | undefined;
-        const merged = mergeRunTags(runModel.tags, this._contextTags);
-        if (merged.added.length > 0) {
-          if (merged.dropped.length > 0) {
-            this._logger?.warn(`Run tags limit reached, not added: ${merged.dropped.join(', ')}`);
+        for (let index = 0; index < attempts.length; index++) {
+          const attempt = attempts[index];
+          const next = attempts[index + 1];
+          if (!next) {
+            // the last attempt fails as it always did
+            adTestRun = await this._testApi.createTestRun(attempt.model, this._projectName);
+            break;
           }
           try {
-            adTestRun = await this._testApi.createTestRun({ ...runModel, tags: merged.tags }, this._projectName);
+            adTestRun = await this._testApi.createTestRun(attempt.model, this._projectName);
+            if (adTestRun?.id) break;
           } catch (error) {
-            // a tag Azure DevOps does not accept must never prevent reporting
+            // tags or an association Azure DevOps does not accept must never prevent reporting
             this._logger?.warn(
-              `Creating the test run with the tags [${merged.added.join(', ')}] failed (${toError(error).message}). Retrying without them.`
+              `Creating the test run ${attempt.label} failed (${toError(error).message}). Retrying ${next.retry}.`
             );
           }
-        } else if (merged.dropped.length > 0) {
-          this._logger?.warn(`Run tags limit reached, not added: ${merged.dropped.join(', ')}`);
-        }
-        if (!adTestRun?.id) {
-          adTestRun = await this._testApi.createTestRun(runModel, this._projectName);
         }
         if (adTestRun?.id) return adTestRun;
         else throw new Error('Failed to create test run');
@@ -1424,6 +1471,70 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.error(toError(error).stack ?? '');
       if (planId === undefined) this._setIsDisable(true);
     }
+  }
+
+  /**
+   * The create requests to try, most complete first:
+   * 1. with the tags of the Playwright config;
+   * 2. without them;
+   * 3. with the pipeline association but without the tags of `testRunConfig` (a bad tag, or more than 5, must not
+   *    cost the association, which is what puts the run into the Tests tab of the build);
+   * 4. without the association. Tags need a build or a release, so none are sent then.
+   * With the association off this is exactly the request (and the single retry) of before.
+   */
+  private _runCreateAttempts(
+    runModel: TestInterfaces.RunCreateModel
+  ): Array<{ model: TestInterfaces.RunCreateModel; label: string; retry: string }> {
+    const attempts: Array<{ model: TestInterfaces.RunCreateModel; label: string; retry: string }> = [];
+    const merged = mergeRunTags(runModel.tags, this._contextTags);
+    if (merged.dropped.length > 0) {
+      this._logger?.warn(`Run tags limit reached, not added: ${merged.dropped.join(', ')}`);
+    }
+    if ((runModel.tags?.length ?? 0) > MAX_RUN_TAGS) {
+      this._logger?.warn(
+        `testRunConfig.tags has ${runModel.tags!.length} tags, Azure DevOps accepts at most ${MAX_RUN_TAGS} on a run.`
+      );
+    }
+    const associated = this._pipelineAssociation
+      ? mergePipelineAssociation(runModel, this._pipelineAssociation)
+      : { model: runModel, added: [] };
+    const isAssociated = associated.added.length > 0;
+    const hasUserTags = !!runModel.tags?.length;
+    const withoutTags = (model: TestInterfaces.RunCreateModel): TestInterfaces.RunCreateModel => {
+      const copy = { ...model };
+      delete copy.tags;
+      return copy;
+    };
+
+    if (merged.added.length > 0) {
+      attempts.push({
+        model: { ...associated.model, tags: merged.tags },
+        label: `with the tags [${merged.added.join(', ')}]`,
+        retry: '',
+      });
+    }
+    attempts.push({
+      model: associated.model,
+      label: isAssociated
+        ? `associated with ${describePipelineAssociation(this._pipelineAssociation!)}${hasUserTags ? ' and with the tags of testRunConfig' : ''}`
+        : '',
+      retry: 'without them',
+    });
+    if (isAssociated && hasUserTags) {
+      attempts.push({
+        model: withoutTags(associated.model),
+        label: `associated with ${describePipelineAssociation(this._pipelineAssociation!)}`,
+        retry: 'without the tags of testRunConfig',
+      });
+    }
+    if (isAssociated) {
+      attempts.push({
+        model: hasUserTags ? withoutTags(runModel) : runModel,
+        label: '',
+        retry: 'without the pipeline association',
+      });
+    }
+    return attempts;
   }
 
   private _isSelectedPlan(planId: string | undefined): boolean {

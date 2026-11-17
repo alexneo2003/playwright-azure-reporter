@@ -233,6 +233,19 @@ export function cleanEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     AZURE_PW_DISABLED: undefined,
     AZURE_PW_TEST_RUN_ID: undefined,
     AZURE_PW_ROOT_SUITE_ID: undefined,
+    // Azure Pipelines variables: a test suite that runs in a pipeline must not associate the mocked runs with it
+    TF_BUILD: undefined,
+    BUILD_BUILDID: undefined,
+    SYSTEM_DEFINITIONID: undefined,
+    SYSTEM_TEAMPROJECT: undefined,
+    SYSTEM_STAGENAME: undefined,
+    SYSTEM_STAGEATTEMPT: undefined,
+    SYSTEM_PHASENAME: undefined,
+    SYSTEM_PHASEATTEMPT: undefined,
+    SYSTEM_JOBNAME: undefined,
+    SYSTEM_JOBATTEMPT: undefined,
+    RELEASE_RELEASEURI: undefined,
+    RELEASE_ENVIRONMENTURI: undefined,
     ...env,
   };
 }
