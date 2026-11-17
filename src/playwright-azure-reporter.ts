@@ -47,7 +47,7 @@ import {
   TPlanIdOption,
   TPlanIdSelector,
 } from './plan-selection';
-import { formatShardSuffix, mergeRunTags, normalizeConfigTags } from './run-context';
+import { formatShardSuffix, MAX_RUN_TAGS, mergeRunTags, normalizeConfigTags } from './run-context';
 import { diagnoseMissingTestPoints } from './test-point-diagnostics';
 import {
   buildIterationDetails,
@@ -466,14 +466,16 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.debug("'pipelineAssociation': the enabled parts have no pipeline values to associate with.");
       return;
     }
-    this._pipelineAssociation = association;
-    this._logger?.info(`Test runs are associated with ${describePipelineAssociation(association)}`);
     if (isCrossProject(context, this._projectName)) {
+      // verified on a live organization: Azure DevOps answers "Build <id> cannot be found." for a build of another project
       this._logger?.info(
         `The pipeline runs in project ${context.teamProject}, results are published to project ${this._projectName}. ` +
-          'If Azure DevOps does not accept the association there, the run is created without it.'
+          'Azure DevOps does not associate a run with a build of another project, so the runs are not associated.'
       );
+      return;
     }
+    this._pipelineAssociation = association;
+    this._logger?.info(`Test runs are associated with ${describePipelineAssociation(association)}`);
   }
 
   private _initPublishTestSteps(option: AzureReporterOptions['publishTestSteps']): void {
@@ -1472,10 +1474,13 @@ class AzureDevOpsReporter implements Reporter {
   }
 
   /**
-   * The create requests to try, most complete first: with the tags of the Playwright config, then without them,
-   * then without the pipeline association. Without the association the tags of `testRunConfig` are dropped too:
-   * Azure DevOps accepts run tags only for a run with a build or a release. With the association off this is
-   * exactly the request (and the single retry) of before.
+   * The create requests to try, most complete first:
+   * 1. with the tags of the Playwright config;
+   * 2. without them;
+   * 3. with the pipeline association but without the tags of `testRunConfig` (a bad tag, or more than 5, must not
+   *    cost the association, which is what puts the run into the Tests tab of the build);
+   * 4. without the association. Tags need a build or a release, so none are sent then.
+   * With the association off this is exactly the request (and the single retry) of before.
    */
   private _runCreateAttempts(
     runModel: TestInterfaces.RunCreateModel
@@ -1485,10 +1490,21 @@ class AzureDevOpsReporter implements Reporter {
     if (merged.dropped.length > 0) {
       this._logger?.warn(`Run tags limit reached, not added: ${merged.dropped.join(', ')}`);
     }
+    if ((runModel.tags?.length ?? 0) > MAX_RUN_TAGS) {
+      this._logger?.warn(
+        `testRunConfig.tags has ${runModel.tags!.length} tags, Azure DevOps accepts at most ${MAX_RUN_TAGS} on a run.`
+      );
+    }
     const associated = this._pipelineAssociation
       ? mergePipelineAssociation(runModel, this._pipelineAssociation)
       : { model: runModel, added: [] };
     const isAssociated = associated.added.length > 0;
+    const hasUserTags = !!runModel.tags?.length;
+    const withoutTags = (model: TestInterfaces.RunCreateModel): TestInterfaces.RunCreateModel => {
+      const copy = { ...model };
+      delete copy.tags;
+      return copy;
+    };
 
     if (merged.added.length > 0) {
       attempts.push({
@@ -1499,19 +1515,23 @@ class AzureDevOpsReporter implements Reporter {
     }
     attempts.push({
       model: associated.model,
-      label: isAssociated ? `associated with ${describePipelineAssociation(this._pipelineAssociation!)}` : '',
+      label: isAssociated
+        ? `associated with ${describePipelineAssociation(this._pipelineAssociation!)}${hasUserTags ? ' and with the tags of testRunConfig' : ''}`
+        : '',
       retry: 'without them',
     });
-    if (isAssociated) {
-      const hasUserTags = !!runModel.tags?.length;
-      const withoutAssociation: TestInterfaces.RunCreateModel = { ...runModel };
-      if (hasUserTags) delete withoutAssociation.tags;
+    if (isAssociated && hasUserTags) {
       attempts.push({
-        model: withoutAssociation,
+        model: withoutTags(associated.model),
+        label: `associated with ${describePipelineAssociation(this._pipelineAssociation!)}`,
+        retry: 'without the tags of testRunConfig',
+      });
+    }
+    if (isAssociated) {
+      attempts.push({
+        model: hasUserTags ? withoutTags(runModel) : runModel,
         label: '',
-        retry: hasUserTags
-          ? 'without the pipeline association and without the tags of testRunConfig (Azure DevOps accepts run tags only for a run with a build or a release)'
-          : 'without the pipeline association',
+        retry: 'without the pipeline association',
       });
     }
     return attempts;

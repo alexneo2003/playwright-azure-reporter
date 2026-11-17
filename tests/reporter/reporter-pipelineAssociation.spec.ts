@@ -253,7 +253,43 @@ test.describe('pipelineAssociation', () => {
     expect(result.output).toContain('Retrying without the pipeline association.');
   });
 
-  test('without the association the tags of testRunConfig are dropped too', async ({ runInlineTest, server }) => {
+  test('too many tags in testRunConfig: the run keeps the association, only the tags are dropped', async ({
+    runInlineTest,
+    server,
+  }) => {
+    // the answer of a live organization to 6 tags
+    const calls = setupRoutes(server, (body) =>
+      (body.tags?.length ?? 0) > 5
+        ? `Number of tags ${body.tags.length} for this run are more than supported limit 5`
+        : undefined
+    );
+    const tags = ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => `{ name: 'tag${name}' }`).join(', ');
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': reporterConfig(
+          server.PORT,
+          `pipelineAssociation: true, testRunConfig: { configurationIds: [1], tags: [${tags}] },`
+        ),
+        'a.spec.js': spec,
+      },
+      { reporter: '' },
+      PIPELINE_ENV
+    );
+
+    expect(result.passed).toBe(1);
+    expect(calls.creates).toHaveLength(2);
+    expect(calls.creates[0].tags).toHaveLength(6);
+    expect(calls.creates[1]).toMatchObject(ASSOCIATION);
+    expect(calls.creates[1].tags).toBeUndefined();
+    expect(result.output).toContain('testRunConfig.tags has 6 tags, Azure DevOps accepts at most 5 on a run.');
+    expect(result.output).toContain('more than supported limit 5). Retrying without the tags of testRunConfig.');
+  });
+
+  test('a rejected build: first the tags of testRunConfig go, then the association', async ({
+    runInlineTest,
+    server,
+  }) => {
     const calls = setupRoutes(server, rejectBuild);
 
     const result = await runInlineTest(
@@ -269,11 +305,14 @@ test.describe('pipelineAssociation', () => {
     );
 
     expect(result.passed).toBe(1);
-    expect(calls.creates).toHaveLength(2);
-    expect(calls.creates[0].tags).toEqual([{ name: 'nightly' }]);
+    expect(calls.creates).toHaveLength(3);
+    expect(calls.creates[0]).toMatchObject({ build: { id: '1234' }, tags: [{ name: 'nightly' }] });
+    expect(calls.creates[1]).toMatchObject({ build: { id: '1234' } });
     expect(calls.creates[1].tags).toBeUndefined();
-    expect(calls.creates[1].build).toBeUndefined();
-    expect(result.output).toContain('without the tags of testRunConfig');
+    expect(calls.creates[2].build).toBeUndefined();
+    expect(calls.creates[2].tags).toBeUndefined();
+    expect(result.output).toContain('Retrying without the tags of testRunConfig.');
+    expect(result.output).toContain('Retrying without the pipeline association.');
   });
 
   test('order of the retries: config tags first, then the association', async ({ runInlineTest, server }) => {
@@ -323,8 +362,8 @@ test.describe('pipelineAssociation', () => {
     expect(calls.creates[0]).toMatchObject({ ...ASSOCIATION, plan: { id: '4' } });
   });
 
-  test('the pipeline runs in another project: logged', async ({ runInlineTest, server }) => {
-    setupRoutes(server);
+  test('the pipeline runs in another project: the runs are not associated', async ({ runInlineTest, server }) => {
+    const calls = setupRoutes(server);
 
     const result = await runInlineTest(
       { 'playwright.config.ts': reporterConfig(server.PORT, 'pipelineAssociation: true,'), 'a.spec.js': spec },
@@ -335,6 +374,12 @@ test.describe('pipelineAssociation', () => {
     expect(result.output).toContain(
       'The pipeline runs in project Pipelines, results are published to project SampleSample.'
     );
+    expect(result.output).toContain('Azure DevOps does not associate a run with a build of another project');
+    expect(result.output).not.toContain('Test runs are associated with');
+    // no request that is known to fail
+    expect(calls.creates).toHaveLength(1);
+    expect(calls.creates[0].build).toBeUndefined();
+    expect(calls.creates[0].pipelineReference).toBeUndefined();
   });
 
   test('an existing run is never modified', async ({ runInlineTest, server }) => {
