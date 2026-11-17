@@ -15,8 +15,8 @@ export interface AzureTestPlanInfo {
 export type TPlanIdList = Array<number | string>;
 
 /**
- * Selects the test plans to publish to. Called once, before the first result is published,
- * with all test plans of the project.
+ * Selects the test plans to publish to. Called once, when the run starts, with all test plans of the project.
+ * The tests may already run meanwhile; results are published once the selection is known.
  */
 export type TPlanIdSelector = (context: { plans: AzureTestPlanInfo[] }) => TPlanIdList | Promise<TPlanIdList>;
 

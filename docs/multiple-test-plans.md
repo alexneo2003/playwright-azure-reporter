@@ -19,7 +19,7 @@ With a single plan nothing changes: `planId: 4` works exactly as before.
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `4`                    | Test plan 4, one test run. The behaviour of every previous version.                                            |
 | `[4, 12, 15]`          | Each of the listed plans that has test points of the executed tests.                                           |
-| `({ plans }) => [...]` | The plans the function returns. It gets all test plans of the project and is called once, when the run starts. |
+| `({ plans }) => [...]` | The plans the function returns. It gets all test plans of the project and is called once, when the run starts (`onBegin`). |
 
 A list with one plan (`[4]`) is the same as `4`.
 
@@ -117,7 +117,7 @@ The function may be `async`, to read the list from anywhere else:
 
 Things to know about the function:
 
-- It is called **once**, before the first result is published. The selected plans are written to the log: `Results are published to 2 test plan(s): 4 "Regression", 15 "Release 2.0".`
+- It is called **once**, when the run starts. Playwright does not wait for reporters there, so the tests already run while the plans are loaded; results are published once the selection is known. In a short run the selection, and a message about a function that failed, can therefore appear in the log after the Playwright summary. The selected plans are written to the log: `Results are published to 2 test plan(s): 4 "Regression", 15 "Release 2.0".`
 - Loading the plans is one extra request per run. It is made only when `planId` is a function.
 - A function that throws, returns no plans, or returns something that is not a plan id disables reporting with a message. The tests still run.
 - A function always uses the [variables for several plans](#run-ids-in-the-pipeline), also when it returns a single plan.

@@ -375,9 +375,18 @@ class AzureDevOpsReporter implements Reporter {
       });
     // this is the default implementation, might be replaced by the options
     this._testPointMapper = async (testCase, testPoints) => {
-      if (testPoints.length > 1) {
+      // With several plans one point per plan is expected: only several points inside one plan are ambiguous.
+      const byPlan = new Map<string, number>();
+      for (const testPoint of testPoints) {
+        const planId = this._isMultiPlan ? String(testPoint.testPlan?.id) : '';
+        byPlan.set(planId, (byPlan.get(planId) ?? 0) + 1);
+      }
+      for (const [planId, count] of byPlan) {
+        if (count < 2) continue;
         this._logger?.warn(
-          `There are ${testPoints.length} testPoints found for the test case \n\t ${testCase.title}, \n\t you should set testRunConfig.configurationIds and/or use set a testPointMapper!`
+          `There are ${count} testPoints found for the test case \n\t ${testCase.title}${
+            planId ? ` in test plan ${planId}` : ''
+          }, \n\t you should set testRunConfig.configurationIds and/or a testPointMapper!`
         );
       }
 
@@ -522,9 +531,6 @@ class AzureDevOpsReporter implements Reporter {
       this._setIsDisable(true);
       return;
     }
-    if (this._testRunId) {
-      this._setAzurePWTestRunId(this._testRunId);
-    }
     if (options?.uploadAttachments) {
       if (!options?.attachmentsType) {
         this._logger?.warn("'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default.");
@@ -586,6 +592,10 @@ class AzureDevOpsReporter implements Reporter {
         this._setIsDisable(true);
         return;
       }
+    }
+    // Only now is it known that the options are valid and that there is a single run to export.
+    if (this._testRunId && !this._isMultiPlan) {
+      this._setAzurePWTestRunId(this._testRunId);
     }
     this._token = options.token;
     this._authType = options.authType || 'pat';
@@ -2540,6 +2550,11 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       const runId = await this._runIdPromise;
+      // Several plans: the tests may finish before the plans are selected, and the selection can disable reporting.
+      if (this._isDisabled) {
+        this._removePublished(testCase.testAlias);
+        return;
+      }
       this._logger?.info(chalk.gray(`Start publishing: ${test.title}`));
       const toBePublished: TTestResultsToBePublished = { testCase: testCase, testResult };
       const mappedTestPoints = (await this._getTestPointsOfTestResults([toBePublished], [])).get(toBePublished);
@@ -2932,7 +2947,10 @@ class AzureDevOpsReporter implements Reporter {
 
         if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
           if (!_reLoggedStartPublishing) {
-            this._logger?.info(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`), true);
+            this._logger?.info(
+              chalk.gray(`Start publishing test results for ${testsResults.length} test(s)${planSuffix}`),
+              true
+            );
             _reLoggedStartPublishing = true;
           }
           this._logger?.info(
@@ -3273,7 +3291,10 @@ class AzureDevOpsReporter implements Reporter {
           await this._publishGlobalErrorsAttachment(runId, content);
           if (completeRun) {
             await this._testApi.updateTestRun(this._runCompletionModel(), this._projectName, runId);
-            this._logger?.info(`Run ${runId} - Completed`, true);
+            this._logger?.info(
+              `Run ${runId} - Completed (test plan ${this._planIds[0]}, errors outside of tests only)`,
+              true
+            );
           }
         } catch (error) {
           this._logger?.error(

@@ -31,7 +31,14 @@ const runIdOf = (plan: number) => 1000 + plan;
  */
 function setupAzure(
   server: any,
-  options: { points: Point[]; plans?: Plan[]; runIds?: number[]; failRunCreationFor?: number[] }
+  options: {
+    points: Point[];
+    plans?: Plan[];
+    runIds?: number[];
+    failRunCreationFor?: number[];
+    /** Answer the plans request late, as a slow organization does: the tests finish before the plans are selected. */
+    plansDelayMs?: number;
+  }
 ): Calls {
   const calls: Calls = {
     runs: [],
@@ -68,8 +75,9 @@ function setupAzure(
 
   server.setRoute(
     '/SampleSample/_apis/testplan/Plans?includePlanDetails=true&filterActivePlans=false',
-    (_: any, res: any) => {
+    async (_: any, res: any) => {
       calls.planQueries++;
+      if (options.plansDelayMs) await new Promise((resolve) => setTimeout(resolve, options.plansDelayMs));
       json(res, { value: options.plans ?? [], count: options.plans?.length ?? 0 });
     }
   );
@@ -225,6 +233,8 @@ test.describe('several test plans', () => {
       // the single-run variable is also read back as testRunId, it is not set for several runs
       expect(result.output).not.toContain('variable=AZURE_PW_TEST_RUN_ID;');
       expect(result.output).not.toContain('azure:pw:error');
+      // one test point per plan is expected, not ambiguous
+      expect(result.output).not.toContain('testPoints found');
       expect(calls.planQueries).toBe(0);
     });
   }
@@ -374,6 +384,48 @@ test.describe('several test plans', () => {
     expect(calls.attachments.map((attachment) => attachment.runId)).toEqual([1005]);
     expect(calls.attachments[0].text).toContain('global setup exploded');
     expect(calls.completed).toEqual([1005]);
+    expect(result.output).toContain('Run 1005 - Completed (test plan 5, errors outside of tests only)');
+  });
+
+  test('several test points inside one plan are still reported as ambiguous, per plan', async ({
+    runInlineTest,
+    server,
+  }) => {
+    // [3] has a second point in plan 4, for another configuration
+    setupAzure(server, { points: [...POINTS, { id: 21, plan: 4, testCase: 3, configuration: 2 }] });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': reporterConfig(server.PORT, 'planId: [4, 5],'),
+        'a.spec.js': threeTestsSpec,
+      },
+      { reporter: '' }
+    );
+
+    expect(result.output).toContain('There are 2 testPoints found for the test case');
+    expect(result.output).toContain('in test plan 4,');
+    expect(result.output).not.toContain('in test plan 5,');
+    expect(result.output).toContain('you should set testRunConfig.configurationIds and/or a testPointMapper!');
+  });
+
+  test('AZURE_PW_TEST_RUN_ID from the environment is not exported again for several plans', async ({
+    runInlineTest,
+    server,
+  }) => {
+    const calls = setupAzure(server, { points: POINTS });
+
+    const result = await runInlineTest(
+      {
+        'playwright.config.ts': reporterConfig(server.PORT, 'planId: [4, 5],'),
+        'a.spec.js': threeTestsSpec,
+      },
+      { reporter: '' },
+      { AZURE_PW_TEST_RUN_ID: '150' }
+    );
+
+    expect(calls.runs.map((run) => run.plan).sort()).toEqual([4, 5]);
+    expect(result.output).not.toContain('variable=AZURE_PW_TEST_RUN_ID;');
+    expect(result.output).toContain('{"4":1004,"5":1005}');
   });
 
   test('more than 10 plans: a warning, the run is not blocked', async ({ runInlineTest, server }) => {
@@ -486,7 +538,8 @@ test.describe('several test plans: planId as a function', () => {
     ],
   ]) {
     test(`a function that ${title} disables reporting, the tests still run`, async ({ runInlineTest, server }) => {
-      const calls = setupAzure(server, { points: POINTS, plans: PLANS });
+      // the tests finish before the plans arrive: their results must not be published afterwards
+      const calls = setupAzure(server, { points: POINTS, plans: PLANS, plansDelayMs: 1500 });
 
       const result = await runInlineTest(
         {
@@ -554,6 +607,8 @@ test.describe('several test plans: options that belong to one plan', () => {
       expect(result.passed).toBe(2);
       expect(calls.runs).toHaveLength(0);
       expect(calls.pointsQueries).toBe(0);
+      // a disabled reporter exports no run id, also not the testRunId of the config
+      expect(result.output).not.toContain('variable=AZURE_PW_TEST_RUN_ID');
     });
   }
 });
