@@ -1,3 +1,37 @@
+## v1.23.0
+
+Released: 2026-11-17
+
+### Features
+- feat(reporter): associate created test runs with the Azure Pipelines build (9f74305)
+- feat(reporter): read the Azure Pipelines context for the run association (612f886)
+- feat(reporter): publish one Playwright run to several test plans (514cff5)
+- feat(reporter): explain why a test got no test point (88f7bc9)
+- feat(reporter): accept planId as a string and parse it strictly (a3f9eff)
+
+### Bug Fixes
+- fix(reporter): adjust the pipeline association to the live spike (59d659b)
+- fix(reporter): count only accepted results in the summary and print the start line once (b3f0a6d)
+- fix(reporter): address the findings of the live check with several test plans (1a72b24)
+- fix(reporter): fetch all test points when a points query hits the Azure DevOps limits (1167418)
+- fix(reporter): remove the leading space from default run names (115eacb)
+- fix(reporter): skip only the test whose testPointMapper throws (6cbd617)
+- fix(deps): resolve Dependabot security alerts (833bd4b)
+
+### Other Changes
+- docs: describe the pipeline association as verified on a live organization (169fdd9)
+- docs: describe the association of runs with the pipeline build (dce0153)
+- ci: remove the OIDC diagnostics from the PR beta release (455982f)
+- ci: run the PR beta release from workflow_dispatch (e2ca688)
+- ci: log OIDC claims and verbose npm output in the PR beta release (6cc42d9)
+- chore: release v1.22.1-beta.0 (6b16e18)
+- ci: drop the changelog step from the beta release (d7a5e2e)
+- ci: publish to npm with trusted publishing instead of a token (cf6814e)
+- docs: describe publishing to several test plans and recommend merge-reports for shards (3d481fd)
+- docs(troubleshooting): describe where configurations are assigned without naming a tab (f9a7cba)
+- docs: add a troubleshooting guide and System.AccessToken setup (03bc993)
+- docs: describe how to publish a sharded run as one test run (ac3c012)
+
 ## v1.22.0
 
 Released: 2026-10-22
