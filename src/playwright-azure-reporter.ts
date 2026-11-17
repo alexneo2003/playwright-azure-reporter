@@ -2599,7 +2599,6 @@ class AzureDevOpsReporter implements Reporter {
     planId?: number
   ): Promise<TestResultsToTestRun> {
     const caseIds = testCase.testCaseIds;
-    this._publishedResultsCount.points += testPoints.length;
 
     const results: TestInterfaces.TestCaseResult[] = testPoints.map((testPoint) =>
       this._createTestCaseResult(testCase, testResult, testPoint)
@@ -2614,6 +2613,8 @@ class AzureDevOpsReporter implements Reporter {
     )) as unknown as TestResultsToTestRun;
 
     if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
+    // counted only now: a rejected request (for example a completed run) must not show up as published
+    this._publishedResultsCount.points += results.length;
     if (planId !== undefined) this._countPlanResults(planId, results.length);
 
     // Publish step results on the created test results (one per test point)
@@ -2743,8 +2744,6 @@ class AzureDevOpsReporter implements Reporter {
       chalk.gray(`Start publishing test results for ${testsResults.length} test(s)${planSuffix}`),
       true
     );
-    // Will optionally re-log this line just before attachments phase to satisfy tests expecting adjacency
-    let _reLoggedStartPublishing = false;
 
     if (this._rootSuiteId) {
       await this._retrieveTestPoints();
@@ -2860,7 +2859,6 @@ class AzureDevOpsReporter implements Reporter {
         if (testCaseResults.length === 0) {
           continue;
         }
-        this._publishedResultsCount.points += testCaseResults.length;
 
         let testCaseResult: TestResultsToTestRun;
         if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
@@ -2897,6 +2895,9 @@ class AzureDevOpsReporter implements Reporter {
           throw new Error(`Azure DevOps did not accept the test results for test cases [${testCaseIds.join(', ')}]`);
         }
         if (plan) this._countPlanResults(plan.planId, testCaseResults.length);
+        // counted only once Azure DevOps accepted the request
+        const isAccepted = !!testCaseResult.result;
+        if (isAccepted) this._publishedResultsCount.points += testCaseResults.length;
 
         if (!testCaseResult.result) {
           this._logger?.warn(`Failed to publish test result for test cases [${testCaseIds.join(', ')}]`);
@@ -2946,13 +2947,6 @@ class AzureDevOpsReporter implements Reporter {
         }
 
         if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
-          if (!_reLoggedStartPublishing) {
-            this._logger?.info(
-              chalk.gray(`Start publishing test results for ${testsResults.length} test(s)${planSuffix}`),
-              true
-            );
-            _reLoggedStartPublishing = true;
-          }
           this._logger?.info(
             chalk.gray(`Starting to uploading attachments for ${withAttachmentsByTestPoint.size} testpoint(s)`)
           );
@@ -2999,7 +2993,7 @@ class AzureDevOpsReporter implements Reporter {
 
         // a test that is in several plans is counted once, by the caller
         if (plan) continue;
-        this._publishedResultsCount.tests += testsPack.length;
+        if (isAccepted) this._publishedResultsCount.tests += testsPack.length;
         this._logger?.info(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount.tests}`));
       }
 

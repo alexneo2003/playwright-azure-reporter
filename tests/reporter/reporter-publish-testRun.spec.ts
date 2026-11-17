@@ -955,8 +955,13 @@ test.describe('Publish results - testRun', () => {
     expect(result.output).not.toContain('Failed request: (401)');
     expect(result.output).toMatch(/azure:pw:log Using run (\d.*) to publish test results/);
     expect(result.output).not.toContain('No existing test case results found for test cases');
+    // the start line is printed once, before the first pack
+    expect(result.output.split('Start publishing test results for 125 test(s)')).toHaveLength(2);
+    expect(result.output.indexOf('Start publishing test results for 125 test(s)')).toBeLessThan(
+      result.output.indexOf('Starting to uploading attachments for 5 testpoint(s)')
+    );
     expect(result.output).toContain(
-      'azure:pw:log Start publishing test results for 125 test(s)\nazure:pw:log Starting to uploading attachments for 5 testpoint(s)\nazure:pw:log Uploading attachments for test: [10] foobar\nazure:pw:log Uploaded attachments'
+      'azure:pw:log Starting to uploading attachments for 5 testpoint(s)\nazure:pw:log Uploading attachments for test: [10] foobar\nazure:pw:log Uploaded attachments'
     );
     expect(result.output).toContain(
       'azure:pw:log Left to publish: 75\nazure:pw:log Starting to uploading attachments for 5 testpoint(s)\nazure:pw:log Uploading attachments for test: [60] foobar\nazure:pw:log Uploaded attachments'
