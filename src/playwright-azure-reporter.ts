@@ -28,6 +28,15 @@ import {
 } from './compat';
 import { DEFAULT_MAX_GLOBAL_ERRORS, GlobalErrorCollector } from './global-errors';
 import Logger from './logger';
+import {
+  AzureTestPlanInfo,
+  isInactivePlan,
+  MANY_PLANS_THRESHOLD,
+  normalizePlanIds,
+  toTestPlanInfo,
+  TPlanIdOption,
+  TPlanIdSelector,
+} from './plan-selection';
 import { formatShardSuffix, mergeRunTags, normalizeConfigTags } from './run-context';
 import { diagnoseMissingTestPoints } from './test-point-diagnostics';
 import {
@@ -39,10 +48,13 @@ import {
   WorkItemStep,
 } from './test-steps';
 import {
+  chunk,
   createGuid,
   getExtensionFromContentType,
   getExtensionFromFilename,
   parsePlanId,
+  POINTS_QUERY_MAX_TEST_CASE_IDS,
+  POINTS_QUERY_PAGE_SIZE,
   shortID,
   stripAnsi,
 } from './utils';
@@ -97,6 +109,8 @@ type TTestRunContextOptions = {
   tags?: boolean;
 };
 type TTestStepsUpdate = { resultId: number; iterationDetails: TestInterfaces.TestIterationDetailsModel };
+/** Multi-plan `testRun` mode: the part of the results that goes to the run of one plan. */
+type TPlanPublication = { planId: number; pointsByTest: Map<TTestResultsToBePublished, TestInterfaces.TestPoint[]> };
 
 interface ITestCaseExtended extends TestCase {
   testAlias: string;
@@ -107,8 +121,13 @@ export interface AzureReporterOptions {
   token?: string;
   authType?: 'pat' | 'accessToken' | 'managedIdentity' | undefined;
   applicationIdURI?: string | undefined;
-  /** Test plan id. A numeric string is accepted too, so `planId: process.env.AZURE_PLAN_ID` works as is. */
-  planId: number | string;
+  /**
+   * The test plan to publish to. A numeric string is accepted too, so `planId: process.env.AZURE_PLAN_ID` works as is.
+   * A list of plans or a function that selects them from the plans of the project publishes one Playwright run
+   * to several plans: one test run is created for every plan that has test points of the executed tests.
+   * See docs/multiple-test-plans.md.
+   */
+  planId: TPlanIdOption;
   orgUrl: string;
   projectName: string;
   publishTestResultsMode?: TPublishTestResults;
@@ -246,6 +265,15 @@ class AzureDevOpsReporter implements Reporter {
   private _projectName!: string;
   private _environment?: string;
   private _planId = 0;
+  /** Several plans: the selected plans, in the order they were listed. Empty for a single plan. */
+  private _planIds: number[] = [];
+  private _planIdSelector: TPlanIdSelector | undefined;
+  private _isMultiPlan = false;
+  /** Several plans: the run of every plan, created when the first result for the plan is published. */
+  private _planRuns = new Map<number, Promise<number | undefined>>();
+  private _createdPlanRuns = new Map<number, number>();
+  private _planResultCounts = new Map<number, number>();
+  private _multiPlanAutoMarked = new Set<string>();
   private _logging = false;
   private _isDisabled = false;
   private _setIsDisable: (state: boolean) => void = () => {};
@@ -347,9 +375,18 @@ class AzureDevOpsReporter implements Reporter {
       });
     // this is the default implementation, might be replaced by the options
     this._testPointMapper = async (testCase, testPoints) => {
-      if (testPoints.length > 1) {
+      // With several plans one point per plan is expected: only several points inside one plan are ambiguous.
+      const byPlan = new Map<string, number>();
+      for (const testPoint of testPoints) {
+        const planId = this._isMultiPlan ? String(testPoint.testPlan?.id) : '';
+        byPlan.set(planId, (byPlan.get(planId) ?? 0) + 1);
+      }
+      for (const [planId, count] of byPlan) {
+        if (count < 2) continue;
         this._logger?.warn(
-          `There are ${testPoints.length} testPoints found for the test case \n\t ${testCase.title}, \n\t you should set testRunConfig.configurationIds and/or use set a testPointMapper!`
+          `There are ${count} testPoints found for the test case \n\t ${testCase.title}${
+            planId ? ` in test plan ${planId}` : ''
+          }, \n\t you should set testRunConfig.configurationIds and/or a testPointMapper!`
         );
       }
 
@@ -494,9 +531,6 @@ class AzureDevOpsReporter implements Reporter {
       this._setIsDisable(true);
       return;
     }
-    if (this._testRunId) {
-      this._setAzurePWTestRunId(this._testRunId);
-    }
     if (options?.uploadAttachments) {
       if (!options?.attachmentsType) {
         this._logger?.warn("'attachmentsType' is not set. Attachments Type will be set to 'screenshot' by default.");
@@ -514,13 +548,55 @@ class AzureDevOpsReporter implements Reporter {
 
     this._orgUrl = options.orgUrl;
     this._projectName = options.projectName;
-    const parsedPlanId = parsePlanId(options.planId);
-    if (parsedPlanId === undefined) {
-      this._logger?.warn(`'planId' value "${options.planId}" is not a positive integer. Reporting is disabled.`);
-      this._setIsDisable(true);
-      return;
+    if (typeof options.planId === 'function') {
+      this._planIdSelector = options.planId;
+      this._isMultiPlan = true;
+    } else if (Array.isArray(options.planId)) {
+      const { ids, invalid } = normalizePlanIds(options.planId);
+      if (invalid.length > 0 || ids.length === 0) {
+        this._logger?.warn(
+          invalid.length > 0
+            ? `'planId' list contains values that are not test plan ids: ${invalid.join(', ')}. Reporting is disabled.`
+            : "'planId' list is empty. Reporting is disabled."
+        );
+        this._setIsDisable(true);
+        return;
+      }
+      if (ids.length === 1) {
+        // a list of one plan is the same as that plan
+        this._planId = ids[0];
+      } else {
+        this._planIds = ids;
+        this._isMultiPlan = true;
+      }
+    } else {
+      const parsedPlanId = parsePlanId(options.planId);
+      if (parsedPlanId === undefined) {
+        this._logger?.warn(`'planId' value "${options.planId}" is not a positive integer. Reporting is disabled.`);
+        this._setIsDisable(true);
+        return;
+      }
+      this._planId = parsedPlanId;
     }
-    this._planId = parsedPlanId;
+    if (this._isMultiPlan) {
+      // A run, and a suite, belong to one plan: these options cannot say which of the plans they are for.
+      const unsupported = [
+        options.isExistingTestRun ? "'isExistingTestRun'" : '',
+        options.publishTestResultsMode === 'testRunADO' ? "'publishTestResultsMode: testRunADO'" : '',
+        this._rootSuiteId ? "'rootSuiteId' (or AZURE_PW_ROOT_SUITE_ID)" : '',
+      ].filter(Boolean);
+      if (unsupported.length > 0) {
+        this._logger?.warn(
+          `${unsupported.join(', ')} cannot be used with several test plans in 'planId'. Reporting is disabled.`
+        );
+        this._setIsDisable(true);
+        return;
+      }
+    }
+    // Only now is it known that the options are valid and that there is a single run to export.
+    if (this._testRunId && !this._isMultiPlan) {
+      this._setAzurePWTestRunId(this._testRunId);
+    }
     this._token = options.token;
     this._authType = options.authType || 'pat';
     this._applicationIdURI = options.applicationIdURI;
@@ -728,6 +804,15 @@ class AzureDevOpsReporter implements Reporter {
       // Fetch configuration names early if configuration IDs are provided
       await this._fetchConfigurationNames();
 
+      if (this._isMultiPlan) {
+        // Runs are created later, one for every plan the results belong to.
+        this._testApi = await this._connection.getTestApi();
+        await this._resolvePlanIds();
+        if (!this._isDisabled) await this._checkProject(this._projectName);
+        this._resolveRunId();
+        return;
+      }
+
       if (this._isExistingTestRun) {
         this._resolveRunId(this._testRunId!);
         this._logger?.info(`Using existing run ${this._testRunId} to publish test results`);
@@ -815,6 +900,11 @@ class AzureDevOpsReporter implements Reporter {
 
       if (this._publishTestResultsMode === 'testResult') {
         await this._refreshTokenIfNeeded();
+        if (this._isMultiPlan) {
+          this._logTestItem(test, testResult);
+          await this._publishCaseResult(test, testResult);
+          return;
+        }
         const runId = await this._runIdPromise;
         if (!runId) return;
 
@@ -857,11 +947,13 @@ class AzureDevOpsReporter implements Reporter {
     this._fullResult = result;
 
     try {
-      await this._performOnEnd();
+      if (this._isMultiPlan) await this._performOnEndMultiPlan();
+      else await this._performOnEnd();
     } catch (error) {
       this._logger?.error(`Error in onEnd: ${toError(error).message}`);
     }
     await this._publishGlobalErrors();
+    if (this._isMultiPlan) this._exportPlanRunIds();
   }
 
   /**
@@ -871,6 +963,10 @@ class AzureDevOpsReporter implements Reporter {
   private async _publishGlobalErrors(): Promise<void> {
     const collector = this._globalErrors;
     if (!collector || collector.total === 0 || this._isDisabled) return;
+    if (this._isMultiPlan) {
+      await this._publishGlobalErrorsMultiPlan(collector);
+      return;
+    }
     try {
       let runId = this._currentRunId;
       let completeRun = false;
@@ -949,29 +1045,7 @@ class AzureDevOpsReporter implements Reporter {
           await this._testPointsByRootSuitePromise;
         }
 
-        let prevCount = this._testsAliasToBePublished.length;
-        let safetyIterations = 0;
-        while (this._testsAliasToBePublished.length > 0) {
-          safetyIterations++;
-          if (prevCount > this._testsAliasToBePublished.length) {
-            this._logger?.info(
-              `Waiting for all results to be published. Remaining ${this._testsAliasToBePublished.length} results`
-            );
-            prevCount = this._testsAliasToBePublished.length;
-          } else if (safetyIterations % 10 === 0) {
-            this._logger?.debug(
-              `[onEnd][wait-loop] Still waiting. Remaining=${this._testsAliasToBePublished.length} safetyIterations=${safetyIterations}`
-            );
-          }
-          if (safetyIterations > 200) {
-            // 200 * 50ms = 10s safeguard
-            this._logger?.warn(
-              `Aborting wait loop after ${safetyIterations} iterations with ${this._testsAliasToBePublished.length} remaining aliases.`
-            );
-            break;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
+        await this._waitForPendingResults();
       } else {
         if (this._testResultsToBePublished.length === 0) {
           this._logger?.info('No test results to publish', true);
@@ -1074,6 +1148,36 @@ class AzureDevOpsReporter implements Reporter {
       }
     }
 
+    this._logFeatureSummaries();
+  }
+
+  private async _waitForPendingResults(): Promise<void> {
+    let prevCount = this._testsAliasToBePublished.length;
+    let safetyIterations = 0;
+    while (this._testsAliasToBePublished.length > 0) {
+      safetyIterations++;
+      if (prevCount > this._testsAliasToBePublished.length) {
+        this._logger?.info(
+          `Waiting for all results to be published. Remaining ${this._testsAliasToBePublished.length} results`
+        );
+        prevCount = this._testsAliasToBePublished.length;
+      } else if (safetyIterations % 10 === 0) {
+        this._logger?.debug(
+          `[onEnd][wait-loop] Still waiting. Remaining=${this._testsAliasToBePublished.length} safetyIterations=${safetyIterations}`
+        );
+      }
+      if (safetyIterations > 200) {
+        // 200 * 50ms = 10s safeguard
+        this._logger?.warn(
+          `Aborting wait loop after ${safetyIterations} iterations with ${this._testsAliasToBePublished.length} remaining aliases.`
+        );
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  private _logFeatureSummaries(): void {
     // Output auto-mark test cases as automated summary if enabled
     if (this._autoMarkTestCasesAsAutomatedEnabled) {
       const total =
@@ -1271,16 +1375,20 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
-  private async _createRun(runName: string): Promise<TestInterfaces.TestRun | void> {
+  /**
+   * `planId` is given for the run of one of several plans. The project is checked once in `onBegin` then,
+   * and a failure costs only the results of that plan instead of disabling the reporter.
+   */
+  private async _createRun(runName: string, planId?: number): Promise<TestInterfaces.TestRun | void> {
     try {
-      const isExists = await this._checkProject(this._projectName);
+      const isExists = planId !== undefined || (await this._checkProject(this._projectName));
       if (!isExists) {
         return;
       } else {
         const runModel: TestInterfaces.RunCreateModel = {
           name: runName,
           automated: true,
-          plan: { id: String(this._planId) },
+          plan: { id: String(planId ?? this._planId) },
           ...(this._testRunConfig
             ? this._testRunConfig
             : {
@@ -1314,8 +1422,19 @@ class AzureDevOpsReporter implements Reporter {
       }
     } catch (error) {
       this._logger?.error(toError(error).stack ?? '');
-      this._setIsDisable(true);
+      if (planId === undefined) this._setIsDisable(true);
     }
+  }
+
+  private _isSelectedPlan(planId: string | undefined): boolean {
+    if (!planId) return false;
+    const id = parseInt(planId, 10);
+    return this._isMultiPlan ? this._planIds.includes(id) : id === this._planId;
+  }
+
+  /** `test plan 4` or `test plans 4, 7`, for messages. */
+  private _plansLabel(): string {
+    return this._isMultiPlan ? `test plans ${this._planIds.join(', ')}` : `test plan ${this._planId}`;
   }
 
   private _removePublished(testAlias: string): void {
@@ -1340,7 +1459,7 @@ class AzureDevOpsReporter implements Reporter {
     testsResult: TTestResultsToBePublished
   ): TestInterfaces.TestPoint[] {
     return testPoints?.filter((testPoint) => {
-      if (!testPoint.testPlan!.id || parseInt(testPoint.testPlan!.id, 10) !== this._planId) {
+      if (!this._isSelectedPlan(testPoint.testPlan!.id)) {
         return false;
       } else if (
         !testPoint.testCase.id ||
@@ -1537,15 +1656,11 @@ class AzureDevOpsReporter implements Reporter {
       let points: TestInterfaces.TestPoint[] = [];
       if (mapperError === undefined) {
         if (!this._testApi) this._testApi = await this._connection.getTestApi();
-        const response = await this._testApi.getPointsByQuery(
-          { pointsFilter: { testcaseIds: testCaseIds.map((id) => parseInt(id, 10)) } },
-          this._projectName
-        );
-        points = response?.points ?? [];
+        points = (await this._queryTestPoints({ testcaseIds: testCaseIds.map((id) => parseInt(id, 10)) })) ?? [];
       }
       return diagnoseMissingTestPoints({
         testCaseIds,
-        planId: this._planId,
+        planId: this._isMultiPlan ? this._planIds : this._planId,
         configurationIds: this._testRunConfig?.configurationIds,
         rootSuite: this._rootSuiteId
           ? {
@@ -1564,7 +1679,7 @@ class AzureDevOpsReporter implements Reporter {
 
   private _missingTestPointsWarning(testCase: ITestCaseExtended, reasons: string[] | undefined): string {
     const configurations = this._testRunConfig?.configurationIds;
-    const head = `No test points found for test case [${testCase.testCaseIds}] associated with test plan ${this._planId} ${
+    const head = `No test points found for test case [${testCase.testCaseIds}] associated with ${this._plansLabel()} ${
       configurations ? `for configurations [${configurations.join(', ')}]` : ''
     }`;
     if (reasons?.length) {
@@ -1615,24 +1730,17 @@ class AzureDevOpsReporter implements Reporter {
         this._logger?.debug(`Filtering test points by configurations: ${this._configurationNames.join(', ')}`);
       }
 
-      const pointsQuery: TestInterfaces.TestPointsQuery = {
-        pointsFilter: pointsFilter,
-      };
-
       if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      const pointsQueryResult: TestInterfaces.TestPointsQuery = await this._testApi.getPointsByQuery(
-        pointsQuery,
-        this._projectName
-      );
-      if (pointsQueryResult.points) {
+      const queriedPoints = await this._queryTestPoints(pointsFilter);
+      if (queriedPoints) {
         for (const testsResult of testsResults) {
-          let currentTestPoints = this._filterTestTestPoints(pointsQueryResult.points, testsResult);
+          let currentTestPoints = this._filterTestTestPoints(queriedPoints, testsResult);
 
           // in case of testRunADO
           if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
             currentTestPoints = this._filterTestTestPointsByRunResults(
               existingTestCaseResults,
-              pointsQueryResult.points || [],
+              queriedPoints,
               testsResult
             );
           }
@@ -1654,6 +1762,52 @@ class AzureDevOpsReporter implements Reporter {
       this._logger?.error(toError(error).stack ?? '');
     }
     return result;
+  }
+
+  /**
+   * Azure DevOps answers a points query with at most 1000 test points and gives no sign that there are more
+   * (verified on a live organization). The query knows nothing about the plan, so the points of the same
+   * test cases in every other plan of the project count too. A full page is therefore followed by `$skip`
+   * requests until a page comes back short. The first request is left exactly as it always was.
+   */
+  private async _queryTestPoints(
+    pointsFilter: TestInterfaces.PointsFilter
+  ): Promise<TestInterfaces.TestPoint[] | void> {
+    let testcaseIds = pointsFilter.testcaseIds ?? [];
+    if (testcaseIds.length > POINTS_QUERY_MAX_TEST_CASE_IDS) {
+      // more ids in one query are rejected with 400
+      testcaseIds = [...new Set(testcaseIds)];
+    }
+    const filters =
+      testcaseIds.length > POINTS_QUERY_MAX_TEST_CASE_IDS
+        ? chunk(testcaseIds, POINTS_QUERY_MAX_TEST_CASE_IDS).map((ids) => ({ ...pointsFilter, testcaseIds: ids }))
+        : [testcaseIds === pointsFilter.testcaseIds ? pointsFilter : { ...pointsFilter, testcaseIds }];
+
+    let points: TestInterfaces.TestPoint[] | undefined;
+    for (const filter of filters) {
+      const pointsQuery: TestInterfaces.TestPointsQuery = { pointsFilter: filter };
+      const firstPage = (await this._testApi.getPointsByQuery(pointsQuery, this._projectName)).points;
+      if (!firstPage) continue;
+      points = (points ?? []).concat(firstPage);
+
+      let pageSize = firstPage.length;
+      let skip = 0;
+      while (pageSize >= POINTS_QUERY_PAGE_SIZE) {
+        skip += POINTS_QUERY_PAGE_SIZE;
+        this._logger?.debug(`Test points query returned a full page, fetching the next one (skip: ${skip})`);
+        try {
+          const nextPage = (await this._testApi.getPointsByQuery(pointsQuery, this._projectName, skip)).points ?? [];
+          points = points.concat(nextPage);
+          pageSize = nextPage.length;
+        } catch (error) {
+          this._logger?.warn(
+            `Failed to fetch test points after the first ${skip}: ${toError(error).message}. Some test points may be missing.`
+          );
+          break;
+        }
+      }
+    }
+    return points;
   }
 
   private _addReportingOverride = (api: Test.ITestApi): Test.ITestApi => {
@@ -1966,10 +2120,11 @@ class AzureDevOpsReporter implements Reporter {
   private async _uploadAttachmentsFunc(
     testResult: TestResult,
     testCaseResultId: number,
-    test: ITestCaseExtended | TestCase
+    test: ITestCaseExtended | TestCase,
+    planRunId?: number
   ): Promise<string[]> {
     this._logger?.info(chalk.gray(`Uploading attachments for test: ${test.title}`));
-    const runId = await this._runIdPromise;
+    const runId = planRunId ?? (await this._runIdPromise);
     const attachmentsResult: string[] = [];
 
     if (!runId) {
@@ -2034,10 +2189,11 @@ class AzureDevOpsReporter implements Reporter {
   private async _uploadLogsAttachmentsFunc(
     testResult: TestResult,
     testCaseResultId: number,
-    test: ITestCaseExtended | TestCase
+    test: ITestCaseExtended | TestCase,
+    planRunId?: number
   ): Promise<string[]> {
     this._logger?.info(chalk.gray(`Uploading logs attachments for test: ${test.title}`));
-    const runId = await this._runIdPromise;
+    const runId = planRunId ?? (await this._runIdPromise);
     const attachmentsResult: string[] = [];
 
     if (!runId) {
@@ -2394,78 +2550,33 @@ class AzureDevOpsReporter implements Reporter {
 
     try {
       const runId = await this._runIdPromise;
+      // Several plans: the tests may finish before the plans are selected, and the selection can disable reporting.
+      if (this._isDisabled) {
+        this._removePublished(testCase.testAlias);
+        return;
+      }
       this._logger?.info(chalk.gray(`Start publishing: ${test.title}`));
       const toBePublished: TTestResultsToBePublished = { testCase: testCase, testResult };
       const mappedTestPoints = (await this._getTestPointsOfTestResults([toBePublished], [])).get(toBePublished);
       this._logger?.debug(`[publishCaseResult] Mapped test points: ${JSON.stringify(mappedTestPoints, null, 2)}`);
 
       if (!mappedTestPoints || mappedTestPoints.length == 0) {
-        const reasons = await this._explainMissingTestPoints(toBePublished);
-        // Track for summary if enabled
-        if (this._testCaseSummaryEnabled) {
-          this._unmatched.noTestPoints.push({
-            title: test.title,
-            file: test.location?.file || 'unknown',
-            line: test.location?.line || 0,
-            testCaseIds: caseIds,
-            reasons,
-          });
-        }
+        await this._reportNoTestPoints(toBePublished);
 
         // Ensure we don't hang in onEnd wait loop
         this._removePublished(testCase.testAlias);
-
-        this._logger?.warn(this._missingTestPointsWarning(testCase, reasons));
-
         return;
       }
 
-      this._publishedResultsCount.points += mappedTestPoints?.length || 0;
-
-      const results: TestInterfaces.TestCaseResult[] = mappedTestPoints.map((testPoint) =>
-        this._createTestCaseResult(testCase, testResult, testPoint)
-      );
-
-      if (!this._testApi) this._testApi = await this._connection.getTestApi();
-      const apiOverride = this._addReportingOverride(this._testApi);
-      const testCaseResult: TestResultsToTestRun = (await apiOverride.addTestResultsToTestRun(
-        results,
-        this._projectName,
-        runId!
-      )) as unknown as TestResultsToTestRun;
-
-      if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
-
-      // Publish step results on the created test results (one per test point)
-      await this._publishTestStepsForCreatedResults(
-        runId!,
-        testCase,
-        testResult,
-        mappedTestPoints,
-        testCaseResult.result.value ?? []
-      );
-
-      // Mark test cases as automated if enabled
-      if (this._autoMarkTestCasesAsAutomatedEnabled) {
-        for (const caseId of caseIds) {
-          await this._markTestCaseAsAutomated(caseId, testCase);
+      let testCaseResult: TestResultsToTestRun | void;
+      if (this._isMultiPlan) {
+        testCaseResult = await this._publishCaseResultToPlans(test, testCase, testResult, mappedTestPoints);
+        if (!testCaseResult) {
+          this._removePublished(testCase.testAlias);
+          return;
         }
-      }
-
-      if (this._uploadAttachments) {
-        if (testResult.attachments.length > 0) {
-          await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test);
-        }
-      }
-
-      if (this._uploadLogs) {
-        this._logger?.info(chalk.gray(`Uploading stdout.log for test: ${test.title}`));
-        const logAttachment = this._prepareLogAttachments(testResult);
-        await this._uploadLogsAttachmentsFunc(
-          { ...testResult, attachments: logAttachment },
-          testCaseResult.result.value![0].id,
-          test
-        );
+      } else {
+        testCaseResult = await this._publishTestPointsToRun(runId!, test, testCase, testResult, mappedTestPoints);
       }
 
       this._removePublished(testCase.testAlias);
@@ -2478,7 +2589,145 @@ class AzureDevOpsReporter implements Reporter {
     }
   }
 
-  private async _publishTestRunResults(runId: number, testsResults: TTestResultsToBePublished[]) {
+  /** Publishes the result of one test for the given test points into one run. `planId` is set for one of several plans. */
+  private async _publishTestPointsToRun(
+    runId: number,
+    test: TestCase,
+    testCase: ITestCaseExtended,
+    testResult: TestResult,
+    testPoints: TestInterfaces.TestPoint[],
+    planId?: number
+  ): Promise<TestResultsToTestRun> {
+    const caseIds = testCase.testCaseIds;
+
+    const results: TestInterfaces.TestCaseResult[] = testPoints.map((testPoint) =>
+      this._createTestCaseResult(testCase, testResult, testPoint)
+    );
+
+    if (!this._testApi) this._testApi = await this._connection.getTestApi();
+    const apiOverride = this._addReportingOverride(this._testApi);
+    const testCaseResult: TestResultsToTestRun = (await apiOverride.addTestResultsToTestRun(
+      results,
+      this._projectName,
+      runId
+    )) as unknown as TestResultsToTestRun;
+
+    if (!testCaseResult?.result) throw new Error(`Failed to publish test result for test cases [${caseIds}]`);
+    // counted only now: a rejected request (for example a completed run) must not show up as published
+    this._publishedResultsCount.points += results.length;
+    if (planId !== undefined) this._countPlanResults(planId, results.length);
+
+    // Publish step results on the created test results (one per test point)
+    await this._publishTestStepsForCreatedResults(
+      runId,
+      testCase,
+      testResult,
+      testPoints,
+      testCaseResult.result.value ?? []
+    );
+
+    // Mark test cases as automated if enabled
+    if (this._autoMarkTestCasesAsAutomatedEnabled) {
+      for (const caseId of this._testCaseIdsToAutoMark(caseIds, planId)) {
+        await this._markTestCaseAsAutomated(caseId, testCase);
+      }
+    }
+
+    if (this._uploadAttachments) {
+      if (testResult.attachments.length > 0) {
+        await this._uploadAttachmentsFunc(testResult, testCaseResult.result.value![0].id, test, planId && runId);
+      }
+    }
+
+    if (this._uploadLogs) {
+      this._logger?.info(chalk.gray(`Uploading stdout.log for test: ${test.title}`));
+      const logAttachment = this._prepareLogAttachments(testResult);
+      await this._uploadLogsAttachmentsFunc(
+        { ...testResult, attachments: logAttachment },
+        testCaseResult.result.value![0].id,
+        test,
+        planId && runId
+      );
+    }
+
+    return testCaseResult;
+  }
+
+  /**
+   * Several plans, `testResult` mode: a result with a test point of another plan is rejected by Azure DevOps
+   * together with the whole request, so the test points are split by plan and each part goes to the run of its plan.
+   * A plan that fails does not stop the others.
+   */
+  private async _publishCaseResultToPlans(
+    test: TestCase,
+    testCase: ITestCaseExtended,
+    testResult: TestResult,
+    testPoints: TestInterfaces.TestPoint[]
+  ): Promise<TestResultsToTestRun | void> {
+    let published: TestResultsToTestRun | void = undefined;
+    for (const [planId, planPoints] of this._groupTestPointsByPlan(testPoints)) {
+      try {
+        const runId = await this._getOrCreatePlanRun(planId);
+        if (!runId) continue;
+        published = await this._publishTestPointsToRun(runId, test, testCase, testResult, planPoints, planId);
+      } catch (error) {
+        this._logger?.error(
+          `Failed to publish the result of "${test.title}" to test plan ${planId}: ${toError(error).message}`
+        );
+      }
+    }
+    return published;
+  }
+
+  /** Test points by plan, in the order the plans were selected. */
+  private _groupTestPointsByPlan(testPoints: TestInterfaces.TestPoint[]): Map<number, TestInterfaces.TestPoint[]> {
+    const byPlan = new Map<number, TestInterfaces.TestPoint[]>();
+    for (const planId of this._planIds) {
+      const planPoints = testPoints.filter((testPoint) => parseInt(testPoint.testPlan?.id ?? '', 10) === planId);
+      if (planPoints.length > 0) byPlan.set(planId, planPoints);
+    }
+    return byPlan;
+  }
+
+  /** A test case that is in several plans is a single work item: it is marked once, not once per plan. */
+  private _testCaseIdsToAutoMark(caseIds: string[], planId?: number): string[] {
+    if (planId === undefined) return caseIds;
+    const notMarked = caseIds.filter((caseId) => !this._multiPlanAutoMarked.has(caseId));
+    notMarked.forEach((caseId) => this._multiPlanAutoMarked.add(caseId));
+    return notMarked;
+  }
+
+  private _countPlanResults(planId: number, count: number): void {
+    this._planResultCounts.set(planId, (this._planResultCounts.get(planId) ?? 0) + count);
+  }
+
+  /** Explains, tracks for the summary and logs a test that got no test point. */
+  private async _reportNoTestPoints(testsResult: TTestResultsToBePublished): Promise<void> {
+    const { testCase } = testsResult;
+    const reasons = await this._explainMissingTestPoints(testsResult);
+    // Track for summary if enabled
+    if (this._testCaseSummaryEnabled) {
+      this._unmatched.noTestPoints.push({
+        title: testCase.title,
+        file: testCase.location?.file || 'unknown',
+        line: testCase.location?.line || 0,
+        testCaseIds: testCase.testCaseIds,
+        reasons,
+      });
+    }
+
+    this._logger?.warn(this._missingTestPointsWarning(testCase, reasons));
+  }
+
+  /**
+   * `plan` is given for one of several plans: the test points are already resolved and split by plan,
+   * and a failure is thrown to the caller, so it costs only the results of that plan.
+   */
+  private async _publishTestRunResults(
+    runId: number,
+    testsResults: TTestResultsToBePublished[],
+    plan?: TPlanPublication
+  ) {
     if (!this._testApi) this._testApi = await this._connection.getTestApi();
 
     const testsPackSize = 50;
@@ -2490,9 +2739,11 @@ class AzureDevOpsReporter implements Reporter {
     let testResultsQuery: TestInterfaces.TestResultsQuery;
     let resultData: TestInterfaces.TestResultsQuery = { results: [] };
 
-    this._logger?.info(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`), true);
-    // Will optionally re-log this line just before attachments phase to satisfy tests expecting adjacency
-    let _reLoggedStartPublishing = false;
+    const planSuffix = plan ? ` to test plan ${plan.planId}` : '';
+    this._logger?.info(
+      chalk.gray(`Start publishing test results for ${testsResults.length} test(s)${planSuffix}`),
+      true
+    );
 
     if (this._rootSuiteId) {
       await this._retrieveTestPoints();
@@ -2520,7 +2771,9 @@ class AzureDevOpsReporter implements Reporter {
         const stepsByTestPoint = new Map<string, TestInterfaces.TestIterationDetailsModel>();
         const isUpdatingExistingRun = this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun;
 
-        const testsPointsByTestCase = await this._getTestPointsOfTestResults(testsPack, existingTestCaseResultsForRun);
+        const testsPointsByTestCase = plan
+          ? new Map(testsPack.map((testsResult) => [testsResult, plan.pointsByTest.get(testsResult) ?? []]))
+          : await this._getTestPointsOfTestResults(testsPack, existingTestCaseResultsForRun);
 
         for (const [key, value] of testsPointsByTestCase.entries()) {
           const testCase = key.testCase;
@@ -2599,26 +2852,13 @@ class AzureDevOpsReporter implements Reporter {
               }
             }
           } else {
-            const reasons = await this._explainMissingTestPoints(key);
-            // Track for summary if enabled
-            if (this._testCaseSummaryEnabled) {
-              this._unmatched.noTestPoints.push({
-                title: testCase.title,
-                file: testCase.location?.file || 'unknown',
-                line: testCase.location?.line || 0,
-                testCaseIds: testCase.testCaseIds,
-                reasons,
-              });
-            }
-
-            this._logger?.warn(this._missingTestPointsWarning(testCase, reasons));
+            await this._reportNoTestPoints(key);
           }
         }
 
         if (testCaseResults.length === 0) {
           continue;
         }
-        this._publishedResultsCount.points += testCaseResults.length;
 
         let testCaseResult: TestResultsToTestRun;
         if (this._publishTestResultsMode === 'testRunADO' && this._isExistingTestRun) {
@@ -2651,6 +2891,14 @@ class AzureDevOpsReporter implements Reporter {
           )) as unknown as TestResultsToTestRun;
         }
 
+        if (!testCaseResult.result && plan) {
+          throw new Error(`Azure DevOps did not accept the test results for test cases [${testCaseIds.join(', ')}]`);
+        }
+        if (plan) this._countPlanResults(plan.planId, testCaseResults.length);
+        // counted only once Azure DevOps accepted the request
+        const isAccepted = !!testCaseResult.result;
+        if (isAccepted) this._publishedResultsCount.points += testCaseResults.length;
+
         if (!testCaseResult.result) {
           this._logger?.warn(`Failed to publish test result for test cases [${testCaseIds.join(', ')}]`);
         } else if (testCaseResult.result.count !== testCaseResults.length) {
@@ -2659,7 +2907,7 @@ class AzureDevOpsReporter implements Reporter {
 
         // Mark test cases as automated if enabled
         if (this._autoMarkTestCasesAsAutomatedEnabled && testCaseResult.result) {
-          for (const testCaseId of testCaseIds) {
+          for (const testCaseId of this._testCaseIdsToAutoMark(testCaseIds, plan?.planId)) {
             // Find the test case object for this ID
             const testWithResult = testsPack.find((t) => t.testCase.testCaseIds.includes(testCaseId));
             if (testWithResult) {
@@ -2699,10 +2947,6 @@ class AzureDevOpsReporter implements Reporter {
         }
 
         if (this._uploadAttachments && withAttachmentsByTestPoint.size > 0) {
-          if (!_reLoggedStartPublishing) {
-            this._logger?.info(chalk.gray(`Start publishing test results for ${testsResults.length} test(s)`), true);
-            _reLoggedStartPublishing = true;
-          }
           this._logger?.info(
             chalk.gray(`Starting to uploading attachments for ${withAttachmentsByTestPoint.size} testpoint(s)`)
           );
@@ -2716,7 +2960,12 @@ class AzureDevOpsReporter implements Reporter {
             }
 
             for (const withAttachments of value) {
-              await this._uploadAttachmentsFunc(withAttachments.testResult, testResult.id!, withAttachments.testCase);
+              await this._uploadAttachmentsFunc(
+                withAttachments.testResult,
+                testResult.id!,
+                withAttachments.testCase,
+                plan && runId
+              );
             }
           }
         }
@@ -2735,20 +2984,320 @@ class AzureDevOpsReporter implements Reporter {
               await this._uploadLogsAttachmentsFunc(
                 { ...testWithResult.testResult, attachments: logAttachment },
                 testResult.id!,
-                testWithResult.testCase
+                testWithResult.testCase,
+                plan && runId
               );
             }
           }
         }
 
-        this._publishedResultsCount.tests += testsPack.length;
+        // a test that is in several plans is counted once, by the caller
+        if (plan) continue;
+        if (isAccepted) this._publishedResultsCount.tests += testsPack.length;
         this._logger?.info(chalk.gray(`Left to publish: ${testsResults.length - this._publishedResultsCount.tests}`));
       }
 
-      this._resolvePublishResults();
+      if (!plan) this._resolvePublishResults();
     } catch (error) {
+      if (plan) throw error;
       this._logger?.error(toError(error).stack ?? '');
       this._rejectPublishResults(error);
+    }
+  }
+
+  /**
+   * Several plans, `testRun` mode. The test points are resolved once for all selected plans
+   * (`testPointMapper` sees the points of all of them), then every plan that has points gets its own run.
+   */
+  private async _publishTestRunResultsMultiPlan(testsResults: TTestResultsToBePublished[]): Promise<void> {
+    if (!this._testApi) this._testApi = await this._connection.getTestApi();
+
+    const pointsByTest = new Map<TTestResultsToBePublished, TestInterfaces.TestPoint[]>();
+    for (const testsPack of chunk(testsResults, 50)) {
+      const packPoints = await this._getTestPointsOfTestResults(testsPack, []);
+      for (const testsResult of testsPack) pointsByTest.set(testsResult, packPoints.get(testsResult) ?? []);
+    }
+
+    const publications = new Map<number, TPlanPublication>();
+    for (const [testsResult, testPoints] of pointsByTest) {
+      if (testPoints.length === 0) {
+        await this._reportNoTestPoints(testsResult);
+        continue;
+      }
+      for (const [planId, planPoints] of this._groupTestPointsByPlan(testPoints)) {
+        const publication = publications.get(planId) ?? { planId, pointsByTest: new Map() };
+        publication.pointsByTest.set(testsResult, planPoints);
+        publications.set(planId, publication);
+      }
+    }
+
+    const publishedTests = new Set<TTestResultsToBePublished>();
+    for (const planId of this._planIds) {
+      const publication = publications.get(planId);
+      if (!publication) continue;
+      const planTests = [...publication.pointsByTest.keys()];
+      try {
+        const runId = await this._getOrCreatePlanRun(planId);
+        if (!runId) continue;
+        await this._publishTestRunResults(runId, planTests, publication);
+        planTests.forEach((testsResult) => publishedTests.add(testsResult));
+      } catch (error) {
+        this._logger?.error(`Failed to publish test results to test plan ${planId}: ${toError(error).message}`);
+      }
+    }
+    this._publishedResultsCount.tests += publishedTests.size;
+  }
+
+  /** Resolves the plans of a `planId` function and logs where the results go. Disables reporting when no plan is left. */
+  private async _resolvePlanIds(): Promise<void> {
+    let knownPlans: AzureTestPlanInfo[] | undefined;
+    if (this._planIdSelector) {
+      try {
+        knownPlans = await this._fetchTestPlans();
+      } catch (error) {
+        this._logger?.error(
+          `Failed to load the test plans of project ${this._projectName} for the 'planId' function: ${toError(error).message}. Reporting is disabled.`
+        );
+        this._setIsDisable(true);
+        return;
+      }
+      let selected: unknown;
+      try {
+        selected = await this._planIdSelector({ plans: knownPlans });
+      } catch (error) {
+        this._logger?.error(`'planId' function failed: ${toError(error).message}. Reporting is disabled.`);
+        this._setIsDisable(true);
+        return;
+      }
+      const { ids, invalid } = normalizePlanIds(selected ?? []);
+      if (invalid.length > 0) {
+        this._logger?.warn(
+          `'planId' function returned values that are not test plan ids: ${invalid.join(', ')}. Reporting is disabled.`
+        );
+        this._setIsDisable(true);
+        return;
+      }
+      if (ids.length === 0) {
+        this._logger?.warn("'planId' function returned no test plans. Reporting is disabled.");
+        this._setIsDisable(true);
+        return;
+      }
+      this._planIds = ids;
+    }
+
+    const describePlan = (planId: number) => {
+      const plan = knownPlans?.find((known) => known.id === planId);
+      return plan?.name ? `${planId} "${plan.name}"` : String(planId);
+    };
+    this._logger?.info(
+      `Results are published to ${this._planIds.length} test plan(s): ${this._planIds.map(describePlan).join(', ')}. ` +
+        'A test run is created for every plan that has test points of the executed tests.',
+      true
+    );
+    for (const planId of knownPlans ? this._planIds : []) {
+      const plan = knownPlans?.find((known) => known.id === planId);
+      if (!plan) {
+        this._logger?.warn(
+          `Test plan ${planId} returned by the 'planId' function is not in project ${this._projectName}.`
+        );
+      } else if (isInactivePlan(plan)) {
+        this._logger?.warn(
+          `Test plan ${describePlan(planId)} is ${plan.state}. Azure DevOps still accepts results for it, they will be published.`
+        );
+      }
+    }
+    if (this._planIds.length > MANY_PLANS_THRESHOLD) {
+      this._logger?.warn(
+        `${this._planIds.length} test plans are selected, up to that many test runs are created for one Playwright run. Consider narrowing 'planId'.`
+      );
+    }
+  }
+
+  /** All test plans of the project, active or not. The client library does not follow the continuation token itself. */
+  private async _fetchTestPlans(): Promise<AzureTestPlanInfo[]> {
+    const testPlanApi = await this._connection.getTestPlanApi();
+    const plans: AzureTestPlanInfo[] = [];
+    const seenTokens = new Set<string>();
+    let continuationToken: string | undefined;
+    do {
+      const verData = await testPlanApi.vsoClient.getVersioningData(
+        '7.2-preview.1',
+        'testplan',
+        '0e292477-a0c2-47f3-a9b6-34f153d627f4',
+        { project: this._projectName },
+        { continuationToken, includePlanDetails: true, filterActivePlans: false }
+      );
+      const options = testPlanApi.createRequestOptions('application/json', verData.apiVersion);
+      const response = await testPlanApi.rest.get<TestPlanInterfaces.TestPlan[]>(verData.requestUrl as string, options);
+      const page: TestPlanInterfaces.TestPlan[] =
+        testPlanApi.formatResponse(response.result, TestPlanInterfaces.TypeInfo.TestPlan, true) ?? [];
+      for (const plan of page) {
+        const info = toTestPlanInfo(plan);
+        if (info) plans.push(info);
+      }
+      const nextToken = (response.headers as Record<string, string> | undefined)?.['x-ms-continuationtoken'];
+      continuationToken = nextToken && !seenTokens.has(nextToken) ? nextToken : undefined;
+      if (continuationToken) seenTokens.add(continuationToken);
+    } while (continuationToken);
+    return plans;
+  }
+
+  /**
+   * The run of a plan, created on the first call. The promise is stored before anything is awaited,
+   * so results that are published in parallel share one run. A failed creation is not retried.
+   */
+  private _getOrCreatePlanRun(planId: number): Promise<number | undefined> {
+    let run = this._planRuns.get(planId);
+    if (!run) {
+      run = this._createRun(`${this._testRunTitle} (plan ${planId})`, planId)
+        .then((created) => {
+          if (!created?.id) {
+            this._logger?.error(
+              `Failed to create a test run for test plan ${planId}. Results for this plan are not published.`
+            );
+            return undefined;
+          }
+          this._createdPlanRuns.set(planId, created.id);
+          process.env[`AZURE_PW_TEST_RUN_ID_${planId}`] = String(created.id);
+          process.env.AZURE_PW_TEST_RUN_IDS = this._planRunIdsJson();
+          this._logger?.info(`Using run ${created.id} to publish test results to test plan ${planId}`);
+          return created.id;
+        })
+        .catch((error) => {
+          this._logger?.error(`Failed to create a test run for test plan ${planId}: ${toError(error).message}`);
+          return undefined;
+        });
+      this._planRuns.set(planId, run);
+    }
+    return run;
+  }
+
+  /** `{"<planId>":<runId>}` for the runs created so far, in the order the plans were selected. */
+  private _planRunIdsJson(): string {
+    const entries = this._planIds
+      .filter((planId) => this._createdPlanRuns.has(planId))
+      .map((planId) => [String(planId), this._createdPlanRuns.get(planId)]);
+    return JSON.stringify(Object.fromEntries(entries));
+  }
+
+  /**
+   * Several plans have several runs, so AZURE_PW_TEST_RUN_ID (which is also read back as `testRunId`) is left alone.
+   * The runs are exported as a JSON map and as one variable per plan.
+   */
+  private _exportPlanRunIds(): void {
+    if (this._createdPlanRuns.size === 0) return;
+    console.log(`##vso[task.setvariable variable=AZURE_PW_TEST_RUN_IDS;isOutput=true]${this._planRunIdsJson()}`);
+    for (const planId of this._planIds) {
+      const runId = this._createdPlanRuns.get(planId);
+      if (runId === undefined) continue;
+      console.log(`##vso[task.setvariable variable=AZURE_PW_TEST_RUN_ID_${planId};isOutput=true]${runId}`);
+    }
+  }
+
+  private async _performOnEndMultiPlan(): Promise<void> {
+    const shouldForceLogs = this._publishTestResultsMode === 'testRun';
+    try {
+      if (this._publishTestResultsMode === 'testResult') {
+        await this._waitForPendingResults();
+      } else if (this._testResultsToBePublished.length === 0) {
+        this._logger?.info('No test results to publish', true);
+        // Still output test case summary even if no tests to publish
+        await this._outputTestCaseSummary();
+        return;
+      } else {
+        await this._publishTestRunResultsMultiPlan(this._testResultsToBePublished);
+      }
+
+      // a run that is still being created belongs to a result that is already counted
+      await Promise.all(this._planRuns.values());
+
+      const { tests, points } = this._publishedResultsCount;
+      if (tests === 0 && this._createdPlanRuns.size === 0) {
+        this._logger?.warn('No testcases were matched. Ensure that your tests are declared correctly.');
+      } else {
+        this._logger?.info(
+          `Test results published for ${tests} test(s), ${points} test point(s) in ${this._createdPlanRuns.size} test plan(s)`,
+          shouldForceLogs
+        );
+      }
+
+      for (const planId of this._planIds) {
+        const runId = this._createdPlanRuns.get(planId);
+        if (runId === undefined) continue;
+        try {
+          const updated = await this._testApi.updateTestRun(this._runCompletionModel(), this._projectName, runId);
+          this._logger?.info(
+            `Run ${runId} - ${updated.state} (test plan ${planId}, ${this._planResultCounts.get(planId) ?? 0} result(s))`,
+            shouldForceLogs
+          );
+        } catch (error) {
+          this._logger?.error(`Failed to complete run ${runId} of test plan ${planId}: ${toError(error).message}`);
+        }
+      }
+    } catch (error) {
+      this._logger?.error(`Error on onEnd hook ${String(error)}`);
+    }
+
+    if (this._testCaseSummaryEnabled) {
+      try {
+        const summary = await this._outputTestCaseSummary();
+        if (
+          this._testCaseSummaryPublishToRun &&
+          typeof summary === 'string' &&
+          this._unmatched.noTestPoints.length > 0
+        ) {
+          for (const runId of this._createdPlanRuns.values()) {
+            await this._publishTestCaseSummaryAttachment(runId, summary);
+          }
+        }
+      } catch (summaryError) {
+        this._logger?.error(`Error outputting test case summary: ${toError(summaryError).message}`);
+      }
+    }
+
+    this._logFeatureSummaries();
+  }
+
+  /**
+   * Several plans: the errors reported outside of tests are attached to every run. When nothing was published
+   * (for example globalSetup failed) a run is created in the first selected plan only to carry them.
+   */
+  private async _publishGlobalErrorsMultiPlan(collector: GlobalErrorCollector): Promise<void> {
+    try {
+      let runIds = [...this._createdPlanRuns.values()];
+      let completeRun = false;
+      if (runIds.length === 0) {
+        if (this._planIds.length === 0) return;
+        const runId = await this._getOrCreatePlanRun(this._planIds[0]);
+        if (!runId) return;
+        runIds = [runId];
+        completeRun = true;
+      }
+
+      if (!this._testApi) this._testApi = await this._connection.getTestApi();
+      const content = collector.report({
+        status: this._fullResult?.status,
+        durationMs: this._fullResult?.duration,
+        runTitle: this._testRunTitle,
+      });
+      for (const runId of runIds) {
+        try {
+          await this._publishGlobalErrorsAttachment(runId, content);
+          if (completeRun) {
+            await this._testApi.updateTestRun(this._runCompletionModel(), this._projectName, runId);
+            this._logger?.info(
+              `Run ${runId} - Completed (test plan ${this._planIds[0]}, errors outside of tests only)`,
+              true
+            );
+          }
+        } catch (error) {
+          this._logger?.error(
+            `Failed to publish errors reported outside of tests to run ${runId}: ${toError(error).message}`
+          );
+        }
+      }
+    } catch (error) {
+      this._logger?.error(`Failed to publish errors reported outside of tests: ${toError(error).message}`);
     }
   }
 
@@ -2774,7 +3323,7 @@ class AzureDevOpsReporter implements Reporter {
     summary += `\n`;
 
     summary += `## Recommendations\n\n`;
-    summary += `- Verify test case IDs exist in Azure DevOps test plan ${this._planId}\n`;
+    summary += `- Verify test case IDs exist in Azure DevOps ${this._plansLabel()}\n`;
     if (this._testRunConfig?.configurationIds && this._testRunConfig.configurationIds.length > 0) {
       const configInfo =
         this._configurationNames.length > 0
@@ -2891,4 +3440,5 @@ class AzureDevOpsReporter implements Reporter {
 
 export type { CompatibilityPolicy, FeatureRequirement } from './compat';
 export { FEATURE_MATRIX, formatFeatureMatrix } from './compat';
+export type { AzureTestPlanInfo, TPlanIdOption, TPlanIdSelector } from './plan-selection';
 export default AzureDevOpsReporter;

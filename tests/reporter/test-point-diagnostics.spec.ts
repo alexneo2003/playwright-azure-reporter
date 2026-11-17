@@ -86,3 +86,31 @@ test.describe('test point diagnostics', () => {
     expect(diagnosis.message).toContain('only for configurations: 3;');
   });
 });
+
+test.describe('test point diagnostics: several plans', () => {
+  test('points only in plans that are not selected', () => {
+    const [diagnosis] = diagnoseMissingTestPoints({ testCaseIds: ['5'], planId: [4, 7], points });
+    expect(diagnosis.reason).toBe('other-plans');
+    expect(diagnosis.message).toBe(
+      'test case 5 has test points only in other plans: 9, 11 (planId is 4, 7). Add it to a suite of one of plans 4, 7 or change planId.'
+    );
+  });
+
+  test('a point in any selected plan counts as in the plan', () => {
+    const [diagnosis] = diagnoseMissingTestPoints({
+      testCaseIds: ['5'],
+      planId: [4, 9],
+      configurationIds: [7],
+      points,
+    });
+    expect(diagnosis.reason).toBe('other-configurations');
+    expect(diagnosis.message).toContain(
+      'test case 5 has test points in plans 4, 9 only for configurations: 1 (Windows 10)'
+    );
+  });
+
+  test('a test case without any point', () => {
+    const [diagnosis] = diagnoseMissingTestPoints({ testCaseIds: ['33'], planId: [4, 7], points });
+    expect(diagnosis.message).toContain('is added to a suite of one of plans 4, 7.');
+  });
+});

@@ -16,6 +16,7 @@ A Playwright reporter that publishes test results to Azure DevOps Test Plans.
   - [General Options](#general-options)
   - [Authentication](#authentication)
   - [Publishing Modes](#publishing-modes)
+  - [Multiple Test Plans](#multiple-test-plans)
   - [Retry Results](#retry-results)
   - [Test Step Results](#test-step-results)
   - [Errors Outside of Tests](#errors-outside-of-tests)
@@ -127,7 +128,7 @@ See [Test Case ID Matching](#test-case-id-matching) for advanced matching patter
 |--------|------|-------------|
 | `orgUrl` | `string` | Full URL for your organization. Example: `https://dev.azure.com/your-organization-name` |
 | `projectName` | `string` | Name of your Azure DevOps project |
-| `planId` | `number` | ID of the test plan (from the test plan URL: `planId=4`) |
+| `planId` | `number` \| `string` \| `(number \| string)[]` \| `function` | ID of the test plan (from the test plan URL: `planId=4`). A list of IDs or a function that selects plans publishes to [several test plans](#multiple-test-plans) |
 
 > **Note:** Some APIs (e.g. ProfileApi) must be hit at the deployment level: `https://vssps.dev.azure.com/{yourorgname}`
 
@@ -247,6 +248,27 @@ To publish results to an existing test run instead of creating a new one:
 #### Sharded Runs
 
 Every shard of `--shard=1/4` ... `--shard=4/4` is a separate Playwright process, so a reporter loaded in each shard creates one test run per shard. To publish a sharded run as a single test run, let the shards write Playwright blob reports and run this reporter once with `npx playwright merge-reports`. No test is executed again, the recorded results of all shards are replayed to the reporter. See [Sharded Runs](docs/sharded-runs.md) for the configuration and examples for Azure Pipelines and GitHub Actions.
+
+> **Recommended:** if you use shards, run this reporter in the `merge-reports` job and not in every shard. With [several test plans](#multiple-test-plans) this matters even more: a reporter in every shard creates a test run per plan in every shard.
+
+### Multiple Test Plans
+
+`planId` also takes a list of plans, or a function that selects them from the test plans of the project:
+
+```typescript
+{
+  planId: [4, 12, 15],
+  // or select them when the run starts: the regression plan and every active release plan
+  planId: ({ plans }) =>
+    plans.filter((plan) => plan.id === 4 || (plan.state === 'Active' && plan.name.startsWith('Release '))).map((plan) => plan.id),
+}
+```
+
+Each result is published to every selected plan that has a test point for the test case, so a test case that is in several plans is updated in all of them by one Playwright run.
+
+> **Important:** A test run belongs to one test plan, so **one test run is created for every selected plan that has test points of the executed tests**. `AZURE_PW_TEST_RUN_ID` is not set then, use `AZURE_PW_TEST_RUN_IDS`. `isExistingTestRun`, `testRunADO` mode and `rootSuiteId` work with a single plan only.
+
+See [Multiple Test Plans](docs/multiple-test-plans.md) for all the ways to configure `planId`, how results are routed, the pipeline variables and how many test runs to expect.
 
 ### Retry Results
 
@@ -653,6 +675,7 @@ Automatically update Azure DevOps test case work items to reflect their automati
 | Variable | Description |
 |----------|-------------|
 | `AZURE_PW_TEST_RUN_ID` | Set automatically after the test run is created. Available as `process.env.AZURE_PW_TEST_RUN_ID`. In `testResult` mode it's set at the start; in `testRun` mode at the end; in `testRunADO` mode it contains the existing run ID. |
+| `AZURE_PW_TEST_RUN_IDS` | Set instead of `AZURE_PW_TEST_RUN_ID` when [several test plans](#multiple-test-plans) are selected: a JSON map of plan ID to run ID, for example `{"4":701,"15":702}`. `AZURE_PW_TEST_RUN_ID_<planId>` holds the run ID of one plan. |
 | `AZURE_PW_ROOT_SUITE_ID` | Alternative to the `rootSuiteId` option |
 | `AZUREPWDEBUG` | Enable debug logging: `'1'` = enabled, `'0'` = disabled (default) |
 

@@ -159,6 +159,121 @@ test.describe('sharded runs: merge-reports', () => {
     expect(calls.attachments.map((a) => a.text).sort()).toEqual(['file from shard two', 'hello from shard one']);
   });
 
+  test('several test plans: the merged run makes one test run per plan, the shards alone one per shard and plan', async ({
+    server,
+  }, testInfo) => {
+    setupRoutes(server);
+    const created: number[] = [];
+    const published: Array<{ runId: number; pointId: number }> = [];
+    const attachments: Array<{ runId: number; text: string }> = [];
+    const stepUpdates: number[] = [];
+    const json = (res: any, body: unknown) => {
+      setHeaders(res, headers);
+      res.end(JSON.stringify(body));
+    };
+    server.setRoute('/_apis/testplan', (req: any, res: any) => {
+      setHeaders(res, headers);
+      server.serveFile(req, res, asset('azureTestPlanOptionsResponse.json'));
+    });
+    server.setRoute(
+      '/SampleSample/_apis/testplan/Plans?includePlanDetails=true&filterActivePlans=false',
+      (_: any, res: any) =>
+        json(res, {
+          value: [
+            { id: 4, name: 'Regression', state: 'Active' },
+            { id: 5, name: 'Release 2.0', state: 'Active' },
+            { id: 6, name: 'Release 1.0', state: 'Inactive' },
+          ],
+        })
+    );
+    // test case 3 has a test point in each of the three plans
+    server.setRoute('/SampleSample/_apis/test/Points', (_: any, res: any) =>
+      json(res, {
+        points: [4, 5, 6].map((plan) => ({
+          id: 10 + plan,
+          configuration: { id: '1', name: 'Windows 10' },
+          suite: { id: '6' },
+          testCase: { id: '3' },
+          testPlan: { id: String(plan) },
+        })),
+      })
+    );
+    server.setRoute('/SampleSample/_apis/test/Runs', async (req: any, res: any) => {
+      const plan = parseInt((await getRequestBody(req)).plan.id, 10);
+      created.push(plan);
+      json(res, { id: 1000 + plan, plan: { id: String(plan) } });
+    });
+    for (const plan of [4, 5]) {
+      const runId = 1000 + plan;
+      const resultId = 100000 + plan;
+      server.setRoute(`/SampleSample/_apis/test/Runs/${runId}/Results`, async (req: any, res: any) => {
+        const body = await getRequestBody(req);
+        if (req.method === 'POST') {
+          published.push(...body.map((result: any) => ({ runId, pointId: parseInt(result.testPoint.id, 10) })));
+        } else {
+          stepUpdates.push(runId);
+        }
+        json(res, { count: 1, value: [{ id: resultId, testRun: { id: String(runId) } }] });
+      });
+      server.setRoute(`/SampleSample/_apis/test/Runs/${runId}`, (_: any, res: any) =>
+        json(res, { id: runId, state: 'Completed' })
+      );
+      server.setRoute(
+        `/SampleSample/_apis/test/Runs/${runId}/Results/${resultId}/Attachments`,
+        async (req: any, res: any) => {
+          const body = await getRequestBody(req);
+          attachments.push({ runId, text: Buffer.from(body.stream, 'base64').toString('utf8') });
+          setHeaders(res, headers);
+          server.serveFile(req, res, asset('runResultsAttachmentsResponse.json'));
+        }
+      );
+    }
+
+    const entry = reporterEntry(server.PORT).replace(
+      'planId: 4,',
+      "planId: ({ plans }) => plans.filter((plan) => plan.state === 'Active').map((plan) => plan.id),"
+    );
+    const dir = testInfo.outputPath('project');
+    writeProject(dir, {
+      ...specs,
+      'playwright.config.js': "module.exports = { testDir: '.', testMatch: '*.spec.js', reporter: [['blob']] };",
+      'merge.config.js': `module.exports = { reporter: [${entry}] };`,
+      'shard.config.js': `module.exports = { testDir: '.', testMatch: '*.spec.js', reporter: [${entry}] };`,
+    });
+
+    const all = path.join(dir, 'all-blob-reports');
+    fs.mkdirSync(all);
+    for (const shard of [1, 2]) {
+      const blobs = path.join(dir, 'blobs', String(shard));
+      await playwright(dir, ['test', `--shard=${shard}/2`], { PLAYWRIGHT_BLOB_OUTPUT_DIR: blobs });
+      for (const file of fs.readdirSync(blobs)) fs.copyFileSync(path.join(blobs, file), path.join(all, file));
+    }
+    expect(created).toEqual([]);
+
+    const merged = await playwright(dir, ['merge-reports', '--config', 'merge.config.js', 'all-blob-reports']);
+
+    expect(merged.exitCode).toBe(0);
+    expect(merged.output).toContain('Results are published to 2 test plan(s): 4 "Regression", 5 "Release 2.0".');
+    // one run per plan for both shards together
+    expect([...created].sort()).toEqual([4, 5]);
+    const key = (entry: { runId: number; pointId: number }) => `${entry.runId}:${entry.pointId}`;
+    expect(published.map(key).sort()).toEqual(['1004:14', '1004:14', '1005:15', '1005:15']);
+    // attachments and step results of both shards reach the run of every plan
+    expect(attachments.map((a) => `${a.runId}:${a.text}`).sort()).toEqual([
+      '1004:file from shard two',
+      '1004:hello from shard one',
+      '1005:file from shard two',
+      '1005:hello from shard one',
+    ]);
+    expect([...new Set(stepUpdates)].sort()).toEqual([1004, 1005]);
+    expect(merged.output).toContain('{"4":1004,"5":1005}');
+
+    // the reporter in every shard instead: every shard creates a run in every plan
+    created.length = 0;
+    for (const shard of [1, 2]) await playwright(dir, ['test', '--config', 'shard.config.js', `--shard=${shard}/2`]);
+    expect([...created].sort()).toEqual([4, 4, 5, 5]);
+  });
+
   test('without merge-reports every shard creates its own run', async ({ server }, testInfo) => {
     const calls = setupRoutes(server);
     const dir = testInfo.outputPath('project');
